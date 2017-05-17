@@ -46,11 +46,13 @@ im2c = lowpass(ir.read(c=3, series=94, rescale=False), sigma)
 im3c = lowpass(ir.read(c=3, series=82, rescale=False), sigma)
 im4c = lowpass(ir.read(c=3, series=83, rescale=False), sigma)
 
-shift12, _, _ = skimage.feature.register_translation(im1, im2, 100)
-shift13, _, _ = skimage.feature.register_translation(im1, im3, 100)
-shift24, _, _ = skimage.feature.register_translation(im2, im4, 100)
-
-shift13 = [-80, -1]
+im1f = skimage.filters.laplace(im1)
+im2f = skimage.filters.laplace(im2)
+im3f = skimage.filters.laplace(im3)
+im4f = skimage.filters.laplace(im4)
+shift12, _, _ = skimage.feature.register_translation(im1f, im2f, 100)
+shift13, _, _ = skimage.feature.register_translation(im1f, im3f, 100)
+shift24, _, _ = skimage.feature.register_translation(im2f, im4f, 100)
 
 shift = np.vstack((shift12, shift13, shift24))
 shift[2] += shift[0]
