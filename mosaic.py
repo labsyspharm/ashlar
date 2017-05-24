@@ -1,4 +1,6 @@
 from __future__ import division
+import sys
+import gc
 from collections import defaultdict
 import bioformats
 import javabridge
@@ -61,7 +63,20 @@ def paste(target, img, pos, debug=False):
         target_slice[1:-1, -1] += 6000
 
 
+def difference(a, b):
+    return np.where(a >= b, a - b, 0)
+
+
+def gamma_correct(a, gamma):
+    max = np.iinfo(a.dtype).max
+    return (a / max)**(1 / gamma)
+
+
+
+
 MARGIN_FACTOR = 1.1
+PX_SCALE_X = 1.02 #1.010
+PX_SCALE_Y = 1.02 #1.011
 GAMMA = 2.2
 #WX, WY = 4000, 4000
 WX, WY = 999999, 999999
@@ -88,12 +103,17 @@ for scan, filename in enumerate(filenames, 1):
     ir = bioformats.ImageReader(filepath)
     metadata = bioformats.OMEXML(bioformats.get_omexml_metadata(filepath))
 
+    # bg = np.flipud(ir.read(c=0, series=175, rescale=False))
+    # bg = scipy.ndimage.gaussian_filter(bg, 100)
+    #bg = 0
+
     img0 = np.flipud(ir.read(c=0, series=0, rescale=False))
+    #img0 = difference(np.flipud(ir.read(c=0, series=0, rescale=False)), bg)
     x_range = get_position_range(metadata, 'x')
     y_range = get_position_range(metadata, 'y')
     px_node = metadata.image(0).Pixels.node
-    pixel_size_x = float(px_node.get('PhysicalSizeX')) * 1.02
-    pixel_size_y = float(px_node.get('PhysicalSizeY')) * 1.02
+    pixel_size_x = float(px_node.get('PhysicalSizeX')) * PX_SCALE_X
+    pixel_size_y = float(px_node.get('PhysicalSizeY')) * PX_SCALE_Y
     pixel_sizes = np.array([pixel_size_y, pixel_size_x])
     mosaic_width = (x_range / pixel_size_x + img0.shape[1]) * MARGIN_FACTOR
     mosaic_height = (y_range / pixel_size_y + img0.shape[0]) * MARGIN_FACTOR
@@ -103,27 +123,54 @@ for scan, filename in enumerate(filenames, 1):
     if scan == 1:
         reference = mosaic
         # FIXME: Assumes we always start in the corner.
-        paste(mosaic, img0, (0, 0))
+        pos = (0, 0)
+        positions[scan][0] = pos
+        paste(mosaic, img0, pos)
         plane0_meta = metadata.image(0).Pixels.Plane(0)
         pos0 = np.array([plane0_meta.PositionY, plane0_meta.PositionX])
         first_image = 1
     else:
         first_image = 0
 
+    print
     for i in range(first_image, metadata.image_count):
-        print "Registering %d/%d" % (i, metadata.image_count)
+        print "\rRegistering tile %d/%d" % (i + 1, metadata.image_count),
+        sys.stdout.flush()
         sy, sx = ((get_position(metadata, i) - pos0) / pixel_sizes).astype(int)
         if sx > WX or sy > WY:
             continue
         img = np.flipud(ir.read(c=0, series=i, rescale=False))
+        #img = difference(np.flipud(ir.read(c=0, series=i, rescale=False)), bg)
         h, w = img.shape
         reftile_f = skimage.filters.laplace(reference[sy:sy+h, sx:sx+w])
         img_f = skimage.filters.laplace(img)
         shift, _, _ = skimage.feature.register_translation(reftile_f, img_f, 10)
-        #print "  offset: %f,%f" % (offsets[1], offsets[0])
+        #print "  shift: %f,%f" % (shift[1], shift[0])
         pos = shift + [sy, sx]
         positions[scan][i] = pos
         paste(mosaic, img, pos)
+        gc.collect()
+    print
 
-    gamma_corrected = (mosaic[:WY,:WX]/np.iinfo(mosaic.dtype).max)**(1/GAMMA)
+    gamma_corrected = gamma_correct(mosaic[:WY,:WX], GAMMA)
     skimage.io.imsave('scan_%d.jpg' % scan, gamma_corrected, quality=95)
+
+    for c in range(1, metadata.image(0).Pixels.channel_count):
+        print "Aligning channel %d" % c
+        mosaic = np.zeros_like(reference)
+        for i in range(0, metadata.image_count):
+            print "\r  tile %d/%d" % (i + 1, metadata.image_count),
+            sys.stdout.flush()
+            try:
+                pos = positions[scan][i]
+            except:
+                # Temporary while working with WX,WY
+                continue
+            img = np.flipud(ir.read(c=c, series=i, rescale=False))
+            paste(mosaic, img, pos)
+            gc.collect()
+        print
+
+        gamma_corrected = gamma_correct(mosaic[:WY,:WX], GAMMA)
+        skimage.io.imsave('scan_%d_%d.jpg' % (scan, c), gamma_corrected,
+                          quality=95)
