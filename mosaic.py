@@ -1,7 +1,7 @@
 from __future__ import division
 import sys
 import gc
-import signal
+import time
 from collections import defaultdict
 import bioformats
 import javabridge
@@ -14,8 +14,8 @@ except ImportError:
     print "pyfftw not found, falling back to numpy.fft"
 import scipy.ndimage
 import skimage.feature
-import skimage.filters
 import skimage.io
+from skimage.restoration.uft import laplacian
 
 
 def lowpass(im, sigma):
@@ -71,6 +71,36 @@ def paste(target, img, pos, debug=False):
         target_slice[1:-1, -1] += 6000
 
 
+def empty_aligned(shape, dtype, align=32):
+    """Get an empty array with the specified byte alignment."""
+    dtype = np.dtype(dtype)
+    n = dtype.itemsize * np.prod(shape)
+    a = np.empty(n + (align - 1), dtype=np.uint8)
+    data_align = a.ctypes.data % align
+    offset = 0 if data_align == 0 else (align - data_align)
+    b = a[offset : offset + n]
+    return b.view(dtype).reshape(shape)
+
+
+def laplace(image, ksize=3):
+    """Find the edges of an image using the Laplace operator.
+
+
+    Copied from skimage.filters.edges, with explicit aligned output from
+    convolve. Also the mask option was dropped.
+
+    """
+
+    image = skimage.img_as_float(image)
+    # Create the discrete Laplacian operator - We keep only the real part of the
+    # filter.
+    _, laplace_op = laplacian(image.ndim, (ksize, ) * image.ndim)
+    output = empty_aligned(image.shape, 'complex64')
+    output.imag[:] = 0
+    scipy.ndimage.convolve(image, laplace_op, output.real)
+    return output
+
+
 def subtract(a, b):
     return np.where(a >= b, a - b, 0)
 
@@ -85,11 +115,6 @@ def read_image(reader, **kwargs):
     img = reader.read(**kwargs)
     img = np.flipud(img)
     return img
-
-
-def sigint_handler(signal, frame):
-    javabridge.kill_vm()
-    raise KeyboardInterrupt
 
 
 MARGIN_FACTOR = 1.1
@@ -127,6 +152,8 @@ for scan, filename in enumerate(filenames, 1):
     #bg = 0
 
     img0 = read_image(ir, c=0, series=0)
+    # Warm up fftw.
+    skimage.feature.register_translation(laplace(img0), laplace(img0), 10, 'fourier')
     #img0 = subtract(img0, bg)
     x_range = get_position_range(metadata, 'x')
     y_range = get_position_range(metadata, 'y')
@@ -138,6 +165,7 @@ for scan, filename in enumerate(filenames, 1):
     mosaic_height = (y_range / pixel_size_y + img0.shape[0]) * MARGIN_FACTOR
     mosaic_shape = np.trunc([mosaic_height, mosaic_width]).astype(int)
 
+    t_mos_start = time.time()
     mosaic = np.zeros(mosaic_shape, dtype=img0.dtype)
     if scan == 1:
         reference = mosaic
@@ -152,6 +180,8 @@ for scan, filename in enumerate(filenames, 1):
         first_image = 0
 
     print
+    reg_time = 0
+    n_regs = 0
     for i in range(first_image, metadata.image_count):
         print "\rRegistering tile %d/%d" % (i + 1, metadata.image_count),
         sys.stdout.flush()
@@ -161,15 +191,23 @@ for scan, filename in enumerate(filenames, 1):
         img = read_image(ir, c=0, series=i)
         #img = subtract(img, bg)
         h, w = img.shape
-        reftile_f = skimage.filters.laplace(reference[sy:sy+h, sx:sx+w])
-        img_f = skimage.filters.laplace(img)
-        shift, _, _ = skimage.feature.register_translation(reftile_f, img_f, 10)
+        reftile_f = pyfftw.builders.fft2(laplace(reference[sy:sy+h, sx:sx+w]),
+                                         avoid_copy=True)()
+        img_f = pyfftw.builders.fft2(laplace(img), avoid_copy=True)()
+        t_start = time.time()
+        shift, _, _ = skimage.feature.register_translation(reftile_f, img_f,
+                                                           10, 'fourier')
+        reg_time += time.time() - t_start
+        n_regs += 1
         #print "  shift: %f,%f" % (shift[1], shift[0])
         pos = shift + [sy, sx]
         positions[scan][i] = pos
         paste(mosaic, img, pos)
         gc.collect()
     print
+    print ("Registration: %g ms/frame (%g seconds, %d frames)"
+           % (reg_time / n_regs * 1000, reg_time, n_regs))
+    print "Total mosaicing time: %g s" % (time.time() - t_mos_start)
 
     gamma_corrected = gamma_correct(mosaic[:WY,:WX], GAMMA)
     skimage.io.imsave('scan_%d.jpg' % scan, gamma_corrected, quality=95)
