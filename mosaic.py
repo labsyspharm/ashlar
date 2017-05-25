@@ -1,11 +1,17 @@
 from __future__ import division
 import sys
 import gc
+import signal
 from collections import defaultdict
 import bioformats
 import javabridge
 import matplotlib.pyplot as plt
 import numpy as np
+try:
+    import pyfftw
+    np.fft = pyfftw.interfaces.numpy_fft
+except ImportError:
+    print "pyfftw not found, falling back to numpy.fft"
 import scipy.ndimage
 import skimage.feature
 import skimage.filters
@@ -52,7 +58,9 @@ def paste(target, img, pos, debug=False):
     # application have far more overlap than a single pixel, it's irrelevant.
     target_slice = target[yi:yi+img.shape[0], xi:xi+img.shape[1]]
     img_subpixel_shifted = scipy.ndimage.shift(img, pos_f)
-    target_slice[:, :] = np.maximum(target_slice, img_subpixel_shifted)
+    result = np.maximum(target_slice, img_subpixel_shifted)
+    result = np.minimum(result, 1.0)
+    target_slice[:, :] = result
 
     if debug:
         # Render a faint outline of the pasted image.
@@ -63,35 +71,46 @@ def paste(target, img, pos, debug=False):
         target_slice[1:-1, -1] += 6000
 
 
-def difference(a, b):
+def subtract(a, b):
     return np.where(a >= b, a - b, 0)
 
 
 def gamma_correct(a, gamma):
-    max = np.iinfo(a.dtype).max
-    return (a / max)**(1 / gamma)
+    #max = np.iinfo(a.dtype).max
+    #return (a / max)**(1 / gamma)
+    return a ** (1 / gamma)
 
 
+def read_image(reader, **kwargs):
+    img = reader.read(**kwargs)
+    img = np.flipud(img)
+    return img
+
+
+def sigint_handler(signal, frame):
+    javabridge.kill_vm()
+    raise KeyboardInterrupt
 
 
 MARGIN_FACTOR = 1.1
 PX_SCALE_X = 1.02 #1.010
 PX_SCALE_Y = 1.02 #1.011
 GAMMA = 2.2
-#WX, WY = 4000, 4000
-WX, WY = 999999, 999999
+WX, WY = 4000, 4000
+#WX, WY = 999999, 999999
 
 javabridge.start_vm(class_path=bioformats.JARS)
+#signal.signal(signal.SIGINT, sigint_handler)
 # Hack module to fix py3 assumptions which break XML parsing.
 bioformats.omexml.str = unicode
 
 filenames = (
     '1_40X_BACKGROUND_ONLY_Scan_20170425_191309_01x4x00176.rcpnl',
-    '2_40X_LY6C_CD8_CD68_Scan_20170427_134107_01x4x00176.rcpnl',
-    '3_40X_BACKGROUND_ONLY_Scan_20170428_121003_01x4x00176.rcpnl',
-    '4_40X_B220_CD4_CD49B_Scan_20170501_120526_01x4x00176.rcpnl',
-    '5_40X_BACKGROUND_ONLY_can_20170502_213630_01x4x00176.rcpnl',
-    '6_40X_CD11B_FOXP3_VIMENTIN_Scan_20170505_113103_01x4x00176.rcpnl',
+    # '2_40X_LY6C_CD8_CD68_Scan_20170427_134107_01x4x00176.rcpnl',
+    # '3_40X_BACKGROUND_ONLY_Scan_20170428_121003_01x4x00176.rcpnl',
+    # '4_40X_B220_CD4_CD49B_Scan_20170501_120526_01x4x00176.rcpnl',
+    # '5_40X_BACKGROUND_ONLY_can_20170502_213630_01x4x00176.rcpnl',
+    # '6_40X_CD11B_FOXP3_VIMENTIN_Scan_20170505_113103_01x4x00176.rcpnl',
 )
 
 positions = defaultdict(dict)
@@ -99,16 +118,16 @@ positions = defaultdict(dict)
 for scan, filename in enumerate(filenames, 1):
 
     print "Scan %d\n==========" % scan
-    filepath = '../../dloads/' + filename
+    filepath = sys.argv[1] + '/' + filename
     ir = bioformats.ImageReader(filepath)
     metadata = bioformats.OMEXML(bioformats.get_omexml_metadata(filepath))
 
-    # bg = np.flipud(ir.read(c=0, series=175, rescale=False))
+    # bg = read_image(ir, c=0, series=175)
     # bg = scipy.ndimage.gaussian_filter(bg, 100)
     #bg = 0
 
-    img0 = np.flipud(ir.read(c=0, series=0, rescale=False))
-    #img0 = difference(np.flipud(ir.read(c=0, series=0, rescale=False)), bg)
+    img0 = read_image(ir, c=0, series=0)
+    #img0 = subtract(img0, bg)
     x_range = get_position_range(metadata, 'x')
     y_range = get_position_range(metadata, 'y')
     px_node = metadata.image(0).Pixels.node
@@ -139,8 +158,8 @@ for scan, filename in enumerate(filenames, 1):
         sy, sx = ((get_position(metadata, i) - pos0) / pixel_sizes).astype(int)
         if sx > WX or sy > WY:
             continue
-        img = np.flipud(ir.read(c=0, series=i, rescale=False))
-        #img = difference(np.flipud(ir.read(c=0, series=i, rescale=False)), bg)
+        img = read_image(ir, c=0, series=i)
+        #img = subtract(img, bg)
         h, w = img.shape
         reftile_f = skimage.filters.laplace(reference[sy:sy+h, sx:sx+w])
         img_f = skimage.filters.laplace(img)
@@ -166,7 +185,7 @@ for scan, filename in enumerate(filenames, 1):
             except:
                 # Temporary while working with WX,WY
                 continue
-            img = np.flipud(ir.read(c=c, series=i, rescale=False))
+            img = read_image(ir, c=c, series=i)
             paste(mosaic, img, pos)
             gc.collect()
         print
@@ -174,3 +193,5 @@ for scan, filename in enumerate(filenames, 1):
         gamma_corrected = gamma_correct(mosaic[:WY,:WX], GAMMA)
         skimage.io.imsave('scan_%d_%d.jpg' % (scan, c), gamma_corrected,
                           quality=95)
+
+javabridge.kill_vm()
