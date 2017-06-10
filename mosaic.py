@@ -64,11 +64,12 @@ def paste(target, img, pos, debug=False):
 
     if debug:
         # Render a faint outline of the pasted image.
-        # TODO 6000 is arbitrary and should be calculated from the data.
-        target_slice[0, :] += 6000
-        target_slice[-1, :] += 6000
-        target_slice[1:-1, 0] += 6000
-        target_slice[1:-1, -1] += 6000
+        # TODO .1 is arbitrary and should be calculated from the data.
+        target_slice[0, :] += .1
+        target_slice[-1, :] += .1
+        target_slice[1:-1, 0] += .1
+        target_slice[1:-1, -1] += .1
+        target_slice[:, :] = np.minimum(target_slice[:, :], 1)
 
 
 def empty_aligned(shape, dtype, align=32):
@@ -105,6 +106,12 @@ def subtract(a, b):
     return np.where(a >= b, a - b, 0)
 
 
+def correct_illumination(img, bg):
+    output = img / bg
+    output /= 35 #output.max()
+    return output
+
+
 def gamma_correct(a, gamma):
     #max = np.iinfo(a.dtype).max
     #return (a / max)**(1 / gamma)
@@ -112,7 +119,7 @@ def gamma_correct(a, gamma):
 
 
 def read_image(reader, **kwargs):
-    img = reader.read(**kwargs)
+    img = reader.read(rescale=False, **kwargs)
     img = np.flipud(img)
     return img
 
@@ -147,14 +154,14 @@ for scan, filename in enumerate(filenames, 1):
     ir = bioformats.ImageReader(filepath)
     metadata = bioformats.OMEXML(bioformats.get_omexml_metadata(filepath))
 
-    # bg = read_image(ir, c=0, series=175)
-    # bg = scipy.ndimage.gaussian_filter(bg, 100)
-    #bg = 0
+    bg = read_image(ir, c=0, series=175)
+    bg = scipy.ndimage.gaussian_filter(bg, 100)
+    #bg = 1
 
     img0 = read_image(ir, c=0, series=0)
     # Warm up fftw.
     skimage.feature.register_translation(laplace(img0), laplace(img0), 10, 'fourier')
-    #img0 = subtract(img0, bg)
+    img0 = correct_illumination(img0, bg)
     x_range = get_position_range(metadata, 'x')
     y_range = get_position_range(metadata, 'y')
     px_node = metadata.image(0).Pixels.node
@@ -189,7 +196,7 @@ for scan, filename in enumerate(filenames, 1):
         if sx > WX or sy > WY:
             continue
         img = read_image(ir, c=0, series=i)
-        #img = subtract(img, bg)
+        img = correct_illumination(img, bg)
         h, w = img.shape
         reftile_f = pyfftw.builders.fft2(laplace(reference[sy:sy+h, sx:sx+w]),
                                          avoid_copy=True)()
@@ -214,6 +221,8 @@ for scan, filename in enumerate(filenames, 1):
 
     for c in range(1, metadata.image(0).Pixels.channel_count):
         print "Aligning channel %d" % c
+        bg = read_image(ir, c=c, series=175)
+        bg = scipy.ndimage.gaussian_filter(bg, 100)
         mosaic = np.zeros_like(reference)
         for i in range(0, metadata.image_count):
             print "\r  tile %d/%d" % (i + 1, metadata.image_count),
@@ -224,6 +233,7 @@ for scan, filename in enumerate(filenames, 1):
                 # Temporary while working with WX,WY
                 continue
             img = read_image(ir, c=c, series=i)
+            img = correct_illumination(img, bg)
             paste(mosaic, img, pos)
             gc.collect()
         print
