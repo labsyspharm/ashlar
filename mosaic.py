@@ -106,8 +106,8 @@ def subtract(a, b):
     return np.where(a >= b, a - b, 0)
 
 
-def correct_illumination(img, bg):
-    output = img / bg
+def correct_illumination(img, empty):
+    output = img / empty
     output /= 35 #output.max()
     return output
 
@@ -138,7 +138,7 @@ bioformats.omexml.str = unicode
 
 filenames = (
     '1_40X_BACKGROUND_ONLY_Scan_20170425_191309_01x4x00176.rcpnl',
-    # '2_40X_LY6C_CD8_CD68_Scan_20170427_134107_01x4x00176.rcpnl',
+    '2_40X_LY6C_CD8_CD68_Scan_20170427_134107_01x4x00176.rcpnl',
     # '3_40X_BACKGROUND_ONLY_Scan_20170428_121003_01x4x00176.rcpnl',
     # '4_40X_B220_CD4_CD49B_Scan_20170501_120526_01x4x00176.rcpnl',
     # '5_40X_BACKGROUND_ONLY_can_20170502_213630_01x4x00176.rcpnl',
@@ -154,14 +154,13 @@ for scan, filename in enumerate(filenames, 1):
     ir = bioformats.ImageReader(filepath)
     metadata = bioformats.OMEXML(bioformats.get_omexml_metadata(filepath))
 
-    bg = read_image(ir, c=0, series=175)
-    bg = scipy.ndimage.gaussian_filter(bg, 100)
-    #bg = 1
+    empty = read_image(ir, c=0, series=175)
+    empty = scipy.ndimage.gaussian_filter(empty, 100)
 
     img0 = read_image(ir, c=0, series=0)
     # Warm up fftw.
     skimage.feature.register_translation(laplace(img0), laplace(img0), 10, 'fourier')
-    img0 = correct_illumination(img0, bg)
+    img0 = correct_illumination(img0, empty)
     x_range = get_position_range(metadata, 'x')
     y_range = get_position_range(metadata, 'y')
     px_node = metadata.image(0).Pixels.node
@@ -196,7 +195,7 @@ for scan, filename in enumerate(filenames, 1):
         if sx > WX or sy > WY:
             continue
         img = read_image(ir, c=0, series=i)
-        img = correct_illumination(img, bg)
+        img = correct_illumination(img, empty)
         h, w = img.shape
         reftile_f = pyfftw.builders.fft2(laplace(reference[sy:sy+h, sx:sx+w]),
                                          avoid_copy=True)()
@@ -218,28 +217,47 @@ for scan, filename in enumerate(filenames, 1):
 
     gamma_corrected = gamma_correct(mosaic[:WY,:WX], GAMMA)
     skimage.io.imsave('scan_%d.jpg' % scan, gamma_corrected, quality=95)
+    del gamma_corrected
+    gc.collect()
 
-    for c in range(1, metadata.image(0).Pixels.channel_count):
-        print "Aligning channel %d" % c
-        bg = read_image(ir, c=c, series=175)
-        bg = scipy.ndimage.gaussian_filter(bg, 100)
-        mosaic = np.zeros_like(reference)
-        for i in range(0, metadata.image_count):
-            print "\r  tile %d/%d" % (i + 1, metadata.image_count),
-            sys.stdout.flush()
-            try:
-                pos = positions[scan][i]
-            except:
-                # Temporary while working with WX,WY
-                continue
-            img = read_image(ir, c=c, series=i)
-            img = correct_illumination(img, bg)
-            paste(mosaic, img, pos)
+    if 'background' in filename.lower():
+
+        ir_bg = ir
+
+    else:
+
+        for c in range(1, metadata.image(0).Pixels.channel_count):
+
+            print "Aligning channel %d" % c
+
+            mosaic = np.zeros_like(reference)
+            mosaic_bg = np.zeros_like(reference)
+            for mode, s, r, m in (('bg', scan-1, ir_bg, mosaic_bg),
+                                  ('fg', scan, ir, mosaic)):
+                empty = read_image(r, c=c, series=175)
+                empty = scipy.ndimage.gaussian_filter(empty, 100)
+                for i in range(0, metadata.image_count):
+                    print "\r  %s tile %d/%d" % (mode, i + 1,
+                                                 metadata.image_count),
+                    sys.stdout.flush()
+                    try:
+                        pos = positions[s][i]
+                    except:
+                        # Temporary while working with WX,WY
+                        continue
+                    img = read_image(r, c=c, series=i)
+                    img = correct_illumination(img, empty)
+                    paste(m, img, pos)
+                    gc.collect()
+                print
+                skimage.io.imsave('scan_%d_%d_%s.jpg' % (scan, c, mode),
+                                  m[:WY, :WX], quality=95 )
+
+            mosaic -= mosaic_bg
+            del mosaic_bg
+            mosaic = gamma_correct(mosaic[:WY,:WX], GAMMA)
+            skimage.io.imsave('scan_%d_%d.jpg' % (scan, c), mosaic, quality=95)
+            del mosaic
             gc.collect()
-        print
-
-        gamma_corrected = gamma_correct(mosaic[:WY,:WX], GAMMA)
-        skimage.io.imsave('scan_%d_%d.jpg' % (scan, c), gamma_corrected,
-                          quality=95)
 
 javabridge.kill_vm()
