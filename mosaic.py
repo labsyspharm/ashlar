@@ -115,7 +115,8 @@ def crop_like(img, target):
 
 def correct_illumination(img, empty):
     output = img / empty
-    output /= 35 #output.max()
+    output *= empty.mean()
+    np.minimum(output, 1, output)
     return output
 
 
@@ -126,7 +127,7 @@ def gamma_correct(a, gamma):
 
 
 def read_image(reader, **kwargs):
-    img = reader.read(rescale=False, **kwargs)
+    img = reader.read(**kwargs)
     img = np.flipud(img)
     return img
 
