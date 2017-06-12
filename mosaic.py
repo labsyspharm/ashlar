@@ -44,8 +44,6 @@ def paste(target, img, pos, debug=False):
     pos_f, pos_i = np.modf(pos)
     yi, xi = pos_i.astype('i8')
     # Clip img to the edges of the mosaic.
-    # TODO Also need to handle the bottom and right edges. We have padding
-    # there for now so it's not important yet.
     if yi < 0:
         img = img[-yi:]
         yi = 0
@@ -57,6 +55,7 @@ def paste(target, img, pos, debug=False):
     # actually discarded. However since the images being tiled in this
     # application have far more overlap than a single pixel, it's irrelevant.
     target_slice = target[yi:yi+img.shape[0], xi:xi+img.shape[1]]
+    img = crop_like(img, target_slice)
     img_subpixel_shifted = scipy.ndimage.shift(img, pos_f)
     result = np.maximum(target_slice, img_subpixel_shifted)
     result = np.minimum(result, 1.0)
@@ -106,6 +105,14 @@ def subtract(a, b):
     return np.where(a >= b, a - b, 0)
 
 
+def crop_like(img, target):
+    if (img.shape[0] > target.shape[0]):
+        img = img[:target.shape[0], :]
+    if (img.shape[1] > target.shape[1]):
+        img = img[:, :target.shape[1]]
+    return img
+
+
 def correct_illumination(img, empty):
     output = img / empty
     output /= 35 #output.max()
@@ -128,8 +135,8 @@ MARGIN_FACTOR = 1.1
 PX_SCALE_X = 1.02 #1.010
 PX_SCALE_Y = 1.02 #1.011
 GAMMA = 2.2
-WX, WY = 4000, 4000
-#WX, WY = 999999, 999999
+#WX, WY = 4000, 4000
+WX, WY = 2000, 2000
 
 javabridge.start_vm(class_path=bioformats.JARS)
 #signal.signal(signal.SIGINT, sigint_handler)
@@ -169,6 +176,9 @@ for scan, filename in enumerate(filenames, 1):
     pixel_sizes = np.array([pixel_size_y, pixel_size_x])
     mosaic_width = (x_range / pixel_size_x + img0.shape[1]) * MARGIN_FACTOR
     mosaic_height = (y_range / pixel_size_y + img0.shape[0]) * MARGIN_FACTOR
+    # FIXME Temporary clipping to subregion [0,0]-[WX-1,WY-1].
+    mosaic_width = min(mosaic_width, WX)
+    mosaic_height = min(mosaic_height, WY)
     mosaic_shape = np.trunc([mosaic_height, mosaic_width]).astype(int)
 
     t_mos_start = time.time()
@@ -192,13 +202,15 @@ for scan, filename in enumerate(filenames, 1):
         print "\rRegistering tile %d/%d" % (i + 1, metadata.image_count),
         sys.stdout.flush()
         sy, sx = ((get_position(metadata, i) - pos0) / pixel_sizes).astype(int)
-        if sx > WX or sy > WY:
+        # FIXME Temporary optimization for working with subregions when testing.
+        if sx > mosaic_width or sy > mosaic_height:
             continue
         img = read_image(ir, c=0, series=i)
         img = correct_illumination(img, empty)
         h, w = img.shape
         reftile_f = pyfftw.builders.fft2(laplace(reference[sy:sy+h, sx:sx+w]),
                                          avoid_copy=True)()
+        img = crop_like(img, reftile_f)
         img_f = pyfftw.builders.fft2(laplace(img), avoid_copy=True)()
         t_start = time.time()
         shift, _, _ = skimage.feature.register_translation(reftile_f, img_f,
@@ -215,7 +227,7 @@ for scan, filename in enumerate(filenames, 1):
            % (reg_time / n_regs * 1000, reg_time, n_regs))
     print "Total mosaicing time: %g s" % (time.time() - t_mos_start)
 
-    gamma_corrected = gamma_correct(mosaic[:WY,:WX], GAMMA)
+    gamma_corrected = gamma_correct(mosaic, GAMMA)
     skimage.io.imsave('scan_%d.jpg' % scan, gamma_corrected, quality=95)
     del gamma_corrected
     gc.collect()
@@ -242,21 +254,22 @@ for scan, filename in enumerate(filenames, 1):
                     sys.stdout.flush()
                     try:
                         pos = positions[s][i]
-                    except:
-                        # Temporary while working with WX,WY
+                    except KeyError:
+                        # Temporary while working with subregions.
                         continue
                     img = read_image(r, c=c, series=i)
                     img = correct_illumination(img, empty)
                     paste(m, img, pos)
                     gc.collect()
                 print
-                skimage.io.imsave('scan_%d_%d_%s.jpg' % (scan, c, mode),
-                                  m[:WY, :WX], quality=95 )
+                skimage.io.imsave('scan_%d_%d.jpg' % (s, c), m, quality=95)
 
-            mosaic -= mosaic_bg
+            mosaic = subtract(mosaic, mosaic_bg)
             del mosaic_bg
-            mosaic = gamma_correct(mosaic[:WY,:WX], GAMMA)
-            skimage.io.imsave('scan_%d_%d.jpg' % (scan, c), mosaic, quality=95)
+            gc.collect()
+            mosaic = gamma_correct(mosaic, GAMMA)
+            skimage.io.imsave('cycle_%d_%d.jpg' % (scan//2, c), mosaic,
+                              quality=95)
             del mosaic
             gc.collect()
 
