@@ -113,11 +113,17 @@ def crop_like(img, target):
     return img
 
 
-def correct_illumination(img, empty):
-    output = img / empty
-    output *= empty.mean()
+def correct_illumination(img, ff):
+    output = img / ff
     np.minimum(output, 1, output)
     return output
+
+
+def read_ff(channel):
+    ff = skimage.io.imread('flat_field_ch%d.tif' % channel).astype('u2').astype('f8')
+    ff = scipy.ndimage.gaussian_filter(ff, 200)
+    ff /= ff.mean()
+    return ff
 
 
 def gamma_correct(a, gamma):
@@ -162,13 +168,11 @@ for scan, filename in enumerate(filenames, 1):
     ir = bioformats.ImageReader(filepath)
     metadata = bioformats.OMEXML(bioformats.get_omexml_metadata(filepath))
 
-    empty = read_image(ir, c=0, series=175)
-    empty = scipy.ndimage.gaussian_filter(empty, 100)
-
+    ff = read_ff(0)
     img0 = read_image(ir, c=0, series=0)
     # Warm up fftw.
     skimage.feature.register_translation(laplace(img0), laplace(img0), 10, 'fourier')
-    img0 = correct_illumination(img0, empty)
+    img0 = correct_illumination(img0, ff)
     x_range = get_position_range(metadata, 'x')
     y_range = get_position_range(metadata, 'y')
     px_node = metadata.image(0).Pixels.node
@@ -207,7 +211,7 @@ for scan, filename in enumerate(filenames, 1):
         if sx > mosaic_width or sy > mosaic_height:
             continue
         img = read_image(ir, c=0, series=i)
-        img = correct_illumination(img, empty)
+        img = correct_illumination(img, ff)
         h, w = img.shape
         reftile_f = pyfftw.builders.fft2(laplace(reference[sy:sy+h, sx:sx+w]),
                                          avoid_copy=True)()
@@ -247,8 +251,7 @@ for scan, filename in enumerate(filenames, 1):
             mosaic_bg = np.zeros_like(reference)
             for mode, s, r, m in (('bg', scan-1, ir_bg, mosaic_bg),
                                   ('fg', scan, ir, mosaic)):
-                empty = read_image(r, c=c, series=175)
-                empty = scipy.ndimage.gaussian_filter(empty, 100)
+                ff = read_ff(c)
                 for i in range(0, metadata.image_count):
                     print "\r  %s tile %d/%d" % (mode, i + 1,
                                                  metadata.image_count),
@@ -259,7 +262,7 @@ for scan, filename in enumerate(filenames, 1):
                         # Temporary while working with subregions.
                         continue
                     img = read_image(r, c=c, series=i)
-                    img = correct_illumination(img, empty)
+                    img = correct_illumination(img, ff)
                     paste(m, img, pos)
                     gc.collect()
                 print
