@@ -120,9 +120,8 @@ def correct_illumination(img, ff):
 
 
 def read_ff(channel):
-    ff = skimage.io.imread('flat_field_ch%d.tif' % channel).astype('u2').astype('f8')
-    ff = scipy.ndimage.gaussian_filter(ff, 200)
-    ff /= ff.mean()
+    ff = skimage.io.imread('flat_field_ch%d.tif' % channel)
+    ff = ff / ff.mean()
     return ff
 
 

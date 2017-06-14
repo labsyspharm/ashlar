@@ -20,7 +20,7 @@ n_channels = mpixels0.SizeC
 sx = mpixels0.SizeX
 sy = mpixels0.SizeY
 
-sum = np.zeros([n_channels, sy, sx])
+acc = np.zeros((n_channels, sy, sx))
 
 for path in paths:
 
@@ -37,14 +37,16 @@ for path in paths:
         print "\r  %d/%d" % (i+1, n_images),
         sys.stdout.flush()
         for c in range(n_channels):
-            img = ir.read(c=c, series=i, rescale=False)
-            sum[c] += img
+            img = ir.read(c=c, series=i)
+            acc[c] += img
     print
 
-ff = sum / sum.reshape([n_channels, -1]).max(1).reshape([n_channels, 1, 1])
-ff = (ff * 65536).astype('i2')
+ff = scipy.ndimage.gaussian_filter(acc, [0, 100, 100])
+max_by_channel = np.apply_over_axes(np.max, ff, [1,2])
+ff = ff / max_by_channel
+ff = (ff * np.iinfo(np.uint16).max).astype(np.uint16)
 
 for c in range(n_channels):
     skimage.io.imsave('flat_field_ch%d.tif' % c, ff[c])
 
-#javabridge.kill_vm()
+javabridge.kill_vm()
