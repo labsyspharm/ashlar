@@ -8,12 +8,14 @@ import skimage.io
 
 
 javabridge.start_vm(class_path=bioformats.JARS)
+bioformats.init_logger()
 # Hack module to fix py3 assumptions which break XML parsing.
 bioformats.omexml.str = unicode
 
 
 paths = sys.argv[1:]
 
+print 'Reading metadata...'
 metadata0 = bioformats.OMEXML(bioformats.get_omexml_metadata(paths[0]))
 mpixels0 = metadata0.image().Pixels
 n_channels = mpixels0.SizeC
@@ -24,6 +26,8 @@ acc = np.zeros((n_channels, sy, sx))
 
 for path in paths:
 
+    print '>>>', path
+    print '  Initializing...'
     metadata = bioformats.OMEXML(bioformats.get_omexml_metadata(path))
     mpixels = metadata.image().Pixels
     assert mpixels.SizeC == n_channels
@@ -32,7 +36,6 @@ for path in paths:
     n_images = metadata.image_count
     ir = bioformats.ImageReader(path)
 
-    print '>>>', path
     for i in range(n_images):
         print "\r  %d/%d" % (i+1, n_images),
         sys.stdout.flush()

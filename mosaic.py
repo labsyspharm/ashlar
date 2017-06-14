@@ -145,6 +145,7 @@ GAMMA = 2.2
 WX, WY = 2000, 2000
 
 javabridge.start_vm(class_path=bioformats.JARS)
+bioformats.init_logger()
 #signal.signal(signal.SIGINT, sigint_handler)
 # Hack module to fix py3 assumptions which break XML parsing.
 bioformats.omexml.str = unicode
@@ -169,8 +170,8 @@ for scan, filename in enumerate(filenames, 1):
 
     ff = read_ff(0)
     img0 = read_image(ir, c=0, series=0)
-    # Warm up fftw.
-    skimage.feature.register_translation(laplace(img0), laplace(img0), 10, 'fourier')
+    # Warm up fftw to make future timing accurate.
+    #skimage.feature.register_translation(laplace(img0), laplace(img0), 10, 'fourier')
     img0 = correct_illumination(img0, ff)
     x_range = get_position_range(metadata, 'x')
     y_range = get_position_range(metadata, 'y')
@@ -185,7 +186,7 @@ for scan, filename in enumerate(filenames, 1):
     mosaic_height = min(mosaic_height, WY)
     mosaic_shape = np.trunc([mosaic_height, mosaic_width]).astype(int)
 
-    t_mos_start = time.time()
+    #t_mos_start = time.time()
     mosaic = np.zeros(mosaic_shape, dtype=img0.dtype)
     if scan == 1:
         reference = mosaic
@@ -199,9 +200,9 @@ for scan, filename in enumerate(filenames, 1):
     else:
         first_image = 0
 
-    print
-    reg_time = 0
-    n_regs = 0
+    #print
+    #reg_time = 0
+    #n_regs = 0
     for i in range(first_image, metadata.image_count):
         print "\rRegistering tile %d/%d" % (i + 1, metadata.image_count),
         sys.stdout.flush()
@@ -216,20 +217,20 @@ for scan, filename in enumerate(filenames, 1):
                                          avoid_copy=True)()
         img = crop_like(img, reftile_f)
         img_f = pyfftw.builders.fft2(laplace(img), avoid_copy=True)()
-        t_start = time.time()
+        #t_start = time.time()
         shift, _, _ = skimage.feature.register_translation(reftile_f, img_f,
                                                            10, 'fourier')
-        reg_time += time.time() - t_start
-        n_regs += 1
+        #reg_time += time.time() - t_start
+        #n_regs += 1
         #print "  shift: %f,%f" % (shift[1], shift[0])
         pos = shift + [sy, sx]
         positions[scan][i] = pos
         paste(mosaic, img, pos)
         gc.collect()
     print
-    print ("Registration: %g ms/frame (%g seconds, %d frames)"
-           % (reg_time / n_regs * 1000, reg_time, n_regs))
-    print "Total mosaicing time: %g s" % (time.time() - t_mos_start)
+    #print ("Registration: %g ms/frame (%g seconds, %d frames)"
+    #       % (reg_time / n_regs * 1000, reg_time, n_regs))
+    #print "Total mosaicing time: %g s" % (time.time() - t_mos_start)
 
     gamma_corrected = gamma_correct(mosaic, GAMMA)
     skimage.io.imsave('scan_%d.jpg' % scan, gamma_corrected, quality=95)
