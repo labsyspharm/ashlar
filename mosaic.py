@@ -119,6 +119,8 @@ def correct_illumination(img, ff):
     ff: float (mean-normalized)
     returns: float
     """
+    if ff is None:
+        return img
     output = img / ff
     np.clip(output, 0, 1, output)
     return output
@@ -128,7 +130,12 @@ def read_ff(channel):
     """
     returns: float
     """
-    ff = skimage.io.imread('flat_field_ch%d.tif' % channel)
+    try:
+        ff = skimage.io.imread('flat_field_ch%d.tif' % channel)
+    except IOError:
+        print ("WARNING: No flat-field image for channel %d; not correcting"
+               % channel)
+        return None
     ff = ff / ff.mean()
     return ff
 
