@@ -173,6 +173,7 @@ filepaths = sorted(sys.argv[1:])
 assert all(p.endswith('.rcpnl') for p in filepaths)
 
 positions = defaultdict(dict)
+ir_bg = None
 
 for scan, filepath in enumerate(filepaths, 1):
 
@@ -245,7 +246,7 @@ for scan, filepath in enumerate(filepaths, 1):
     #print "Total mosaicing time: %g s" % (time.time() - t_mos_start)
 
     gamma_corrected = gamma_correct(mosaic, GAMMA)
-    skimage.io.imsave('scan_%d.jpg' % scan, gamma_corrected, quality=95)
+    skimage.io.imsave('scan_%d_0.jpg' % scan, gamma_corrected, quality=95)
     del gamma_corrected
     gc.collect()
 
@@ -260,9 +261,11 @@ for scan, filepath in enumerate(filepaths, 1):
             print "Aligning channel %d" % c
 
             mosaic = np.zeros_like(reference)
-            mosaic_bg = np.zeros_like(reference)
+            mosaic_bg = np.zeros_like(reference) if ir_bg else None
             for mode, s, r, m in (('bg', scan-1, ir_bg, mosaic_bg),
                                   ('fg', scan, ir, mosaic)):
+                if r is None:
+                    continue
                 ff = read_ff(c)
                 for i in range(0, metadata.image_count):
                     print "\r  %s tile %d/%d" % (mode, i + 1,
@@ -278,14 +281,18 @@ for scan, filepath in enumerate(filepaths, 1):
                     paste(m, img, pos)
                     gc.collect()
                 print
-                skimage.io.imsave('scan_%d_%d.jpg' % (s, c), m, quality=95)
+                mg = gamma_correct(m, GAMMA)
+                skimage.io.imsave('scan_%d_%d.jpg' % (s, c), mg, quality=95)
+                del mg
+                gc.collect()
 
-            mosaic = subtract(mosaic, mosaic_bg)
-            del mosaic_bg
-            gc.collect()
-            mosaic = gamma_correct(mosaic, GAMMA)
-            skimage.io.imsave('cycle_%d_%d.jpg' % (scan//2, c), mosaic,
-                              quality=95)
+            if ir_bg:
+                mosaic = subtract(mosaic, mosaic_bg)
+                del mosaic_bg
+                gc.collect()
+                mosaic = gamma_correct(mosaic, GAMMA)
+                skimage.io.imsave('cycle_%d_%d.jpg' % (scan//2, c), mosaic,
+                                  quality=95)
             del mosaic
             gc.collect()
 
