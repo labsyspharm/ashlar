@@ -18,15 +18,6 @@ import skimage.io
 from skimage.restoration.uft import laplacian
 
 
-def lowpass(im, sigma):
-    dtype = im.dtype
-    im = im.astype('f8')
-    im -= scipy.ndimage.gaussian_filter(im, sigma)
-    im = np.maximum(im, 0)
-    im = im.astype(dtype)
-    return im
-
-
 def get_position_range(metadata, dimension):
     attr = 'Position' + dimension.upper()
     values = set(getattr(metadata.image(i).Pixels.Plane(0), attr)
@@ -40,7 +31,12 @@ def get_position(metadata, i):
 
 
 def paste(target, img, pos, debug=False):
-    """Composite img into target using maximum intensity projection."""
+    """Composite img into target using maximum intensity projection.
+
+    target: uint
+    img: float
+
+    """
     pos_f, pos_i = np.modf(pos)
     yi, xi = pos_i.astype('i8')
     # Clip img to the edges of the mosaic.
@@ -56,19 +52,21 @@ def paste(target, img, pos, debug=False):
     # application have far more overlap than a single pixel, it's irrelevant.
     target_slice = target[yi:yi+img.shape[0], xi:xi+img.shape[1]]
     img = crop_like(img, target_slice)
-    img_subpixel_shifted = scipy.ndimage.shift(img, pos_f)
-    result = np.maximum(target_slice, img_subpixel_shifted)
-    result = np.minimum(result, 1.0)
-    target_slice[:, :] = result
-
+    img = scipy.ndimage.shift(img, pos_f)
+    np.clip(img, 0, 1, img)
+    img = skimage.util.dtype.convert(img, target.dtype)
+    target_slice[:, :] = np.maximum(target_slice, img)
     if debug:
         # Render a faint outline of the pasted image.
-        # TODO .1 is arbitrary and should be calculated from the data.
-        target_slice[0, :] += .1
-        target_slice[-1, :] += .1
-        target_slice[1:-1, 0] += .1
-        target_slice[1:-1, -1] += .1
-        target_slice[:, :] = np.minimum(target_slice[:, :], 1)
+        # TODO 6000 is arbitrary and should be calculated from the data.
+        # Also these lines can cause registration problems, so ideally
+        # this step should be performed on the final images by using the
+        # accumulated list of per-tile offsets.
+        target_slice[0, :] += 6000
+        target_slice[-1, :] += 6000
+        target_slice[1:-1, 0] += 6000
+        target_slice[1:-1, -1] += 6000
+        np.clip(target_slice[:, :], 0, np.iinfo(target.dtype).max)
 
 
 def empty_aligned(shape, dtype, align=32):
@@ -85,6 +83,8 @@ def empty_aligned(shape, dtype, align=32):
 def laplace(image, ksize=3):
     """Find the edges of an image using the Laplace operator.
 
+    image: any dtype
+    returns: float
 
     Copied from skimage.filters.edges, with explicit aligned output from
     convolve. Also the mask option was dropped.
@@ -114,21 +114,33 @@ def crop_like(img, target):
 
 
 def correct_illumination(img, ff):
+    """
+    img: float
+    ff: float (mean-normalized)
+    returns: float
+    """
     output = img / ff
-    np.minimum(output, 1, output)
+    np.clip(output, 0, 1, output)
     return output
 
 
 def read_ff(channel):
+    """
+    returns: float
+    """
     ff = skimage.io.imread('flat_field_ch%d.tif' % channel)
     ff = ff / ff.mean()
     return ff
 
 
 def gamma_correct(a, gamma):
-    #max = np.iinfo(a.dtype).max
-    #return (a / max)**(1 / gamma)
-    return a ** (1 / gamma)
+    """
+    a: any dtype
+    returns: uint16
+    """
+    a = skimage.img_as_float(a)
+    a **= 1 / gamma
+    return skimage.img_as_uint(a)
 
 
 def read_image(reader, **kwargs):
@@ -187,7 +199,7 @@ for scan, filename in enumerate(filenames, 1):
     mosaic_shape = np.trunc([mosaic_height, mosaic_width]).astype(int)
 
     #t_mos_start = time.time()
-    mosaic = np.zeros(mosaic_shape, dtype=img0.dtype)
+    mosaic = np.zeros(mosaic_shape, dtype=np.uint16)
     if scan == 1:
         reference = mosaic
         # FIXME: Assumes we always start in the corner.
