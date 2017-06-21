@@ -169,21 +169,14 @@ bioformats.init_logger()
 # Hack module to fix py3 assumptions which break XML parsing.
 bioformats.omexml.str = unicode
 
-filenames = (
-    '1_40X_BACKGROUND_ONLY_Scan_20170425_191309_01x4x00176.rcpnl',
-    '2_40X_LY6C_CD8_CD68_Scan_20170427_134107_01x4x00176.rcpnl',
-    # '3_40X_BACKGROUND_ONLY_Scan_20170428_121003_01x4x00176.rcpnl',
-    # '4_40X_B220_CD4_CD49B_Scan_20170501_120526_01x4x00176.rcpnl',
-    # '5_40X_BACKGROUND_ONLY_can_20170502_213630_01x4x00176.rcpnl',
-    # '6_40X_CD11B_FOXP3_VIMENTIN_Scan_20170505_113103_01x4x00176.rcpnl',
-)
+filepaths = sorted(sys.argv[1:])
+assert all(p.endswith('.rcpnl') for p in filepaths)
 
 positions = defaultdict(dict)
 
-for scan, filename in enumerate(filenames, 1):
+for scan, filepath in enumerate(filepaths, 1):
 
     print "Scan %d\n==========" % scan
-    filepath = sys.argv[1] + '/' + filename
     ir = bioformats.ImageReader(filepath)
     metadata = bioformats.OMEXML(bioformats.get_omexml_metadata(filepath))
 
@@ -256,7 +249,7 @@ for scan, filename in enumerate(filenames, 1):
     del gamma_corrected
     gc.collect()
 
-    if 'background' in filename.lower():
+    if 'background' in filepath.lower():
 
         ir_bg = ir
 
