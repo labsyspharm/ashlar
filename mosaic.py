@@ -296,4 +296,8 @@ for scan, filepath in enumerate(filepaths, 1):
             del mosaic
             gc.collect()
 
+        if ir_bg:
+            ir_bg.close()
+        ir.close()
+
 javabridge.kill_vm()
