@@ -245,10 +245,7 @@ for scan, filepath in enumerate(filepaths, 1):
     #       % (reg_time / n_regs * 1000, reg_time, n_regs))
     #print "Total mosaicing time: %g s" % (time.time() - t_mos_start)
 
-    gamma_corrected = gamma_correct(mosaic, GAMMA)
-    skimage.io.imsave('scan_%d_0.jpg' % scan, gamma_corrected, quality=95)
-    del gamma_corrected
-    gc.collect()
+    skimage.io.imsave('scan_%d_0.tif' % scan, mosaic)
 
     if 'background' in filepath.lower():
 
@@ -281,19 +278,14 @@ for scan, filepath in enumerate(filepaths, 1):
                     paste(m, img, pos)
                     gc.collect()
                 print
-                mg = gamma_correct(m, GAMMA)
-                skimage.io.imsave('scan_%d_%d.jpg' % (s, c), mg, quality=95)
-                del mg
-                gc.collect()
+                skimage.io.imsave('scan_%d_%d.tif' % (s, c), m)
 
             if ir_bg:
                 mosaic = subtract(mosaic, mosaic_bg)
                 del mosaic_bg
                 gc.collect()
-                mosaic = gamma_correct(mosaic, GAMMA)
-                skimage.io.imsave('cycle_%d_%d.jpg' % (scan//2, c), mosaic,
-                                  quality=95)
-            del mosaic
+                skimage.io.imsave('cycle_%d_%d.tif' % (scan//2, c), mosaic)
+                del mosaic
             gc.collect()
 
         if ir_bg:
