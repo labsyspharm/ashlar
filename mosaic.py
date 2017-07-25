@@ -135,8 +135,8 @@ def read_ff(channel):
     try:
         ff = skimage.io.imread('flat_field_ch%d.tif' % channel)
     except IOError:
-        print ("WARNING: No flat-field image for channel %d; not correcting"
-               % channel)
+        # print ("WARNING: No flat-field image for channel %d; not correcting"
+        #        % channel)
         return None
     ff = ff / ff.mean()
     return ff
