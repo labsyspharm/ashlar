@@ -6,6 +6,7 @@ import collections
 import bioformats
 import javabridge
 import matplotlib.pyplot as plt
+import modest_image
 import numpy as np
 import pandas as pd
 try:
@@ -184,6 +185,8 @@ stats_records = []
 positions = collections.defaultdict(dict)
 ir_bg = None
 
+plt.ion()
+
 for scan, filepath in enumerate(filepaths, 1):
 
     print "Scan %d\n==========" % scan
@@ -214,6 +217,7 @@ for scan, filepath in enumerate(filepaths, 1):
         reference = mosaic
         plane0_meta = metadata.image(0).Pixels.Plane(0)
         pos0 = np.array([plane0_meta.PositionY, plane0_meta.PositionX])
+    img_artist = modest_image.imshow(plt.gca(), mosaic, vmin=0, vmax=65535)
 
     #print
     #reg_time = 0
@@ -247,6 +251,7 @@ for scan, filepath in enumerate(filepaths, 1):
         pos = shift + [sy, sx]
         positions[scan][i] = pos
         paste(mosaic, img, pos)
+        plt.pause(0.01)
         stats_records.append(TileStatistics(
             scan=scan, tile=i, x_original=sx, y_original=sy, x=pos[1], y=pos[0],
             shift_x=shift[1], shift_y=shift[0], error=error
@@ -275,6 +280,7 @@ for scan, filepath in enumerate(filepaths, 1):
                                   ('fg', scan, ir, mosaic)):
                 if r is None:
                     continue
+                img_artist.set_data(m)
                 ff = read_ff(c)
                 for i in range(0, metadata.image_count):
                     print "\r  %s tile %d/%d" % (mode, i + 1,
@@ -288,12 +294,14 @@ for scan, filepath in enumerate(filepaths, 1):
                     img = read_image(r, c=c, series=i)
                     img = correct_illumination(img, ff)
                     paste(m, img, pos)
-                    gc.collect()
+                    plt.pause(0.01)
                 print
                 skimage.io.imsave('scan_%d_%d.tif' % (s, c), m)
 
             if ir_bg:
                 mosaic = subtract(mosaic, mosaic_bg)
+                img_artist.set_data(mosaic)
+                plt.pause(0.01)
                 del mosaic_bg
                 gc.collect()
                 skimage.io.imsave('cycle_%d_%d.tif' % (scan//2, c), mosaic)
