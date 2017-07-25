@@ -2,11 +2,12 @@ from __future__ import division
 import sys
 import gc
 import time
-from collections import defaultdict
+import collections
 import bioformats
 import javabridge
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 try:
     import pyfftw
     np.fft = pyfftw.interfaces.numpy_fft
@@ -156,6 +157,12 @@ def read_image(reader, **kwargs):
     return img
 
 
+TileStatistics = collections.namedtuple(
+    'TileStatistics',
+    'scan tile x_original y_original x y shift_x shift_y error'
+)
+
+
 MARGIN_FACTOR = 1.1
 PX_SCALE_X = 1.02 #1.010
 PX_SCALE_Y = 1.02 #1.011
@@ -172,7 +179,9 @@ bioformats.omexml.str = unicode
 filepaths = sorted(sys.argv[1:])
 assert all(p.endswith('.rcpnl') for p in filepaths)
 
-positions = defaultdict(dict)
+stats_records = []
+
+positions = collections.defaultdict(dict)
 ir_bg = None
 
 for scan, filepath in enumerate(filepaths, 1):
@@ -203,20 +212,13 @@ for scan, filepath in enumerate(filepaths, 1):
     mosaic = np.zeros(mosaic_shape, dtype=np.uint16)
     if scan == 1:
         reference = mosaic
-        # FIXME: Assumes we always start in the corner.
-        pos = (0, 0)
-        positions[scan][0] = pos
-        paste(mosaic, img0, pos)
         plane0_meta = metadata.image(0).Pixels.Plane(0)
         pos0 = np.array([plane0_meta.PositionY, plane0_meta.PositionX])
-        first_image = 1
-    else:
-        first_image = 0
 
     #print
     #reg_time = 0
     #n_regs = 0
-    for i in range(first_image, metadata.image_count):
+    for i in range(0, metadata.image_count):
         print "\rRegistering tile %d/%d" % (i + 1, metadata.image_count),
         sys.stdout.flush()
         sy, sx = ((get_position(metadata, i) - pos0) / pixel_sizes).astype(int)
@@ -226,20 +228,30 @@ for scan, filepath in enumerate(filepaths, 1):
         img = read_image(ir, c=0, series=i)
         img = correct_illumination(img, ff)
         h, w = img.shape
-        reftile_f = pyfftw.builders.fft2(laplace(reference[sy:sy+h, sx:sx+w]),
-                                         avoid_copy=True)()
-        img = crop_like(img, reftile_f)
-        img_f = pyfftw.builders.fft2(laplace(img), avoid_copy=True)()
-        #t_start = time.time()
-        shift, _, _ = skimage.feature.register_translation(reftile_f, img_f,
-                                                           10, 'fourier')
-        #reg_time += time.time() - t_start
-        #n_regs += 1
-        #print "  shift: %f,%f" % (shift[1], shift[0])
+        if scan == 1 and i == 0:
+            shift = np.zeros(2)
+            error = np.nan
+        else:
+            reftile_f = pyfftw.builders.fft2(
+                laplace(reference[sy:sy+h, sx:sx+w]), avoid_copy=True
+            )()
+            img = crop_like(img, reftile_f)
+            img_f = pyfftw.builders.fft2(laplace(img), avoid_copy=True)()
+            #t_start = time.time()
+            shift, error, _ = skimage.feature.register_translation(
+                reftile_f, img_f, 10, 'fourier'
+            )
+            #reg_time += time.time() - t_start
+            #n_regs += 1
+            #print "  shift: %f,%f" % (shift[1], shift[0])
         pos = shift + [sy, sx]
         positions[scan][i] = pos
         paste(mosaic, img, pos)
-        gc.collect()
+        stats_records.append(TileStatistics(
+            scan=scan, tile=i, x_original=sx, y_original=sy, x=pos[1], y=pos[0],
+            shift_x=shift[1], shift_y=shift[0], error=error
+        ))
+
     print
     #print ("Registration: %g ms/frame (%g seconds, %d frames)"
     #       % (reg_time / n_regs * 1000, reg_time, n_regs))
@@ -291,6 +303,8 @@ for scan, filepath in enumerate(filepaths, 1):
         if ir_bg:
             ir_bg.close()
         ir.close()
+
+stats = pd.DataFrame(stats_records)
 
 try:
     __IPYTHON__
