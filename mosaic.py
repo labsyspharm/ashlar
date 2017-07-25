@@ -292,4 +292,7 @@ for scan, filepath in enumerate(filepaths, 1):
             ir_bg.close()
         ir.close()
 
-javabridge.kill_vm()
+try:
+    __IPYTHON__
+except:
+    javabridge.kill_vm()
