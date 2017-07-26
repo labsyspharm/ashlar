@@ -6,6 +6,8 @@ import collections
 import bioformats
 import javabridge
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.text as mtext
 import modest_image
 import numpy as np
 import pandas as pd
@@ -217,7 +219,13 @@ for scan, filepath in enumerate(filepaths, 1):
         reference = mosaic
         plane0_meta = metadata.image(0).Pixels.Plane(0)
         pos0 = np.array([plane0_meta.PositionY, plane0_meta.PositionX])
-    img_artist = modest_image.imshow(plt.gca(), mosaic, vmin=0, vmax=65535)
+    axes = plt.gca()
+    img_artist = modest_image.imshow(axes, mosaic, vmin=0, vmax=7000,
+                                     cmap='gray')
+    tile_outline = mpatches.Rectangle((0, 0), 0, 0, color='yellow', fill=False)
+    tile_label = mtext.Text(0, 0, "", color='yellow', size=10)
+    axes.add_patch(tile_outline)
+    axes.add_artist(tile_label)
 
     #print
     #reg_time = 0
@@ -251,6 +259,12 @@ for scan, filepath in enumerate(filepaths, 1):
         pos = shift + [sy, sx]
         positions[scan][i] = pos
         paste(mosaic, img, pos)
+        tile_outline.set_xy(reversed(pos))
+        tile_outline.set_width(w)
+        tile_outline.set_height(h)
+        tile_label.set_x(pos[1])
+        tile_label.set_y(pos[0] - 10)
+        tile_label.set_text('%d' % i)
         plt.pause(0.01)
         stats_records.append(TileStatistics(
             scan=scan, tile=i, x_original=sx, y_original=sy, x=pos[1], y=pos[0],
