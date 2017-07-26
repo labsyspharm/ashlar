@@ -170,8 +170,7 @@ MARGIN_FACTOR = 1.1
 PX_SCALE_X = 1.02 #1.010
 PX_SCALE_Y = 1.02 #1.011
 GAMMA = 2.2
-#WX, WY = 4000, 4000
-WX, WY = 2000, 2000
+WX, WY = 999999, 999999
 
 javabridge.start_vm(class_path=bioformats.JARS)
 bioformats.init_logger()
