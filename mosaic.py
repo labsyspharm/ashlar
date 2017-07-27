@@ -178,7 +178,14 @@ bioformats.init_logger()
 # Hack module to fix py3 assumptions which break XML parsing.
 bioformats.omexml.str = unicode
 
-filepaths = sorted(sys.argv[1:])
+args = sys.argv[1:]
+opt_visualize = False
+try:
+    args.remove('-v')
+    opt_visualize = True
+except ValueError:
+    pass
+filepaths = sorted(args)
 assert all(p.endswith('.rcpnl') for p in filepaths)
 
 stats_records = []
@@ -186,7 +193,8 @@ stats_records = []
 positions = collections.defaultdict(dict)
 ir_bg = None
 
-plt.ion()
+if opt_visualize:
+    plt.ion()
 
 for scan, filepath in enumerate(filepaths, 1):
 
@@ -218,13 +226,16 @@ for scan, filepath in enumerate(filepaths, 1):
         reference = mosaic
         plane0_meta = metadata.image(0).Pixels.Plane(0)
         pos0 = np.array([plane0_meta.PositionY, plane0_meta.PositionX])
-    axes = plt.gca()
-    img_artist = modest_image.imshow(axes, mosaic, vmin=0, vmax=7000,
-                                     cmap='gray')
-    tile_outline = mpatches.Rectangle((0, 0), 0, 0, color='yellow', fill=False)
-    tile_label = mtext.Text(0, 0, "", color='yellow', size=10)
-    axes.add_patch(tile_outline)
-    axes.add_artist(tile_label)
+
+    if opt_visualize:
+        axes = plt.gca()
+        img_artist = modest_image.imshow(axes, mosaic, vmin=0, vmax=7000,
+                                         cmap='gray')
+        tile_outline = mpatches.Rectangle((0, 0), 0, 0, color='yellow',
+                                          fill=False)
+        tile_label = mtext.Text(0, 0, "", color='yellow', size=10)
+        axes.add_patch(tile_outline)
+        axes.add_artist(tile_label)
 
     #print
     #reg_time = 0
@@ -258,13 +269,14 @@ for scan, filepath in enumerate(filepaths, 1):
         pos = shift + [sy, sx]
         positions[scan][i] = pos
         paste(mosaic, img, pos)
-        tile_outline.set_xy(reversed(pos))
-        tile_outline.set_width(w)
-        tile_outline.set_height(h)
-        tile_label.set_x(pos[1])
-        tile_label.set_y(pos[0] - 10)
-        tile_label.set_text('%d' % i)
-        plt.pause(0.01)
+        if opt_visualize:
+            tile_outline.set_xy(reversed(pos))
+            tile_outline.set_width(w)
+            tile_outline.set_height(h)
+            tile_label.set_x(pos[1])
+            tile_label.set_y(pos[0] - 10)
+            tile_label.set_text('%d' % i)
+            plt.pause(0.01)
         stats_records.append(TileStatistics(
             scan=scan, tile=i, x_original=sx, y_original=sy, x=pos[1], y=pos[0],
             shift_x=shift[1], shift_y=shift[0], error=error
@@ -293,7 +305,8 @@ for scan, filepath in enumerate(filepaths, 1):
                                   ('fg', scan, ir, mosaic)):
                 if r is None:
                     continue
-                img_artist.set_data(m)
+                if opt_visualize:
+                    img_artist.set_data(m)
                 ff = read_ff(c)
                 for i in range(0, metadata.image_count):
                     print "\r  %s tile %d/%d" % (mode, i + 1,
@@ -307,14 +320,16 @@ for scan, filepath in enumerate(filepaths, 1):
                     img = read_image(r, c=c, series=i)
                     img = correct_illumination(img, ff)
                     paste(m, img, pos)
-                    plt.pause(0.01)
+                    if opt_visualize:
+                        plt.pause(0.01)
                 print
                 skimage.io.imsave('scan_%d_%d.tif' % (s, c), m)
 
             if ir_bg:
                 mosaic = subtract(mosaic, mosaic_bg)
-                img_artist.set_data(mosaic)
-                plt.pause(0.01)
+                if opt_visualize:
+                    img_artist.set_data(mosaic)
+                    plt.pause(0.01)
                 del mosaic_bg
                 gc.collect()
                 skimage.io.imsave('cycle_%d_%d.tif' % (scan//2, c), mosaic)
