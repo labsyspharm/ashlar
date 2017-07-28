@@ -45,17 +45,24 @@ metadata = reader.metadata
 aligner = reg.Aligner(reader)
 
 positions = metadata.positions - metadata.origin
+centers = metadata.centers - metadata.origin
 neighbor_max_distance = metadata.size.max()
 graph = graph_from_positions(positions, neighbor_max_distance)
 
+start = 5
+start_cost = 0
 fringe = queue.PriorityQueue()
-fringe.put((0, 0))
-costs = {0: 0}
+fringe.put((start_cost, start))
+costs = {start: start_cost}
 came_from = {}
-shifts = {}
+shifts = {start: np.array([0, 0])}
 
 while not fringe.empty():
-    print 'scored: %d  fringe: %d' % (len(costs), fringe.qsize())
+    sys.stdout.write(
+        '\rscored: %d/%d  fringe: %d   '
+        % (len(costs), len(positions), fringe.qsize())
+    )
+    sys.stdout.flush()
     _, cur_tile = fringe.get()
     for next_tile in graph.neighbors(cur_tile):
         shift, error = aligner.register(cur_tile, next_tile)
@@ -65,15 +72,17 @@ while not fringe.empty():
             fringe.put((new_cost, next_tile))
             came_from[next_tile] = cur_tile
             shifts[next_tile] = shift
+print
 spanning_tree = nx.from_edgelist(came_from.items())
+shift_array = -np.array([s for i, s in sorted(shifts.items())])
+new_positions = positions + shift_array
 
 mshape = np.ceil((positions + metadata.size).max(axis=0)).astype(int)
 mosaic = np.zeros(mshape, dtype=np.uint16)
-reg.paste(mosaic, reader.read(c=0, series=0), [0, 0])
-for i, shift in shifts.items():
+for i, npos in enumerate(new_positions):
     sys.stdout.write("\rLoading %d/%d" % (i + 1, metadata.num_images))
     sys.stdout.flush()
-    reg.paste(mosaic, reader.read(c=0, series=i), positions[i] + shift)
+    reg.paste(mosaic, reader.read(c=0, series=i), npos)
 print
 
 
