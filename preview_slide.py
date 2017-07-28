@@ -13,15 +13,15 @@ metadata = reader.metadata
 positions = metadata.positions - metadata.origin
 mshape = ((metadata.positions + metadata.sizes - metadata.origin).max(axis=0) + 1).astype(int)
 mosaic = np.zeros(mshape, dtype=np.uint16)
-modest_image.imshow(plt.gca(), mosaic, cmap='gray', vmin=0, vmax=65535)
 
 total = reader.metadata.num_images
 for i in range(total):
-    sys.stdout.write("\rLoading %d/%d" % (i, total))
+    sys.stdout.write("\rLoading %d/%d" % (i + 1, total))
     sys.stdout.flush()
     reg.paste(mosaic, np.flipud(reader.read(c=0, series=i)), positions[i])
-    plt.pause(0.01)
 print
+
+modest_image.imshow(plt.gca(), mosaic)
 plt.show()
 
 try:
