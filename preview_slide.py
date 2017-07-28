@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import modest_image
 import reg
 
@@ -21,8 +22,16 @@ for i in range(total):
     reg.paste(mosaic, np.flipud(reader.read(c=0, series=i)), positions[i])
 print
 
-modest_image.imshow(plt.gca(), mosaic)
+ax = plt.gca()
+
+modest_image.imshow(ax, mosaic)
+
+widths, heights = np.fliplr(metadata.sizes).T
+for xy, w, h in zip(np.fliplr(positions), widths, heights):
+    ax.add_patch(mpatches.Rectangle(xy, w, h, color='black', fill=False))
+
 plt.show()
+
 
 try:
     __IPYTHON__
