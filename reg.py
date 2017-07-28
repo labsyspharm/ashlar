@@ -98,8 +98,8 @@ class Aligner(object):
             int_pos = c1.max(axis=0)
             int_shape = np.ceil(c2.min(axis=0) - int_pos).astype(int)
             ps1, ps2 = c1 - int_pos
-            im1 = skimage.filters.laplace(scipy.ndimage.shift(self.reader.read(series=t1, c=0), ps1)[:int_shape[0],:int_shape[1]])
-            im2 = skimage.filters.laplace(scipy.ndimage.shift(self.reader.read(series=t2, c=0), ps2)[:int_shape[0],:int_shape[1]])
+            im1 = skimage.filters.laplace(np.clip(scipy.ndimage.shift(self.reader.read(series=t1, c=0), ps1)[:int_shape[0],:int_shape[1]], 0, 1))
+            im2 = skimage.filters.laplace(np.clip(scipy.ndimage.shift(self.reader.read(series=t2, c=0), ps2)[:int_shape[0],:int_shape[1]], 0, 1))
             shift, error, _ = skimage.feature.register_translation(im1, im2, 10)
             self._cache[key] = (shift, error)
         #print

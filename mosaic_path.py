@@ -49,35 +49,38 @@ centers = metadata.centers - metadata.origin
 neighbor_max_distance = metadata.size.max()
 graph = graph_from_positions(positions, neighbor_max_distance)
 
-start = 5
-start_cost = 0
-fringe = queue.PriorityQueue()
-fringe.put((start_cost, start))
-costs = {start: start_cost}
-came_from = {}
-shifts = {start: np.array([0, 0])}
-
-while not fringe.empty():
-    sys.stdout.write(
-        '\rscored: %d/%d  fringe: %d   '
-        % (len(costs), len(positions), fringe.qsize())
-    )
+num_edges = graph.size()
+for i, (t1, t2) in enumerate(graph.edges_iter(), 1):
+    sys.stdout.write('\raligning: %d/%d' % (i, num_edges))
     sys.stdout.flush()
-    _, cur_tile = fringe.get()
-    for next_tile in graph.neighbors(cur_tile):
-        shift, error = aligner.register(cur_tile, next_tile)
-        new_cost = costs[cur_tile] + error
-        if next_tile not in costs or new_cost < costs[next_tile]:
-            costs[next_tile] = new_cost
-            fringe.put((new_cost, next_tile))
-            came_from[next_tile] = cur_tile
-            shifts[next_tile] = shift
+    aligner.register(t1, t2)
 print
-spanning_tree = nx.from_edgelist(came_from.items())
-shift_array = -np.array([s for i, s in sorted(shifts.items())])
-new_positions = positions + shift_array
 
-mshape = np.ceil((positions + metadata.size).max(axis=0)).astype(int)
+lg = nx.line_graph(graph)
+spanning_tree = nx.Graph()
+fringe = queue.PriorityQueue()
+seen = set()
+start_edge = sorted(aligner._cache.keys(), key=lambda k: aligner._cache[k][1])[0]
+shifts = {start_edge[0]: np.array([0, 0])}
+fringe.put((aligner.register(*start_edge)[1], start_edge))
+while not fringe.empty():
+    _, edge = fringe.get()
+    seen.add(edge)
+    if edge[0] in spanning_tree and edge[1] in spanning_tree:
+        continue
+    spanning_tree.add_edge(*edge)
+    source, dest = edge
+    if source not in shifts:
+        source, dest = dest, source
+    shifts[dest] = shifts[source] + aligner.register(source, dest)[0]
+    for next_edge in set(lg.neighbors(edge)) - seen:
+        fringe.put((aligner.register(*next_edge)[1], next_edge))
+
+
+new_positions = positions + np.array(zip(*sorted(shifts.items()))[1])
+new_positions -= new_positions.min(axis=0)
+new_centers = new_positions + metadata.size / 2
+mshape = np.ceil((new_positions + metadata.size).max(axis=0)).astype(int)
 mosaic = np.zeros(mshape, dtype=np.uint16)
 for i, npos in enumerate(new_positions):
     sys.stdout.write("\rLoading %d/%d" % (i + 1, metadata.num_images))
@@ -90,3 +93,31 @@ try:
     __IPYTHON__
 except:
     reg._deinit_bioformats()
+
+
+"""
+
+plt.figure()
+ax = plt.gca()
+modest_image.imshow(ax, mosaic)
+nx.draw(spanning_tree, ax=ax, pos=np.fliplr(new_centers), with_labels=True,
+    edge_color='royalblue', width=2, node_size=100, font_size=6)
+
+
+plt.figure()
+ax = plt.subplot(121)
+modest_image.imshow(ax, mosaic)
+nx.draw(
+    graph, ax=ax, pos=np.fliplr(centers), with_labels=True,
+    edge_color=[aligner._cache[tuple(sorted(e))][1] for e in graph.edges()],
+    edge_cmap=plt.get_cmap('hot_r'), width=2, node_size=100, font_size=6
+)
+ax = plt.subplot(122)
+modest_image.imshow(ax, mosaic)
+nx.draw(
+    spanning_tree, ax=ax, pos=np.fliplr(centers), with_labels=True,
+    edge_color='royalblue', width=2, node_size=100, font_size=6
+)
+
+
+"""
