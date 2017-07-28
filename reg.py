@@ -87,11 +87,11 @@ class Aligner(object):
         self._cache = {}
 
     def register(self, t1, t2):
-        print '  %d -> %d' % (t1, t2),
+        #print '  %d -> %d' % (t1, t2),
         key = tuple(sorted((t1, t2)))
         try:
             shift, error = self._cache[key]
-            print '<cached>',
+            #print '<cached>',
         except KeyError:
             c1 = self.reader.metadata.positions[[t1, t2]]
             c2 = c1 + self.reader.metadata.size
@@ -102,7 +102,7 @@ class Aligner(object):
             im2 = skimage.filters.laplace(scipy.ndimage.shift(self.reader.read(series=t2, c=0), ps2)[:int_shape[0],:int_shape[1]])
             shift, error, _ = skimage.feature.register_translation(im1, im2, 10)
             self._cache[key] = (shift, error)
-        print
+        #print
         if t1 > t2:
             shift = -shift
         return shift, error
