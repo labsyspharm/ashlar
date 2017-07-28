@@ -27,6 +27,10 @@ class Metadata(object):
         _init_bioformats()
         ome_xml = bioformats.get_omexml_metadata(path)
         self._metadata = bioformats.OMEXML(ome_xml)
+        s0 = self.tile_size(0)
+        if any(any(self.tile_size(i) != s0) for i in range(1, self.num_images)):
+            raise ValueError("Image series must all have the same dimensions")
+        self.size = s0
 
     @property
     def num_images(self):
@@ -57,17 +61,11 @@ class Metadata(object):
 
     @property
     def centers(self):
-        return self.positions + self.sizes / 2
+        return self.positions + self.size / 2
 
     @property
     def origin(self):
         return self.positions.min(axis=0)
-
-    @property
-    def sizes(self):
-        return np.vstack([
-            self.tile_size(i) for i in range(self.num_images)
-        ])
 
 
 class Reader(object):
@@ -79,7 +77,7 @@ class Reader(object):
         self.ir = bioformats.ImageReader(self.path)
 
     def read(self, series, c):
-        return self.ir.read(c=c, series=series)
+        return np.flipud(self.ir.read(c=c, series=series))
 
 
 class Aligner(object):
@@ -95,11 +93,18 @@ class Aligner(object):
             shift, error = self._cache[key]
             print '<cached>',
         except KeyError:
-            im1 = skimage.filters.laplace(self.reader.read(series=t1, c=0))
-            im2 = skimage.filters.laplace(self.reader.read(series=t2, c=0))
+            c1 = self.reader.metadata.positions[[t1, t2]]
+            c2 = c1 + self.reader.metadata.size
+            int_pos = c1.max(axis=0)
+            int_shape = np.ceil(c2.min(axis=0) - int_pos).astype(int)
+            ps1, ps2 = c1 - int_pos
+            im1 = skimage.filters.laplace(scipy.ndimage.shift(self.reader.read(series=t1, c=0), ps1)[:int_shape[0],:int_shape[1]])
+            im2 = skimage.filters.laplace(scipy.ndimage.shift(self.reader.read(series=t2, c=0), ps2)[:int_shape[0],:int_shape[1]])
             shift, error, _ = skimage.feature.register_translation(im1, im2, 10)
             self._cache[key] = (shift, error)
         print
+        if t1 > t2:
+            shift = -shift
         return shift, error
 
 

@@ -44,8 +44,9 @@ reader = reg.Reader(filepath)
 metadata = reader.metadata
 aligner = reg.Aligner(reader)
 
-neighbor_max_distance = metadata.sizes.max(axis=1).min()
-graph = graph_from_positions(metadata.positions, neighbor_max_distance)
+positions = metadata.positions - metadata.origin
+neighbor_max_distance = metadata.size.max()
+graph = graph_from_positions(positions, neighbor_max_distance)
 
 fringe = queue.PriorityQueue()
 fringe.put((0, 0))
@@ -65,6 +66,15 @@ while not fringe.empty():
             came_from[next_tile] = cur_tile
             shifts[next_tile] = shift
 spanning_tree = nx.from_edgelist(came_from.items())
+
+mshape = np.ceil((positions + metadata.size).max(axis=0)).astype(int)
+mosaic = np.zeros(mshape, dtype=np.uint16)
+reg.paste(mosaic, reader.read(c=0, series=0), [0, 0])
+for i, shift in shifts.items():
+    sys.stdout.write("\rLoading %d/%d" % (i + 1, metadata.num_images))
+    sys.stdout.flush()
+    reg.paste(mosaic, reader.read(c=0, series=i), positions[i] + shift)
+print
 
 
 try:
