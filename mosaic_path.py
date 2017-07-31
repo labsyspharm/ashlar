@@ -59,13 +59,11 @@ print
 lg = nx.line_graph(graph)
 spanning_tree = nx.Graph()
 fringe = queue.PriorityQueue()
-seen = set()
 start_edge = sorted(aligner._cache.keys(), key=lambda k: aligner._cache[k][1])[0]
 shifts = {start_edge[0]: np.array([0, 0])}
 fringe.put((aligner.register(*start_edge)[1], start_edge))
 while not fringe.empty():
     _, edge = fringe.get()
-    seen.add(edge)
     if edge[0] in spanning_tree and edge[1] in spanning_tree:
         continue
     spanning_tree.add_edge(*edge)
@@ -73,7 +71,7 @@ while not fringe.empty():
     if source not in shifts:
         source, dest = dest, source
     shifts[dest] = shifts[source] + aligner.register(source, dest)[0]
-    for next_edge in set(lg.neighbors(edge)) - seen:
+    for next_edge in set(lg.neighbors(edge)):
         fringe.put((aligner.register(*next_edge)[1], next_edge))
 
 
