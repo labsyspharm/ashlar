@@ -37,12 +37,13 @@ TileStatistics = collections.namedtuple(
 )
 
 
-filepath = sys.argv[1]
-assert filepath.endswith('.rcpnl')
+filepaths = sys.argv[1:]
+assert len(filepaths) > 0
+assert all(p.endswith('.rcpnl') for p in filepaths)
 
-reader = reg.Reader(filepath)
+reader = reg.Reader(filepaths[0])
 metadata = reader.metadata
-aligner = reg.Aligner(reader)
+aligner = reg.EdgeAligner(reader)
 
 positions = metadata.positions - metadata.origin
 centers = metadata.centers - metadata.origin
@@ -74,17 +75,31 @@ while not fringe.empty():
     for next_edge in set(lg.neighbors(edge)):
         fringe.put((aligner.register(*next_edge)[1], next_edge))
 
-
 new_positions = positions + np.array(zip(*sorted(shifts.items()))[1])
 new_positions -= new_positions.min(axis=0)
 new_centers = new_positions + metadata.size / 2
 mshape = np.ceil((new_positions + metadata.size).max(axis=0)).astype(int)
-mosaic = np.zeros(mshape, dtype=np.uint16)
+mosaic0 = np.zeros(mshape, dtype=np.uint16)
 for i, npos in enumerate(new_positions):
-    sys.stdout.write("\rLoading %d/%d" % (i + 1, metadata.num_images))
+    sys.stdout.write("\rScan 0: merging %d/%d" % (i + 1, metadata.num_images))
     sys.stdout.flush()
-    reg.paste(mosaic, reader.read(c=0, series=i), npos)
+    reg.paste(mosaic0, reader.read(c=0, series=i), npos)
 print
+skimage.io.imsave('scan_0_0.tif', mosaic0)
+
+for s, filepath in enumerate(filepaths[1:], 1):
+    reader = reg.Reader(filepath)
+    metadata = reader.metadata
+    mosaic = np.zeros(mshape, dtype=np.uint16)
+    aligner = reg.LayerAligner(reader, mosaic0)
+    for i in range(metadata.num_images):
+        sys.stdout.write("\rScan %d: merging %d/%d"
+                         % (s, i + 1, metadata.num_images))
+        sys.stdout.flush()
+        npos, error = aligner.register(i)
+        reg.paste(mosaic, reader.read(c=0, series=i), npos)
+    print
+    skimage.io.imsave('scan_%d_0.tif' % s, mosaic)
 
 
 try:

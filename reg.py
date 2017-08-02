@@ -54,6 +54,15 @@ class Metadata(object):
         return np.array([pixels.SizeY, pixels.SizeX])
 
     @property
+    def grid_dimensions(self):
+        pos = self.positions
+        shape = np.array([len(set(pos[:, d])) for d in range(2)])
+        if np.prod(shape) != self.num_images:
+            raise ValueError("Series positions do not form a grid")
+        return shape
+
+
+    @property
     def positions(self):
         return np.vstack([
             self.tile_position(i) for i in range(self.num_images)
@@ -80,7 +89,7 @@ class Reader(object):
         return np.flipud(self.ir.read(c=c, series=series))
 
 
-class Aligner(object):
+class EdgeAligner(object):
 
     def __init__(self, reader):
         self.reader = reader
@@ -106,6 +115,24 @@ class Aligner(object):
         if t1 > t2:
             shift = -shift
         return shift, error
+
+
+class LayerAligner(object):
+
+    def __init__(self, reader, reference_image):
+        self.reader = reader
+        self.reference_image = reference_image
+        self.positions = ((reader.metadata.positions - reader.metadata.origin)
+                          .astype(int))
+
+    def register(self, t):
+        img = self.reader.read(series=t, c=0)
+        sy, sx = self.positions[t]
+        h, w = img.shape
+        reftile = skimage.filters.laplace(self.reference_image[sy:sy+h, sx:sx+w])
+        img = skimage.filters.laplace(crop_like(img, reftile))
+        shift, error, _ = skimage.feature.register_translation(reftile, img, 10)
+        return self.positions[t] + shift, error
 
 
 def paste(target, img, pos, debug=False):
