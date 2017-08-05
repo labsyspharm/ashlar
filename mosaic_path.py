@@ -114,18 +114,22 @@ plt.figure()
 ax = plt.gca()
 modest_image.imshow(ax, mosaic)
 nx.draw(spanning_tree, ax=ax, pos=np.fliplr(new_centers), with_labels=True,
-    edge_color='royalblue', width=2, node_size=100, font_size=6)
+    edge_color=np.sum(np.array([aligner._cache[tuple(sorted(e))][0] for e in spanning_tree.edges()]) ** 2, axis=1) ** 0.5,
+    edge_cmap=plt.get_cmap('Blues_r'), width=2, node_size=100, font_size=6)
 
 
+nrows, ncols = 1, 2
+if mosaic.shape[1] / mosaic.shape[0] / 2 < 4 / 3:
+    nrows, ncols = ncols, nrows
 plt.figure()
-ax = plt.subplot(121)
+ax = plt.subplot(nrows, ncols,1)
 modest_image.imshow(ax, mosaic)
 nx.draw(
     graph, ax=ax, pos=np.fliplr(centers), with_labels=True,
     edge_color=[aligner._cache[tuple(sorted(e))][1] for e in graph.edges()],
     edge_cmap=plt.get_cmap('hot_r'), width=2, node_size=100, font_size=6
 )
-ax = plt.subplot(122)
+ax = plt.subplot(nrows, ncols, 2)
 modest_image.imshow(ax, mosaic)
 nx.draw(
     spanning_tree, ax=ax, pos=np.fliplr(centers), with_labels=True,
