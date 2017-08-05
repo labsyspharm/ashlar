@@ -93,6 +93,7 @@ class EdgeAligner(object):
 
     def __init__(self, reader):
         self.reader = reader
+        self.max_shift = 0.05
         self._cache = {}
 
     def register(self, t1, t2):
@@ -107,9 +108,26 @@ class EdgeAligner(object):
             int_pos = c1.max(axis=0)
             int_shape = np.ceil(c2.min(axis=0) - int_pos).astype(int)
             ps1, ps2 = c1 - int_pos
-            im1 = skimage.filters.laplace(np.clip(scipy.ndimage.shift(self.reader.read(series=t1, c=0), ps1)[:int_shape[0],:int_shape[1]], 0, 1))
-            im2 = skimage.filters.laplace(np.clip(scipy.ndimage.shift(self.reader.read(series=t2, c=0), ps2)[:int_shape[0],:int_shape[1]], 0, 1))
+            # FIXME The sub-pixel pre-shift is leaving a line of dark pixels
+            # along one edge of one intersection image, depending on
+            # orientation. We probably want to pre-shift the intersection images
+            # only by whole pixels, then get the sub-pixel alignment from the
+            # phase correlation, then add back in the original fractional pixel
+            # amounts we ignored in the pre-shifting.
+            im1 = whiten(np.clip(
+                scipy.ndimage.shift(self.reader.read(series=t1, c=0), ps1)
+                [:int_shape[0],:int_shape[1]],
+                0, 1
+            ))
+            im2 = whiten(np.clip(
+                scipy.ndimage.shift(self.reader.read(series=t2, c=0), ps2)
+                [:int_shape[0],:int_shape[1]],
+                0, 1
+            ))
             shift, error, _ = skimage.feature.register_translation(im1, im2, 10)
+            if any(np.abs(shift) > self.max_shift * self.reader.metadata.size):
+                shift[:] = 0
+                error = 1
             self._cache[key] = (shift, error)
         #print
         if t1 > t2:
@@ -129,10 +147,21 @@ class LayerAligner(object):
         img = self.reader.read(series=t, c=0)
         sy, sx = self.positions[t]
         h, w = img.shape
-        reftile = skimage.filters.laplace(self.reference_image[sy:sy+h, sx:sx+w])
-        img = skimage.filters.laplace(crop_like(img, reftile))
+        reftile = whiten(self.reference_image[sy:sy+h, sx:sx+w])
+        img = whiten(crop_like(img, reftile))
         shift, error, _ = skimage.feature.register_translation(reftile, img, 10)
         return self.positions[t] + shift, error
+
+
+def whiten(img):
+    img = skimage.filters.laplace(img)
+    # Other possible whitening functions:
+    #img = skimage.filters.roberts(img)
+    #img = skimage.filters.scharr(img)
+    #img = skimage.filters.sobel(img)
+    #img = np.log(img)
+    #img = img - scipy.ndimage.filters.gaussian_filter(img, 2) + 0.5
+    return img
 
 
 def paste(target, img, pos, debug=False):

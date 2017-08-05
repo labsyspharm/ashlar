@@ -91,12 +91,12 @@ for s, filepath in enumerate(filepaths[1:], 1):
     reader = reg.Reader(filepath)
     metadata = reader.metadata
     mosaic = np.zeros(mshape, dtype=np.uint16)
-    aligner = reg.LayerAligner(reader, mosaic0)
+    aligner_l = reg.LayerAligner(reader, mosaic0)
     for i in range(metadata.num_images):
         sys.stdout.write("\rScan %d: merging %d/%d"
                          % (s, i + 1, metadata.num_images))
         sys.stdout.flush()
-        npos, error = aligner.register(i)
+        npos, error = aligner_l.register(i)
         reg.paste(mosaic, reader.read(c=0, series=i), npos)
     print
     skimage.io.imsave('scan_%d_0.tif' % s, mosaic)
