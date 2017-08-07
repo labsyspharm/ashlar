@@ -7,6 +7,7 @@ import scipy.ndimage
 import skimage.util
 import skimage.feature
 import skimage.filters
+import matplotlib.pyplot as plt
 
 
 def _init_bioformats():
@@ -103,28 +104,17 @@ class EdgeAligner(object):
             shift, error = self._cache[key]
             #print '<cached>',
         except KeyError:
-            c1 = self.reader.metadata.positions[[t1, t2]]
-            c2 = c1 + self.reader.metadata.size
-            int_pos = c1.max(axis=0)
-            int_shape = np.ceil(c2.min(axis=0) - int_pos).astype(int)
-            ps1, ps2 = c1 - int_pos
             # FIXME The sub-pixel pre-shift is leaving a line of dark pixels
             # along one edge of one intersection image, depending on
             # orientation. We probably want to pre-shift the intersection images
             # only by whole pixels, then get the sub-pixel alignment from the
             # phase correlation, then add back in the original fractional pixel
             # amounts we ignored in the pre-shifting.
-            im1 = whiten(np.clip(
-                scipy.ndimage.shift(self.reader.read(series=t1, c=0), ps1)
-                [:int_shape[0],:int_shape[1]],
-                0, 1
-            ))
-            im2 = whiten(np.clip(
-                scipy.ndimage.shift(self.reader.read(series=t2, c=0), ps2)
-                [:int_shape[0],:int_shape[1]],
-                0, 1
-            ))
-            shift, error, _ = skimage.feature.register_translation(im1, im2, 10)
+            img1, img2 = self.overlap(t1, t2)
+            img1 = whiten(img1)
+            img2 = whiten(img2)
+            shift, error, _ = skimage.feature.register_translation(img1, img2,
+                                                                   10)
             if any(np.abs(shift) > self.max_shift * self.reader.metadata.size):
                 shift[:] = 0
                 error = 1
@@ -133,6 +123,58 @@ class EdgeAligner(object):
         if t1 > t2:
             shift = -shift
         return shift, error
+
+    def intersection(self, t1, t2):
+        corners1 = self.reader.metadata.positions[[t1, t2]]
+        corners2 = corners1 + self.reader.metadata.size
+        position = corners1.max(axis=0)
+        shape = np.ceil(corners2.min(axis=0) - position).astype(int)
+        if any(shape <= 0):
+            raise ValueError("Tiles do not intersect")
+        offset1, offset2 = corners1 - position
+        return offset1, offset2, shape
+
+    def crop(self, tile, offset, shape):
+        img = self.reader.read(series=tile, c=0)
+        img = scipy.ndimage.shift(img, offset)[:shape[0], :shape[1]]
+        img = np.clip(img, 0, 1)
+        #start = -offset.astype(int)
+        #end = start + shape
+        #img = img[start[0]:end[0], start[1]:end[1]]
+        return img
+
+    def overlap(self, t1, t2):
+        offset1, offset2, shape = self.intersection(t1, t2)
+        img1 = self.crop(t1, offset1, shape)
+        img2 = self.crop(t2, offset2, shape)
+        return img1, img2
+
+    def debug(self, t1, t2):
+        o1, o2 = self.overlap(t1, t2)
+        w1 = whiten(o1)
+        w2 = whiten(o2)
+        corr = np.fft.fftshift(np.abs(np.fft.ifft2(
+            np.fft.fft2(w1) * np.fft.fft2(w2).conj()
+        )))
+        stack = np.vstack
+        rows, cols = 3, 1
+        if corr.shape[0] > corr.shape[1]:
+            stack = np.hstack
+            rows, cols = cols, rows
+        plt.figure()
+        plt.subplot(rows, cols, 1)
+        plt.imshow(stack([o1, o2]))
+        ax = plt.subplot(rows, cols, 2)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        plt.imshow(stack([w1, w2]))
+        ax = plt.subplot(rows, cols, 3)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        plt.imshow(corr)
+        sy, sx = corr.shape
+        plt.plot(sx / 2, sy / 2, 'rx')
+        plt.tight_layout(0, 0, 0)
 
 
 class LayerAligner(object):
