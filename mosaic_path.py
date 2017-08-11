@@ -18,6 +18,7 @@ import skimage.feature
 import skimage.io
 from skimage.restoration.uft import laplacian
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import modest_image
 
 import reg
@@ -113,6 +114,9 @@ except:
 plt.figure()
 ax = plt.gca()
 modest_image.imshow(ax, mosaic)
+h, w = metadata.size
+for xy in np.fliplr(new_positions):
+    ax.add_patch(mpatches.Rectangle(xy, w, h, color='black', fill=False, lw=0.5))
 nx.draw(spanning_tree, ax=ax, pos=np.fliplr(new_centers), with_labels=True,
     edge_color=np.sum(np.array([aligner._cache[tuple(sorted(e))][0] for e in spanning_tree.edges()]) ** 2, axis=1) ** 0.5,
     edge_cmap=plt.get_cmap('Blues_r'), width=2, node_size=100, font_size=6)
