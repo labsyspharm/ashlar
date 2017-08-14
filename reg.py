@@ -139,6 +139,11 @@ class EdgeAligner(object):
         img2 = self.crop(t2, offset2, shape)
         return img1, img2
 
+    @property
+    def best(self):
+        ordered_keys = sorted(self._cache, key=lambda k: self._cache[k][1])
+        return ordered_keys[0]
+
     def debug(self, t1, t2):
         shift, _ = self.register(t1, t2)
         o1, o2 = self.overlap(t1, t2)
