@@ -280,7 +280,7 @@ def crop(img, offset, shape):
     return img
 
 
-def paste(target, img, pos, debug=False):
+def paste(target, img, pos):
     """Composite img into target using maximum intensity projection.
 
     target: uint
@@ -306,17 +306,6 @@ def paste(target, img, pos, debug=False):
     np.clip(img, 0, 1, img)
     img = skimage.util.dtype.convert(img, target.dtype)
     target_slice[:, :] = np.maximum(target_slice, img)
-    if debug:
-        # Render a faint outline of the pasted image.
-        # TODO 6000 is arbitrary and should be calculated from the data.
-        # Also these lines can cause registration problems, so ideally
-        # this step should be performed on the final images by using the
-        # accumulated list of per-tile offsets.
-        target_slice[0, :] += 6000
-        target_slice[-1, :] += 6000
-        target_slice[1:-1, 0] += 6000
-        target_slice[1:-1, -1] += 6000
-        np.clip(target_slice[:, :], 0, np.iinfo(target.dtype).max)
 
 
 def crop_like(img, target):
