@@ -127,20 +127,11 @@ class EdgeAligner(object):
     def intersection(self, t1, t2):
         corners1 = self.reader.metadata.positions[[t1, t2]]
         corners2 = corners1 + self.reader.metadata.size
-        position = corners1.max(axis=0)
-        shape = np.ceil(corners2.min(axis=0) - position).astype(int)
-        if any(shape <= 0):
-            raise ValueError("Tiles do not intersect")
-        offset1, offset2 = corners1 - position
-        return offset1, offset2, shape
+        return intersection(corners1, corners2)
 
     def crop(self, tile, offset, shape):
         img = self.reader.read(series=tile, c=0)
-        # Note that this only crops to the nearest whole-pixel offset.
-        start = -offset.astype(int)
-        end = start + shape
-        img = img[start[0]:end[0], start[1]:end[1]]
-        return img
+        return crop(img, offset, shape)
 
     def overlap(self, t1, t2):
         offset1, offset2, shape = self.intersection(t1, t2)
@@ -181,20 +172,79 @@ class EdgeAligner(object):
 
 class LayerAligner(object):
 
-    def __init__(self, reader, reference_image):
+    def __init__(self, reader, reference_reader, reference_positions,
+                 reference_shifts):
         self.reader = reader
-        self.reference_image = reference_image
-        self.positions = ((reader.metadata.positions - reader.metadata.origin)
-                          .astype(int))
+        self.reference_reader = reference_reader
+        self.reference_positions = reference_positions
+        self.reference_shifts = reference_shifts
+        self.max_shift = 0.05
+        self.positions = reader.metadata.positions - reader.metadata.origin
+        dist = scipy.spatial.distance.cdist(self.reference_positions,
+                                            self.positions)
+        self.reference_idx = np.argmin(dist, 0)
 
     def register(self, t):
-        img = self.reader.read(series=t, c=0)
-        sy, sx = self.positions[t]
-        h, w = img.shape
-        reftile = whiten(self.reference_image[sy:sy+h, sx:sx+w])
-        img = whiten(crop_like(img, reftile))
-        shift, error, _ = skimage.feature.register_translation(reftile, img, 10)
-        return self.positions[t] + shift, error
+        ref_img, img = self.overlap(t)
+        ref_img = whiten(ref_img)
+        img = whiten(img)
+        shift, error, _ = skimage.feature.register_translation(ref_img, img, 10)
+        # Add fractional part of offset back in.
+        offset1, offset2, _ = self.intersection(t)
+        shift += np.modf(offset1 - offset2)[0]
+        new_position = self.positions[t] + shift
+        # Constrain shift.
+        rel_shift = shift - self.reference_shifts[t]
+        if any(np.abs(rel_shift) > self.max_shift * self.reader.metadata.size):
+            print "\n%s > %s" % (np.abs(shift), self.max_shift * self.reader.metadata.size)
+            new_position = self.positions[t]
+            error = 1
+        return new_position, error
+
+    def ref_pos(self, t):
+        return self.reference_positions[self.reference_idx[t]]
+
+    def intersection(self, t):
+        corners1 = np.vstack([self.ref_pos(t), self.positions[t]])
+        corners2 = corners1 + self.reader.metadata.size
+        offset1, offset2, shape = intersection(corners1, corners2)
+        shape = shape // 32 * 32
+        return offset1, offset2, shape
+
+    def overlap(self, t):
+        offset1, offset2, shape = self.intersection(t)
+        ref_t = self.reference_idx[t]
+        img1 = self.reference_reader.read(series=ref_t, c=0)
+        img2 = self.reader.read(series=t, c=0)
+        ov1 = crop(img1, offset1, shape)
+        ov2 = crop(img2, offset2, shape)
+        return ov1, ov2
+
+    def debug(self, t):
+        shift, _ = self.register(t)
+        o1, o2 = self.overlap(t)
+        w1 = whiten(o1)
+        w2 = whiten(o2)
+        corr = np.fft.fftshift(np.abs(np.fft.ifft2(
+            np.fft.fft2(w1) * np.fft.fft2(w2).conj()
+        )))
+        plt.figure()
+        plt.subplot(1, 3, 1)
+        plt.imshow(np.vstack([o1, o2]))
+        ax = plt.subplot(1, 3, 2)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        plt.imshow(np.vstack([w1, w2]))
+        ax = plt.subplot(1, 3, 3)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        plt.imshow(corr)
+        shift -= self.ref_pos(t)
+        origin = np.array(corr.shape) / 2
+        plt.plot(origin[1], origin[0], 'r+')
+        shift += origin
+        plt.plot(shift[1], shift[0], 'rx')
+        plt.tight_layout(0, 0, 0)
 
 
 def whiten(img):
@@ -205,6 +255,23 @@ def whiten(img):
     #img = skimage.filters.sobel(img)
     #img = np.log(img)
     #img = img - scipy.ndimage.filters.gaussian_filter(img, 2) + 0.5
+    return img
+
+
+def intersection(corners1, corners2):
+    position = corners1.max(axis=0)
+    shape = np.ceil(corners2.min(axis=0) - position).astype(int)
+    if any(shape <= 0):
+        raise ValueError("Tiles do not intersect")
+    offset1, offset2 = corners1 - position
+    return offset1, offset2, shape
+
+
+def crop(img, offset, shape):
+    # Note that this only crops to the nearest whole-pixel offset.
+    start = -offset.astype(int)
+    end = start + shape
+    img = img[start[0]:end[0], start[1]:end[1]]
     return img
 
 

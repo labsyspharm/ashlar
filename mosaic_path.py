@@ -42,9 +42,9 @@ filepaths = sys.argv[1:]
 assert len(filepaths) > 0
 assert all(p.endswith('.rcpnl') for p in filepaths)
 
-reader = reg.Reader(filepaths[0])
-metadata = reader.metadata
-aligner = reg.EdgeAligner(reader)
+reader0 = reg.Reader(filepaths[0])
+metadata = reader0.metadata
+aligner = reg.EdgeAligner(reader0)
 
 positions = metadata.positions - metadata.origin
 centers = metadata.centers - metadata.origin
@@ -76,7 +76,8 @@ while not fringe.empty():
     for next_edge in set(lg.neighbors(edge)):
         fringe.put((aligner.register(*next_edge)[1], next_edge))
 
-new_positions = positions + np.array(zip(*sorted(shifts.items()))[1])
+shifts = np.array(zip(*sorted(shifts.items()))[1])
+new_positions = positions + shifts
 new_positions -= new_positions.min(axis=0)
 new_centers = new_positions + metadata.size / 2
 mshape = np.ceil((new_positions + metadata.size).max(axis=0)).astype(int)
@@ -84,7 +85,7 @@ mosaic0 = np.zeros(mshape, dtype=np.uint16)
 for i, npos in enumerate(new_positions):
     sys.stdout.write("\rScan 0: merging %d/%d" % (i + 1, metadata.num_images))
     sys.stdout.flush()
-    reg.paste(mosaic0, reader.read(c=0, series=i), npos)
+    reg.paste(mosaic0, reader0.read(c=0, series=i), npos)
 print
 skimage.io.imsave('scan_0_0.tif', mosaic0)
 
@@ -92,7 +93,7 @@ for s, filepath in enumerate(filepaths[1:], 1):
     reader = reg.Reader(filepath)
     metadata = reader.metadata
     mosaic = np.zeros(mshape, dtype=np.uint16)
-    aligner_l = reg.LayerAligner(reader, mosaic0)
+    aligner_l = reg.LayerAligner(reader, reader0, new_positions, shifts)
     for i in range(metadata.num_images):
         sys.stdout.write("\rScan %d: merging %d/%d"
                          % (s, i + 1, metadata.num_images))
