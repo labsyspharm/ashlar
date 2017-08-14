@@ -104,17 +104,16 @@ class EdgeAligner(object):
             shift, error = self._cache[key]
             #print '<cached>',
         except KeyError:
-            # FIXME The sub-pixel pre-shift is leaving a line of dark pixels
-            # along one edge of one intersection image, depending on
-            # orientation. We probably want to pre-shift the intersection images
-            # only by whole pixels, then get the sub-pixel alignment from the
-            # phase correlation, then add back in the original fractional pixel
-            # amounts we ignored in the pre-shifting.
+            # Register nearest-pixel image overlaps.
             img1, img2 = self.overlap(t1, t2)
             img1 = whiten(img1)
             img2 = whiten(img2)
             shift, error, _ = skimage.feature.register_translation(img1, img2,
                                                                    10)
+            # Add fractional part of offset back in.
+            offset1, offset2, _ = self.intersection(t1, t2)
+            shift += np.modf(offset1 - offset2)[0]
+            # Constrain shift.
             if any(np.abs(shift) > self.max_shift * self.reader.metadata.size):
                 shift[:] = 0
                 error = 1
@@ -122,7 +121,8 @@ class EdgeAligner(object):
         #print
         if t1 > t2:
             shift = -shift
-        return shift, error
+        # Return copy of shift to prevent corruption of cached values.
+        return shift.copy(), error
 
     def intersection(self, t1, t2):
         corners1 = self.reader.metadata.positions[[t1, t2]]
@@ -136,11 +136,10 @@ class EdgeAligner(object):
 
     def crop(self, tile, offset, shape):
         img = self.reader.read(series=tile, c=0)
-        img = scipy.ndimage.shift(img, offset)[:shape[0], :shape[1]]
-        img = np.clip(img, 0, 1)
-        #start = -offset.astype(int)
-        #end = start + shape
-        #img = img[start[0]:end[0], start[1]:end[1]]
+        # Note that this only crops to the nearest whole-pixel offset.
+        start = -offset.astype(int)
+        end = start + shape
+        img = img[start[0]:end[0], start[1]:end[1]]
         return img
 
     def overlap(self, t1, t2):
@@ -150,6 +149,7 @@ class EdgeAligner(object):
         return img1, img2
 
     def debug(self, t1, t2):
+        shift, _ = self.register(t1, t2)
         o1, o2 = self.overlap(t1, t2)
         w1 = whiten(o1)
         w2 = whiten(o2)
@@ -172,8 +172,10 @@ class EdgeAligner(object):
         ax.set_xticks([])
         ax.set_yticks([])
         plt.imshow(corr)
-        sy, sx = corr.shape
-        plt.plot(sx / 2, sy / 2, 'rx')
+        origin = np.array(corr.shape) / 2
+        plt.plot(origin[1], origin[0], 'r+')
+        shift += origin
+        plt.plot(shift[1], shift[0], 'rx')
         plt.tight_layout(0, 0, 0)
 
 
