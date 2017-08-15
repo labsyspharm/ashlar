@@ -65,9 +65,11 @@ class Metadata(object):
 
     @property
     def positions(self):
-        return np.vstack([
-            self.tile_position(i) for i in range(self.num_images)
-        ])
+        if not hasattr(self, '_positions'):
+            self._positions = np.vstack([
+                self.tile_position(i) for i in range(self.num_images)
+            ])
+        return self._positions
 
     @property
     def centers(self):
