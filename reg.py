@@ -7,7 +7,12 @@ import scipy.ndimage
 import skimage.util
 import skimage.feature
 import skimage.filters
+import skimage.restoration.uft
+import pyfftw
 import matplotlib.pyplot as plt
+
+# Patch np.fft to use pyfftw so skimage utilities can benefit.
+np.fft = pyfftw.interfaces.numpy_fft
 
 
 def _init_bioformats():
@@ -108,10 +113,11 @@ class EdgeAligner(object):
         except KeyError:
             # Register nearest-pixel image overlaps.
             img1, img2 = self.overlap(t1, t2)
-            img1 = whiten(img1)
-            img2 = whiten(img2)
-            shift, error, _ = skimage.feature.register_translation(img1, img2,
-                                                                   10)
+            img1_f = fft2(whiten(img1))
+            img2_f = fft2(whiten(img2))
+            shift, error, _ = skimage.feature.register_translation(
+                img1_f, img2_f, 10, 'fourier'
+            )
             # Add fractional part of offset back in.
             offset1, offset2, _ = self.intersection(t1, t2)
             shift += np.modf(offset1 - offset2)[0]
@@ -193,9 +199,11 @@ class LayerAligner(object):
 
     def register(self, t):
         ref_img, img = self.overlap(t)
-        ref_img = whiten(ref_img)
-        img = whiten(img)
-        shift, error, _ = skimage.feature.register_translation(ref_img, img, 10)
+        ref_img_f = fft2(whiten(ref_img))
+        img_f = fft2(whiten(img))
+        shift, error, _ = skimage.feature.register_translation(
+            ref_img_f, img_f, 10, 'fourier'
+        )
         # Add fractional part of offset back in.
         offset1, offset2, _ = self.intersection(t)
         shift += np.modf(offset1 - offset2)[0]
@@ -254,15 +262,30 @@ class LayerAligner(object):
         plt.tight_layout(0, 0, 0)
 
 
+def fft2(img):
+    return pyfftw.builders.fft2(img, planner_effort='FFTW_ESTIMATE',
+                                avoid_copy=True, auto_align_input=True,
+                                auto_contiguous=True)()
+
+
+# Pre-calculate the Laplacian operator kernel. We'll always be using 2D images.
+_laplace_kernel = skimage.restoration.uft.laplacian(2, (3, 3))[1]
+
 def whiten(img):
-    img = skimage.filters.laplace(img)
+    # Copied from skimage.filters.edges, with explicit aligned output from
+    # convolve. Also the mask option was dropped.
+    img = skimage.img_as_float(img)
+    output = pyfftw.empty_aligned(img.shape, 'complex64')
+    output.imag[:] = 0
+    scipy.ndimage.convolve(img, _laplace_kernel, output.real)
+    return output
+
     # Other possible whitening functions:
     #img = skimage.filters.roberts(img)
     #img = skimage.filters.scharr(img)
     #img = skimage.filters.sobel(img)
     #img = np.log(img)
     #img = img - scipy.ndimage.filters.gaussian_filter(img, 2) + 0.5
-    return img
 
 
 def intersection(corners1, corners2):
