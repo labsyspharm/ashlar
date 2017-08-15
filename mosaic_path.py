@@ -124,7 +124,7 @@ nx.draw(spanning_tree, ax=ax, pos=np.fliplr(new_centers), with_labels=True,
 
 
 nrows, ncols = 1, 2
-if mosaic.shape[1] / mosaic.shape[0] / 2 < 4 / 3:
+if mosaic.shape[1] * 2 / mosaic.shape[0] < 4 / 3:
     nrows, ncols = ncols, nrows
 plt.figure()
 ax = plt.subplot(nrows, ncols,1)
