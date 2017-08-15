@@ -203,7 +203,7 @@ class LayerAligner(object):
         # Constrain shift.
         rel_shift = shift - self.reference_shifts[t]
         if any(np.abs(rel_shift) > self.max_shift * self.reader.metadata.size):
-            print "\n%s > %s" % (np.abs(shift), self.max_shift * self.reader.metadata.size)
+            #print "\n%s > %s" % (np.abs(shift), self.max_shift * self.reader.metadata.size)
             new_position = self.positions[t]
             error = 1
         return new_position, error
