@@ -89,7 +89,7 @@ class Reader(object):
         self.ir = bioformats.ImageReader(self.path)
 
     def read(self, series, c):
-        return np.flipud(self.ir.read(c=c, series=series))
+        return np.flipud(self.ir.read(c=c, series=series, rescale=False))
 
 
 class EdgeAligner(object):
@@ -283,12 +283,7 @@ def crop(img, offset, shape):
 
 
 def paste(target, img, pos):
-    """Composite img into target using maximum intensity projection.
-
-    target: uint
-    img: float
-
-    """
+    """Composite img into target using maximum intensity projection."""
     pos_f, pos_i = np.modf(pos)
     yi, xi = pos_i.astype('i8')
     # Clip img to the edges of the mosaic.
@@ -305,7 +300,8 @@ def paste(target, img, pos):
     target_slice = target[yi:yi+img.shape[0], xi:xi+img.shape[1]]
     img = crop_like(img, target_slice)
     img = scipy.ndimage.shift(img, pos_f)
-    np.clip(img, 0, 1, img)
+    if np.issubdtype(img.dtype, float):
+        np.clip(img, 0, 1, img)
     img = skimage.util.dtype.convert(img, target.dtype)
     target_slice[:, :] = np.maximum(target_slice, img)
 
