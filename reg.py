@@ -305,21 +305,42 @@ def crop(img, offset, shape):
     return img
 
 
-def fshift(s, shift):
-    s = pyfftw.byte_align(skimage.img_as_float(s), dtype=np.complex64)
-    n, m = s.shape
-    v = np.hstack([np.arange(0.0, (n+1)//2), np.arange(-(n//2), 0.0)]) / n
-    vy0 = v.reshape(-1, 1) * shift[0]
-    u = np.hstack([np.arange(0.0, (m+1)//2), np.arange(-(m//2), 0.0)]) / m
-    ux0 = u * shift[1]
-    fshift = np.exp(-1j * 2 * np.pi * (vy0 + ux0))
-    sf = pyfftw.builders.fft2(s, planner_effort='FFTW_MEASURE',
-                              avoid_copy=True, auto_align_input=True,
-                              auto_contiguous=True)()
-    ss = pyfftw.builders.ifft2(fshift * sf, planner_effort='FFTW_MEASURE',
-                               avoid_copy=True, auto_align_input=True,
-                               auto_contiguous=True)()
-    return ss.real
+# TODO:
+# - Can we use real FFT to avoid 50% of FFT cost?
+def fshift(img, shift):
+    # Ensure properly aligned complex64 data (fft requires complex to avoid
+    # reallocation and copying).
+    img = skimage.util.dtype.convert(img, dtype=np.float32)
+    img = pyfftw.byte_align(img, dtype=np.complex64)
+    # Compute per-axis frequency values according to the Fourier shift theorem.
+    # (Read "w" here as "omega".) We pre-multiply as many scalar values as
+    # possible on these vectors to avoid operations on the full w matrix below.
+    v = np.fft.fftfreq(img.shape[0])
+    wy = (2 * np.pi * v * shift[0]).astype(np.float32).reshape(-1, 1)
+    u = np.fft.fftfreq(img.shape[1])
+    wx = (2 * np.pi * u * shift[1]).astype(np.float32)
+    # Add column and row vector to get full expanded matrix of frequencies.
+    w = wy + wx
+    # We perform an explicit application of Euler's formula with careful
+    # management of output arrays to avoid extra memory allocations and copies,
+    # squeezing out some speed over the obvious np.exp(-1j*w).
+    fshift = np.empty_like(img, dtype=np.complex64)
+    np.cos(w, out=fshift.real)
+    np.sin(w, out=fshift.imag)
+    np.negative(fshift.imag, out=fshift.imag)
+    # Perform the FFT, multiply in-place by the shift matrix, then IFFT.
+    freq = pyfftw.builders.fft2(img, planner_effort='FFTW_ESTIMATE',
+                                avoid_copy=True, auto_align_input=True,
+                                auto_contiguous=True)()
+    freq *= fshift
+    img_s = pyfftw.builders.ifft2(freq, planner_effort='FFTW_ESTIMATE',
+                                  avoid_copy=True, auto_align_input=True,
+                                  auto_contiguous=True)()
+    # Any non-zero imaginary component of the resulting array is due to
+    # numerical error, so we can just return the real part.
+    # FIXME need to zero out row(s) and column(s) we shifted away from,
+    # since at this point we have a cyclic rotation rather than a shift.
+    return img_s.real
 
 
 def paste(target, img, pos):
