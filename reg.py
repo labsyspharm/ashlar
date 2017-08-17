@@ -305,6 +305,23 @@ def crop(img, offset, shape):
     return img
 
 
+def fshift(s, shift):
+    s = pyfftw.byte_align(skimage.img_as_float(s), dtype=np.complex64)
+    n, m = s.shape
+    v = np.hstack([np.arange(0.0, (n+1)//2), np.arange(-(n//2), 0.0)]) / n
+    vy0 = v.reshape(-1, 1) * shift[0]
+    u = np.hstack([np.arange(0.0, (m+1)//2), np.arange(-(m//2), 0.0)]) / m
+    ux0 = u * shift[1]
+    fshift = np.exp(-1j * 2 * np.pi * (vy0 + ux0))
+    sf = pyfftw.builders.fft2(s, planner_effort='FFTW_MEASURE',
+                              avoid_copy=True, auto_align_input=True,
+                              auto_contiguous=True)()
+    ss = pyfftw.builders.ifft2(fshift * sf, planner_effort='FFTW_MEASURE',
+                               avoid_copy=True, auto_align_input=True,
+                               auto_contiguous=True)()
+    return ss.real
+
+
 def paste(target, img, pos):
     """Composite img into target using maximum intensity projection."""
     pos_f, pos_i = np.modf(pos)
