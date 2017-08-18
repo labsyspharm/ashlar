@@ -306,8 +306,19 @@ def crop(img, offset, shape):
 
 
 # TODO:
-# - Can we use real FFT to avoid 50% of FFT cost?
-def fshift(img, shift):
+# - Deal with ringing from high-frequency elements. The wrapped edges of the
+#   image are especially bad, where the wrapping introduces sharp
+#   discontinuities. The edge artifacts could be dealt with in several ways
+#   (extend the trailing image edge via mirroring, throw away some of the
+#   trailing edge of the shifted result) but edges in the "true" image content
+#   would require proper pre-filtering. What filter to use, and how to apply it
+#   quickly?
+# - Can we use real FFT for a ~50% overall speedup? Fourier-space matrices will
+#   all be half-size in the last dimension, so FFT is around 50% faster and our
+#   fshift calculations will be too.
+# - Trailing edge pixels should be zeroed to match the behavior of
+#   scipy.ndimage.shift, which we rely on in our maximum-intensity projection.
+def fourier_shift(img, shift):
     # Ensure properly aligned complex64 data (fft requires complex to avoid
     # reallocation and copying).
     img = skimage.util.dtype.convert(img, dtype=np.float32)
