@@ -1,17 +1,7 @@
-from __future__ import division
 import sys
-import collections
-import queue
 import numpy as np
-import pandas as pd
 import skimage.io
 import reg
-
-
-TileStatistics = collections.namedtuple(
-    'TileStatistics',
-    'scan tile x_original y_original x y shift_x shift_y error'
-)
 
 
 filepaths = sys.argv[1:]

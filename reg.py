@@ -103,6 +103,12 @@ class Reader(object):
         return self.ir.read(c=c, series=series, rescale=False)
 
 
+# TileStatistics = collections.namedtuple(
+#     'TileStatistics',
+#     'scan tile x_original y_original x y shift_x shift_y error'
+# )
+
+
 class EdgeAligner(object):
 
     def __init__(self, reader, verbose=False):
