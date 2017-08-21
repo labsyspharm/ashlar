@@ -55,7 +55,9 @@ class Metadata(object):
 
     def tile_position(self, i):
         plane = self._metadata.image(i).Pixels.Plane(0)
-        position_microns = np.array([plane.PositionY, plane.PositionX])
+        # Invert Y so that stage position coordinates and image pixel
+        # coordinates are aligned.
+        position_microns = np.array([-plane.PositionY, plane.PositionX])
         position_pixels = position_microns / self.pixel_size
         return position_pixels
 
@@ -98,7 +100,7 @@ class Reader(object):
         self.ir = bioformats.ImageReader(self.path)
 
     def read(self, series, c):
-        return np.flipud(self.ir.read(c=c, series=series, rescale=False))
+        return self.ir.read(c=c, series=series, rescale=False)
 
 
 class EdgeAligner(object):
