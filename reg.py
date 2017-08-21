@@ -1,5 +1,5 @@
 from __future__ import division
-import atexit
+import sys
 import bioformats
 import javabridge
 import numpy as np
@@ -9,7 +9,11 @@ import skimage.feature
 import skimage.filters
 import skimage.restoration.uft
 import pyfftw
+import networkx as nx
+import queue
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import modest_image
 
 # Patch np.fft to use pyfftw so skimage utilities can benefit.
 np.fft = pyfftw.interfaces.numpy_fft
@@ -99,17 +103,61 @@ class Reader(object):
 
 class EdgeAligner(object):
 
-    def __init__(self, reader):
+    def __init__(self, reader, verbose=False):
         self.reader = reader
+        self.verbose = verbose
         self.max_shift = 0.05
         self._cache = {}
 
-    def register(self, t1, t2):
-        #print '  %d -> %d' % (t1, t2),
+    def run(self):
+        self.register_all()
+        self.build_spanning_tree()
+        self.calculate_positions()
+
+    def register_all(self):
+        num_edges = self.neighbors_graph.size()
+        for i, (t1, t2) in enumerate(self.neighbors_graph.edges_iter(), 1):
+            if self.verbose:
+                sys.stdout.write('\raligning: %d/%d' % (i, num_edges))
+                sys.stdout.flush()
+            self.register_pair(t1, t2)
+        if self.verbose:
+            print
+
+    def build_spanning_tree(self):
+        line_graph = nx.line_graph(self.neighbors_graph)
+        spanning_tree = nx.Graph()
+        fringe = queue.PriorityQueue()
+        start_edge = self.best_edge
+        fringe.put((self.register_pair(*start_edge)[1], start_edge))
+        while not fringe.empty():
+            _, edge = fringe.get()
+            if edge[0] in spanning_tree and edge[1] in spanning_tree:
+                continue
+            spanning_tree.add_edge(*edge)
+            for next_edge in set(line_graph.neighbors(edge)):
+                fringe.put((self.register_pair(*next_edge)[1], next_edge))
+        self.spanning_tree = spanning_tree
+
+    def calculate_positions(self):
+        # Use the source node of the edge with the best alignment quality as the
+        # reference tile against which all others will be aligned.
+        reference_node = self.best_edge[0]
+        shifts = {reference_node: np.array([0, 0])}
+        for edge in nx.traversal.dfs_edges(self.spanning_tree, reference_node):
+            source, dest = edge
+            if source not in shifts:
+                source, dest = dest, source
+            shifts[dest] = shifts[source] + self.register_pair(source, dest)[0]
+        self.shifts = np.array(zip(*sorted(shifts.items()))[1])
+        self.positions = self.metadata.positions + self.shifts
+        self.positions -= self.positions.min(axis=0)
+        self.centers = self.positions + self.metadata.size / 2
+
+    def register_pair(self, t1, t2):
         key = tuple(sorted((t1, t2)))
         try:
             shift, error = self._cache[key]
-            #print '<cached>',
         except KeyError:
             # Register nearest-pixel image overlaps.
             img1, img2 = self.overlap(t1, t2)
@@ -122,19 +170,18 @@ class EdgeAligner(object):
             offset1, offset2, _ = self.intersection(t1, t2)
             shift += np.modf(offset1 - offset2)[0]
             # Constrain shift.
-            if any(np.abs(shift) > self.max_shift * self.reader.metadata.size):
+            if any(np.abs(shift) > self.max_shift * self.metadata.size):
                 shift[:] = 0
                 error = 1
             self._cache[key] = (shift, error)
-        #print
         if t1 > t2:
             shift = -shift
         # Return copy of shift to prevent corruption of cached values.
         return shift.copy(), error
 
     def intersection(self, t1, t2):
-        corners1 = self.reader.metadata.positions[[t1, t2]]
-        corners2 = corners1 + self.reader.metadata.size
+        corners1 = self.metadata.positions[[t1, t2]]
+        corners2 = corners1 + self.metadata.size
         return intersection(corners1, corners2)
 
     def crop(self, tile, offset, shape):
@@ -148,12 +195,36 @@ class EdgeAligner(object):
         return img1, img2
 
     @property
-    def best(self):
+    def best_edge(self):
         ordered_keys = sorted(self._cache, key=lambda k: self._cache[k][1])
         return ordered_keys[0]
 
+    @property
+    def neighbors_graph(self):
+        """Return graph of neighboring (overlapping) tiles.
+
+        Tiles are considered neighbors if the 'city block' distance between them
+        is less than the largest tile dimension.
+
+        """
+        # FIXME: This should properly test for overlap, possibly via
+        # intersection of bounding rectangles.
+        if not hasattr(self, '_neighbors_graph'):
+            pdist = scipy.spatial.distance.pdist(self.metadata.positions,
+                                                 metric='cityblock')
+            sp = scipy.spatial.distance.squareform(pdist)
+            max_distance = self.metadata.size.max()
+            edges = zip(*np.nonzero((sp > 0) & (sp < max_distance)))
+            graph = nx.from_edgelist(edges)
+            self._neighbors_graph = graph
+        return self._neighbors_graph
+
+    @property
+    def metadata(self):
+        return self.reader.metadata
+
     def debug(self, t1, t2):
-        shift, _ = self.register(t1, t2)
+        shift, _ = self.register_pair(t1, t2)
         o1, o2 = self.overlap(t1, t2)
         w1 = whiten(o1)
         w2 = whiten(o2)
@@ -171,7 +242,7 @@ class EdgeAligner(object):
         ax = plt.subplot(rows, cols, 2)
         ax.set_xticks([])
         ax.set_yticks([])
-        plt.imshow(stack([w1, w2]))
+        plt.imshow(stack([w1, w2]).real)
         ax = plt.subplot(rows, cols, 3)
         ax.set_xticks([])
         ax.set_yticks([])
@@ -180,6 +251,7 @@ class EdgeAligner(object):
         plt.plot(origin[1], origin[0], 'r+')
         shift += origin
         plt.plot(shift[1], shift[0], 'rx')
+        plt.colorbar()
         plt.tight_layout(0, 0, 0)
 
 
@@ -384,3 +456,50 @@ def crop_like(img, target):
     if (img.shape[1] > target.shape[1]):
         img = img[:, :target.shape[1]]
     return img
+
+
+def plot_edge_shifts(aligner, mosaic):
+    plt.figure()
+    ax = plt.gca()
+    modest_image.imshow(ax, mosaic)
+    h, w = aligner.reader.metadata.size
+    # Bounding boxes denoting new tile positions.
+    for xy in np.fliplr(aligner.positions):
+        rect = mpatches.Rectangle(xy, w, h, color='black', fill=False, lw=0.5)
+        ax.add_patch(rect)
+    shifts = np.array([aligner._cache[tuple(sorted(e))][0]
+                       for e in aligner.spanning_tree.edges()])
+    shift_distances = np.sum(shifts ** 2, axis=1) ** 0.5
+    # Spanning tree with nodes at new tile positions, edges colored by shift
+    # distance (brighter = farther).
+    nx.draw(
+        aligner.spanning_tree, ax=ax, with_labels=True,
+        pos=np.fliplr(aligner.centers), edge_color=shift_distances,
+        edge_cmap=plt.get_cmap('Blues_r'), width=2, node_size=100, font_size=6
+    )
+
+def plot_edge_quality(aligner, mosaic):
+    centers = aligner.reader.metadata.centers - aligner.reader.metadata.origin
+    nrows, ncols = 1, 2
+    if mosaic.shape[1] * 2 / mosaic.shape[0] < 4 / 3:
+        nrows, ncols = ncols, nrows
+    plt.figure()
+    ax = plt.subplot(nrows, ncols,1)
+    modest_image.imshow(ax, mosaic)
+    error = [aligner._cache[tuple(sorted(e))][1]
+             for e in aligner.neighbors_graph.edges()]
+    # Neighbor graph colored by edge alignment quality (brighter = better).
+    nx.draw(
+        aligner.neighbors_graph, ax=ax, with_labels=True,
+        pos=np.fliplr(centers), edge_color=error,
+        edge_cmap=plt.get_cmap('hot_r'), width=2, node_size=100, font_size=6
+    )
+    ax = plt.subplot(nrows, ncols, 2)
+    modest_image.imshow(ax, mosaic)
+    # Spanning tree with nodes at original tile positions.
+    nx.draw(
+        aligner.spanning_tree, ax=ax, with_labels=True,
+        pos=np.fliplr(centers), edge_color='royalblue',
+        width=2, node_size=100, font_size=6
+    )
+
