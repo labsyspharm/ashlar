@@ -259,12 +259,11 @@ class EdgeAligner(object):
 
 class LayerAligner(object):
 
-    def __init__(self, reader, reference_reader, reference_positions,
-                 reference_shifts):
+    def __init__(self, reader, reference_reader, reference_aligner):
         self.reader = reader
         self.reference_reader = reference_reader
-        self.reference_positions = reference_positions
-        self.reference_shifts = reference_shifts
+        self.reference_positions = reference_aligner.positions
+        self.reference_shifts = reference_aligner.shifts
         self.max_shift = 0.05
         self.positions = reader.metadata.positions - reader.metadata.origin
         dist = scipy.spatial.distance.cdist(self.reference_positions,

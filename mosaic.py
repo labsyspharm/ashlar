@@ -36,7 +36,7 @@ for s, filepath in enumerate(filepaths[1:], 1):
     reader = reg.Reader(filepath)
     metadata = reader.metadata
     mosaic = np.zeros(mshape, dtype=np.uint16)
-    aligner_l = reg.LayerAligner(reader, reader0, new_positions, shifts)
+    aligner_l = reg.LayerAligner(reader, reader0, aligner)
     for i in range(metadata.num_images):
         sys.stdout.write("\rScan %d: merging %d/%d"
                          % (s, i + 1, metadata.num_images))
