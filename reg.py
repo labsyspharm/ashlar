@@ -109,6 +109,27 @@ class Reader(object):
 # )
 
 
+@property
+def neighbors_graph(aligner):
+    """Return graph of neighboring (overlapping) tiles.
+
+    Tiles are considered neighbors if the 'city block' distance between them
+    is less than the largest tile dimension.
+
+    """
+    # FIXME: This should properly test for overlap, possibly via
+    # intersection of bounding rectangles.
+    if not hasattr(aligner, '_neighbors_graph'):
+        pdist = scipy.spatial.distance.pdist(aligner.metadata.positions,
+                                             metric='cityblock')
+        sp = scipy.spatial.distance.squareform(pdist)
+        max_distance = aligner.metadata.size.max()
+        edges = zip(*np.nonzero((sp > 0) & (sp < max_distance)))
+        graph = nx.from_edgelist(edges)
+        aligner._neighbors_graph = graph
+    return aligner._neighbors_graph
+
+
 class EdgeAligner(object):
 
     def __init__(self, reader, verbose=False):
@@ -117,16 +138,18 @@ class EdgeAligner(object):
         self.max_shift = 0.05
         self._cache = {}
 
+    neighbors_graph = neighbors_graph
+
     def run(self):
         self.register_all()
         self.build_spanning_tree()
         self.calculate_positions()
 
     def register_all(self):
-        num_edges = self.neighbors_graph.size()
+        n = self.neighbors_graph.size()
         for i, (t1, t2) in enumerate(self.neighbors_graph.edges_iter(), 1):
             if self.verbose:
-                sys.stdout.write('\raligning: %d/%d' % (i, num_edges))
+                sys.stdout.write('\r    aligning edge %d/%d' % (i, n))
                 sys.stdout.flush()
             self.register_pair(t1, t2)
         if self.verbose:
@@ -159,10 +182,12 @@ class EdgeAligner(object):
             shifts[dest] = shifts[source] + self.register_pair(source, dest)[0]
         self.shifts = np.array(zip(*sorted(shifts.items()))[1])
         self.positions = self.metadata.positions + self.shifts
-        self.positions -= self.positions.min(axis=0)
+        self.origin = self.positions.min(axis=0)
+        self.positions -= self.origin
         self.centers = self.positions + self.metadata.size / 2
 
     def register_pair(self, t1, t2):
+        """Return relative shift between images and the alignment error."""
         key = tuple(sorted((t1, t2)))
         try:
             shift, error = self._cache[key]
@@ -208,28 +233,14 @@ class EdgeAligner(object):
         return ordered_keys[0]
 
     @property
-    def neighbors_graph(self):
-        """Return graph of neighboring (overlapping) tiles.
-
-        Tiles are considered neighbors if the 'city block' distance between them
-        is less than the largest tile dimension.
-
-        """
-        # FIXME: This should properly test for overlap, possibly via
-        # intersection of bounding rectangles.
-        if not hasattr(self, '_neighbors_graph'):
-            pdist = scipy.spatial.distance.pdist(self.metadata.positions,
-                                                 metric='cityblock')
-            sp = scipy.spatial.distance.squareform(pdist)
-            max_distance = self.metadata.size.max()
-            edges = zip(*np.nonzero((sp > 0) & (sp < max_distance)))
-            graph = nx.from_edgelist(edges)
-            self._neighbors_graph = graph
-        return self._neighbors_graph
-
-    @property
     def metadata(self):
         return self.reader.metadata
+
+    @property
+    def mosaic_shape(self):
+        upper_corners = self.positions + self.metadata.size
+        max_dimensions = upper_corners.max(axis=0)
+        return np.ceil(max_dimensions).astype(int)
 
     def debug(self, t1, t2):
         shift, _ = self.register_pair(t1, t2)
@@ -265,18 +276,42 @@ class EdgeAligner(object):
 
 class LayerAligner(object):
 
-    def __init__(self, reader, reference_reader, reference_aligner):
+    def __init__(self, reader, reference_aligner, verbose=False):
         self.reader = reader
-        self.reference_reader = reference_reader
-        self.reference_positions = reference_aligner.positions
-        self.reference_shifts = reference_aligner.shifts
+        self.reference_aligner = reference_aligner
+        self.reference_positions = (reference_aligner.metadata.positions
+                                    - reference_aligner.metadata.origin)
+        self.verbose = verbose
         self.max_shift = 0.05
-        self.positions = reader.metadata.positions - reader.metadata.origin
+        self.tile_positions = self.metadata.positions - self.metadata.origin
         dist = scipy.spatial.distance.cdist(self.reference_positions,
-                                            self.positions)
+                                            self.tile_positions)
         self.reference_idx = np.argmin(dist, 0)
 
+    neighbors_graph = neighbors_graph
+
+    def run(self):
+        self.register_all()
+        self.calculate_positions()
+
+    def register_all(self):
+        n = self.metadata.num_images
+        self.shifts = np.empty((n, 2))
+        for i in range(n):
+            if self.verbose:
+                sys.stdout.write("\r    aligning tile %d/%d" % (i + 1, n))
+                sys.stdout.flush()
+            shift, error = self.register(i)
+            self.shifts[i] = shift
+        if self.verbose:
+            print
+
+    def calculate_positions(self):
+        self.positions = self.tile_positions + self.shifts
+        self.centers = self.positions + self.metadata.size / 2
+
     def register(self, t):
+        """Return relative shift between images and the alignment error."""
         ref_img, img = self.overlap(t)
         ref_img_f = fft2(whiten(ref_img))
         img_f = fft2(whiten(img))
@@ -286,20 +321,19 @@ class LayerAligner(object):
         # Add fractional part of offset back in.
         offset1, offset2, _ = self.intersection(t)
         shift += np.modf(offset1 - offset2)[0]
-        new_position = self.positions[t] + shift
         # Constrain shift.
-        rel_shift = shift - self.reference_shifts[t]
-        if any(np.abs(rel_shift) > self.max_shift * self.reader.metadata.size):
-            #print "\n%s > %s" % (np.abs(shift), self.max_shift * self.reader.metadata.size)
-            new_position = self.positions[t]
-            error = 1
-        return new_position, error
+        rel_shift = shift - self.reference_aligner.shifts[t]
+        # if any(np.abs(rel_shift) > self.max_shift * self.reader.metadata.size):
+        #     #print "\n%s > %s" % (np.abs(shift), self.max_shift * self.reader.metadata.size)
+        #     new_position = self.tile_positions[t]
+        #     error = 1
+        return shift, error
 
     def ref_pos(self, t):
         return self.reference_positions[self.reference_idx[t]]
 
     def intersection(self, t):
-        corners1 = np.vstack([self.ref_pos(t), self.positions[t]])
+        corners1 = np.vstack([self.ref_pos(t), self.tile_positions[t]])
         corners2 = corners1 + self.reader.metadata.size
         offset1, offset2, shape = intersection(corners1, corners2)
         shape = shape // 32 * 32
@@ -308,11 +342,15 @@ class LayerAligner(object):
     def overlap(self, t):
         offset1, offset2, shape = self.intersection(t)
         ref_t = self.reference_idx[t]
-        img1 = self.reference_reader.read(series=ref_t, c=0)
+        img1 = self.reference_aligner.reader.read(series=ref_t, c=0)
         img2 = self.reader.read(series=t, c=0)
         ov1 = crop(img1, offset1, shape)
         ov2 = crop(img2, offset2, shape)
         return ov1, ov2
+
+    @property
+    def metadata(self):
+        return self.reader.metadata
 
     def debug(self, t):
         shift, _ = self.register(t)
@@ -328,7 +366,7 @@ class LayerAligner(object):
         ax = plt.subplot(1, 3, 2)
         ax.set_xticks([])
         ax.set_yticks([])
-        plt.imshow(np.vstack([w1, w2]))
+        plt.imshow(np.vstack([w1, w2]).real)
         ax = plt.subplot(1, 3, 3)
         ax.set_xticks([])
         ax.set_yticks([])
@@ -510,3 +548,18 @@ def plot_edge_quality(aligner, mosaic):
         width=2, node_size=100, font_size=6
     )
 
+def plot_layer_shifts(aligner, mosaic):
+    plt.figure()
+    ax = plt.gca()
+    modest_image.imshow(ax, mosaic)
+    h, w = aligner.metadata.size
+    # Bounding boxes denoting new tile positions.
+    for xy in np.fliplr(aligner.positions):
+        rect = mpatches.Rectangle(xy, w, h, color='black', fill=False, lw=0.5)
+        ax.add_patch(rect)
+    # Neighbor graph with edges hidden, i.e. just show nodes.
+    nx.draw(
+        aligner.neighbors_graph, ax=ax, with_labels=True,
+        pos=np.fliplr(aligner.centers), edge_color='none',
+        node_size=100, font_size=6
+    )

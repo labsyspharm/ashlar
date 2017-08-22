@@ -1,4 +1,8 @@
 import sys
+try:
+    import pathlib2 as pathlib
+except:
+    pass
 import numpy as np
 import skimage.io
 import reg
@@ -6,35 +10,38 @@ import reg
 
 filepaths = sys.argv[1:]
 assert len(filepaths) > 0
+if len(filepaths) == 1:
+    path = pathlib.Path(filepaths[0])
+    if path.is_dir():
+        filepaths = sorted(str(p) for p in path.glob('*rcpnl'))
 assert all(p.endswith('.rcpnl') for p in filepaths)
 
+print 'Scan 0:'
+print '    reading %s' % filepaths[0]
 reader0 = reg.Reader(filepaths[0])
 metadata = reader0.metadata
-aligner = reg.EdgeAligner(reader0, verbose=True)
-aligner.run()
+aligner0 = reg.EdgeAligner(reader0, verbose=True)
+aligner0.run()
+print '    merging...'
+mshape = aligner0.mosaic_shape
+mosaic = np.zeros(mshape, dtype=np.uint16)
+for i, npos in enumerate(aligner0.positions):
+    reg.paste(mosaic, reader0.read(c=0, series=i), npos)
+skimage.io.imsave('scan_0_0.tif', mosaic)
 
-mshape = np.ceil((aligner.positions + metadata.size).max(axis=0)).astype(int)
-mosaic0 = np.zeros(mshape, dtype=np.uint16)
-for i, npos in enumerate(aligner.positions):
-    sys.stdout.write("\rScan 0: merging %d/%d" % (i + 1, metadata.num_images))
-    sys.stdout.flush()
-    reg.paste(mosaic0, reader0.read(c=0, series=i), npos)
-print
-skimage.io.imsave('scan_0_0.tif', mosaic0)
-
-for s, filepath in enumerate(filepaths[1:], 1):
+aligners = []
+for scan, filepath in enumerate(filepaths[1:], 1):
+    print 'Scan %d:' % scan
+    print '    reading %s' % filepath
     reader = reg.Reader(filepath)
-    metadata = reader.metadata
+    aligner = reg.LayerAligner(reader, aligner0, verbose=True)
+    aligner.run()
+    aligners.append(aligner)
+    print '    merging...'
     mosaic = np.zeros(mshape, dtype=np.uint16)
-    aligner_l = reg.LayerAligner(reader, reader0, aligner)
-    for i in range(metadata.num_images):
-        sys.stdout.write("\rScan %d: merging %d/%d"
-                         % (s, i + 1, metadata.num_images))
-        sys.stdout.flush()
-        npos, error = aligner_l.register(i)
+    for i, npos in enumerate(aligner.positions):
         reg.paste(mosaic, reader.read(c=0, series=i), npos)
-    print
-    skimage.io.imsave('scan_%d_0.tif' % s, mosaic)
+    skimage.io.imsave('scan_%d_0.tif' % scan, mosaic)
 
 
 try:
