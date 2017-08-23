@@ -279,14 +279,15 @@ class LayerAligner(object):
     def __init__(self, reader, reference_aligner, verbose=False):
         self.reader = reader
         self.reference_aligner = reference_aligner
-        self.reference_positions = (reference_aligner.metadata.positions
-                                    - reference_aligner.metadata.origin)
         self.verbose = verbose
         self.max_shift = 0.05
-        self.tile_positions = self.metadata.positions - self.metadata.origin
-        dist = scipy.spatial.distance.cdist(self.reference_positions,
+        self.tile_positions = self.metadata.positions - reference_aligner.origin
+        reference_positions = (reference_aligner.metadata.positions
+                               - reference_aligner.origin)
+        dist = scipy.spatial.distance.cdist(reference_positions,
                                             self.tile_positions)
         self.reference_idx = np.argmin(dist, 0)
+        self.reference_positions = reference_positions[self.reference_idx]
 
     neighbors_graph = neighbors_graph
 
@@ -307,7 +308,7 @@ class LayerAligner(object):
             print
 
     def calculate_positions(self):
-        self.positions = self.tile_positions + self.shifts
+        self.positions = self.reference_aligner.positions + self.shifts
         self.centers = self.positions + self.metadata.size / 2
 
     def register(self, t):
@@ -318,22 +319,19 @@ class LayerAligner(object):
         shift, error, _ = skimage.feature.register_translation(
             ref_img_f, img_f, 10, 'fourier'
         )
-        # Add fractional part of offset back in.
-        offset1, offset2, _ = self.intersection(t)
-        shift += np.modf(offset1 - offset2)[0]
+        # Add offset back in. FIXME untested for non-perfectly-overlapping
+        # bounding boxes (i.e. offset1 == [0,0]).
+        offset1, _, _ = self.intersection(t)
+        shift += offset1
         # Constrain shift.
-        rel_shift = shift - self.reference_aligner.shifts[t]
-        # if any(np.abs(rel_shift) > self.max_shift * self.reader.metadata.size):
-        #     #print "\n%s > %s" % (np.abs(shift), self.max_shift * self.reader.metadata.size)
-        #     new_position = self.tile_positions[t]
+        # if ( FIXME what should the bounds be? mean +/- 2*stdev? )
+        #     shift[:] = 0
         #     error = 1
         return shift, error
 
-    def ref_pos(self, t):
-        return self.reference_positions[self.reference_idx[t]]
-
     def intersection(self, t):
-        corners1 = np.vstack([self.ref_pos(t), self.tile_positions[t]])
+        corners1 = np.vstack([self.reference_positions[t],
+                              self.tile_positions[t]])
         corners2 = corners1 + self.reader.metadata.size
         offset1, offset2, shape = intersection(corners1, corners2)
         shape = shape // 32 * 32
@@ -371,7 +369,6 @@ class LayerAligner(object):
         ax.set_xticks([])
         ax.set_yticks([])
         plt.imshow(corr)
-        shift -= self.ref_pos(t)
         origin = np.array(corr.shape) / 2
         plt.plot(origin[1], origin[0], 'r+')
         shift += origin
