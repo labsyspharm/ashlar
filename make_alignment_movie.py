@@ -4,18 +4,22 @@ import sys
 import glob
 import re
 import subprocess
+import gc
 import numpy as np
 import skimage.io
 import skimage.transform
+import skimage.exposure
 
 
 # Target width.
 TW = 1920
 
 FORMAT = "frame_%04d.jpg"
+MOVIE_FILENAME = 'alignment.mp4'
 
-CMD = ("ffmpeg -r 5 -i " + FORMAT + " -y -vcodec libx264 -profile:v main "
-       "-level 3 -pix_fmt yuv420p -crf 18 -an alignment.mp4")
+CMD = ("ffmpeg -v error -r 5 -y -i " + FORMAT + " -an"
+       " -vcodec libx264 -profile:v main -level 3 -pix_fmt yuv420p -crf 18"
+       " " + MOVIE_FILENAME)
 
 def main(args):
     # Sort paths by scan number, numerically.
@@ -39,13 +43,29 @@ def main(args):
         if rotate:
             img = np.rot90(img)
         img_new = skimage.transform.resize(img, (h, w), mode='reflect')
-        # TODO: contrast stretching
+        # Free this memory as soon as possible.
+        del img
+        gc.collect()
+        bins = np.linspace(0, img_new.max(), 3000)
+        counts, _ = np.histogram(img_new, bins=bins)
+        # Find peak, skipping first bin.
+        # FIXME sometimes (e.g. METASTASIS scan 6) the highest peak is at
+        # the max value, which breaks this logic.
+        vmin = bins[np.argmax(counts[1:]) + 1]
+        vmax = np.percentile(img_new, 99.5)
+        img_new = skimage.exposure.rescale_intensity(img_new, (vmin, vmax))
+        img_new = skimage.exposure.adjust_gamma(img_new, 1/2.2)
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 'ignore', r'Possible precision loss', UserWarning,
                 '^skimage\.util\.dtype'
             )
+            warnings.filterwarnings(
+                'ignore', r'.* is a low contrast image', UserWarning,
+                '^skimage\.io'
+            )
             skimage.io.imsave(out_path, img_new)
+    print('rendering frames to %s' % (MOVIE_FILENAME))
     subprocess.call(CMD.split(' '))
     return 0
 
