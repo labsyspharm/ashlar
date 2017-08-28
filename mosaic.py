@@ -16,32 +16,31 @@ if len(filepaths) == 1:
         filepaths = sorted(str(p) for p in path.glob('*rcpnl'))
 assert all(p.endswith('.rcpnl') for p in filepaths)
 
+aligners = []
+mosaics = []
+
 print 'Scan 0:'
 print '    reading %s' % filepaths[0]
-reader0 = reg.Reader(filepaths[0])
-metadata = reader0.metadata
-aligner0 = reg.EdgeAligner(reader0, verbose=True)
-aligner0.run()
-print '    merging...'
-mshape = aligner0.mosaic_shape
-mosaic = np.zeros(mshape, dtype=np.uint16)
-for i, npos in enumerate(aligner0.positions):
-    reg.paste(mosaic, reader0.read(c=0, series=i), npos)
-skimage.io.imsave('scan_0_0.tif', mosaic)
+reader = reg.Reader(filepaths[0])
+aligner = reg.EdgeAligner(reader, verbose=True)
+aligner.run()
+mshape = aligner.mosaic_shape
+mosaic = reg.Mosaic(aligner, mshape, 'scan_0_%(channel)d.tif', verbose=True)
+mosaic.run()
+aligners.append(aligner)
+mosaics.append(mosaic)
 
-aligners = []
 for scan, filepath in enumerate(filepaths[1:], 1):
     print 'Scan %d:' % scan
     print '    reading %s' % filepath
     reader = reg.Reader(filepath)
-    aligner = reg.LayerAligner(reader, aligner0, verbose=True)
+    aligner = reg.LayerAligner(reader, aligners[0], verbose=True)
     aligner.run()
+    filename_format = 'scan_%d_%%(channel)d.tif' % scan
+    mosaic = reg.Mosaic(aligner, mshape, filename_format, verbose=True)
+    mosaic.run()
     aligners.append(aligner)
-    print '    merging...'
-    mosaic = np.zeros(mshape, dtype=np.uint16)
-    for i, npos in enumerate(aligner.positions):
-        reg.paste(mosaic, reader.read(c=0, series=i), npos)
-    skimage.io.imsave('scan_%d_0.tif' % scan, mosaic)
+    mosaics.append(mosaic)
 
 
 try:

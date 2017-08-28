@@ -1,5 +1,6 @@
 from __future__ import division
 import sys
+import warnings
 import bioformats
 import javabridge
 import numpy as np
@@ -31,6 +32,11 @@ def _deinit_bioformats():
     javabridge.kill_vm()
 
 
+# TODO:
+# - Reintroduce shift constraint in LayerAligner.
+# - Write tables with summary information about alignments.
+
+
 class Metadata(object):
 
     def __init__(self, path):
@@ -45,6 +51,10 @@ class Metadata(object):
     @property
     def num_images(self):
         return self._metadata.image_count
+
+    @property
+    def num_channels(self):
+        return self._metadata.image(0).Pixels.channel_count
 
     @property
     def pixel_size(self):
@@ -374,6 +384,42 @@ class LayerAligner(object):
         shift += origin
         plt.plot(shift[1], shift[0], 'rx')
         plt.tight_layout(0, 0, 0)
+
+
+class Mosaic(object):
+
+    def __init__(self, aligner, shape, filename_format, verbose=False):
+        self.aligner = aligner
+        self.shape = shape
+        self.filename_format = filename_format
+        self.verbose = verbose
+        self.filenames = []
+
+    def run(self):
+        num_tiles = len(self.aligner.positions)
+        for channel in range(self.aligner.metadata.num_channels):
+            if self.verbose:
+                print '    Channel %d:' % channel
+            mosaic_image = np.zeros(self.shape, dtype=np.uint16)
+            for tile, position in enumerate(self.aligner.positions):
+                if self.verbose:
+                    sys.stdout.write('\r        merging tile %d/%d'
+                                     % (tile + 1, num_tiles))
+                    sys.stdout.flush()
+                tile_image = self.aligner.reader.read(c=channel, series=tile)
+                paste(mosaic_image, tile_image, position)
+            if self.verbose:
+                print
+            filename = self.filename_format % {'channel': channel}
+            self.filenames.append(filename)
+            if self.verbose:
+                print "        writing %s" % filename
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    'ignore', r'.* is a low contrast image', UserWarning,
+                    '^skimage\.io'
+                )
+                skimage.io.imsave(filename, mosaic_image)
 
 
 def fft2(img):
