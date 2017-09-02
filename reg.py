@@ -9,6 +9,7 @@ import skimage.util
 import skimage.feature
 import skimage.filters
 import skimage.restoration.uft
+import sklearn.linear_model
 import pyfftw
 import networkx as nx
 import queue
@@ -33,7 +34,6 @@ def _deinit_bioformats():
 
 
 # TODO:
-# - Reintroduce shift constraint in LayerAligner.
 # - Write tables with summary information about alignments.
 
 
@@ -154,6 +154,7 @@ class EdgeAligner(object):
         self.register_all()
         self.build_spanning_tree()
         self.calculate_positions()
+        self.fit_model()
 
     def register_all(self):
         n = self.neighbors_graph.size()
@@ -195,6 +196,10 @@ class EdgeAligner(object):
         self.origin = self.positions.min(axis=0)
         self.positions -= self.origin
         self.centers = self.positions + self.metadata.size / 2
+
+    def fit_model(self):
+        self.lr = sklearn.linear_model.LinearRegression()
+        self.lr.fit(self.metadata.positions, self.positions)
 
     def register_pair(self, t1, t2):
         """Return relative shift between images and the alignment error."""
@@ -321,7 +326,20 @@ class LayerAligner(object):
 
     def calculate_positions(self):
         self.positions = self.reference_aligner.positions + self.shifts
+        self.constrain_positions()
         self.centers = self.positions + self.metadata.size / 2
+
+    def constrain_positions(self):
+        predictions = self.reference_aligner.lr.predict(self.metadata.positions)
+        err = self.positions - predictions
+        # Center and normalize to obtain mean=0 and variance=1.
+        err = (err - err.mean(axis=0)) / err.std(axis=0)
+        sse = np.sum(err ** 2, axis=1)
+        # Sum of squared errors is chi squared with 2 degrees of freedom. We'll
+        # use a threshold of 95% to identify outliers.
+        cutoff = scipy.stats.chi2.ppf(0.95, 2)
+        extremes = np.nonzero(sse > cutoff)[0]
+        self.positions[extremes] = predictions[extremes]
 
     def register(self, t):
         """Return relative shift between images and the alignment error."""
@@ -339,10 +357,6 @@ class LayerAligner(object):
         offset1, _, _ = self.intersection(t)
         assert (offset1 == 0).all(), "Non-zero offset needs to be tested"
         shift += offset1
-        # Constrain shift.
-        # if ( FIXME what should the bounds be? mean +/- 2*stdev? )
-        #     shift[:] = 0
-        #     error = 1
         return shift, error
 
     def intersection(self, t):
