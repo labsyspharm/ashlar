@@ -308,12 +308,14 @@ class LayerAligner(object):
     def register_all(self):
         n = self.metadata.num_images
         self.shifts = np.empty((n, 2))
+        self.errors = np.empty(n)
         for i in range(n):
             if self.verbose:
                 sys.stdout.write("\r    aligning tile %d/%d" % (i + 1, n))
                 sys.stdout.flush()
             shift, error = self.register(i)
             self.shifts[i] = shift
+            self.errors[i] = error
         if self.verbose:
             print
 
