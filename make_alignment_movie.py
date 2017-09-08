@@ -48,10 +48,8 @@ def main(args):
         gc.collect()
         bins = np.linspace(0, img_new.max(), 3000)
         counts, _ = np.histogram(img_new, bins=bins)
-        # Find peak, skipping first bin.
-        # FIXME sometimes (e.g. METASTASIS scan 6) the highest peak is at
-        # the max value, which breaks this logic.
-        vmin = bins[np.argmax(counts[1:]) + 1]
+        # Find peak, skipping first and last bin.
+        vmin = bins[np.argmax(counts[1:-1]) + 1]
         vmax = np.percentile(img_new, 99.5)
         img_new = skimage.exposure.rescale_intensity(img_new, (vmin, vmax))
         img_new = skimage.exposure.adjust_gamma(img_new, 1/2.2)
