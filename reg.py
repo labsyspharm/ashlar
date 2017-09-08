@@ -331,14 +331,9 @@ class LayerAligner(object):
 
     def constrain_positions(self):
         predictions = self.reference_aligner.lr.predict(self.metadata.positions)
-        err = self.positions - predictions
-        # Center and normalize to obtain mean=0 and variance=1.
-        err = (err - err.mean(axis=0)) / err.std(axis=0)
-        sse = np.sum(err ** 2, axis=1)
-        # Sum of squared errors is chi squared with 2 degrees of freedom. We'll
-        # use a threshold of 95% to identify outliers.
-        cutoff = scipy.stats.chi2.ppf(0.95, 2)
-        extremes = np.nonzero(sse > cutoff)[0]
+        shifts = self.positions - predictions
+        max_shift = self.max_shift * self.metadata.size
+        extremes = (np.abs(shifts) > max_shift).any(axis=1)
         self.positions[extremes] = predictions[extremes]
 
     def register(self, t):
