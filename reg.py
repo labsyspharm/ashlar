@@ -220,7 +220,7 @@ class EdgeAligner(object):
             # Constrain shift.
             if any(np.abs(shift) > self.max_shift * self.metadata.size):
                 shift[:] = 0
-                error = 1
+                error = np.inf
             self._cache[key] = (shift, error)
         if t1 > t2:
             shift = -shift
@@ -589,13 +589,23 @@ def plot_edge_quality(aligner, mosaic):
     plt.figure()
     ax = plt.subplot(nrows, ncols,1)
     modest_image.imshow(ax, mosaic)
-    error = [aligner._cache[tuple(sorted(e))][1]
-             for e in aligner.neighbors_graph.edges()]
+    error = np.array([aligner._cache[tuple(sorted(e))][1]
+                      for e in aligner.neighbors_graph.edges()])
+    # Manually center and scale data to 0-1, except infinity which is set to -1.
+    # This lets us use the purple-green diverging color map to color the graph
+    # edges and cause the "infinity" edges to disappear into the background
+    # (which is itself purple).
+    infs = error == np.inf
+    error[infs] = -1
+    error_f = error[~infs]
+    emin = np.min(error_f)
+    emax = np.max(error_f)
+    error[~infs] = (error_f - emin) / (emax - emin)
     # Neighbor graph colored by edge alignment quality (brighter = better).
     nx.draw(
         aligner.neighbors_graph, ax=ax, with_labels=True,
         pos=np.fliplr(centers), edge_color=error,
-        edge_cmap=plt.get_cmap('hot_r'), width=2, node_size=100, font_size=6
+        edge_cmap=plt.get_cmap('PRGn'), width=2, node_size=100, font_size=6
     )
     ax = plt.subplot(nrows, ncols, 2)
     modest_image.imshow(ax, mosaic)
