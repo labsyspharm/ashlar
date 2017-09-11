@@ -193,13 +193,33 @@ class EdgeAligner(object):
             shifts[dest] = shifts[source] + self.register_pair(source, dest)[0]
         self.shifts = np.array(zip(*sorted(shifts.items()))[1])
         self.positions = self.metadata.positions + self.shifts
-        self.origin = self.positions.min(axis=0)
-        self.positions -= self.origin
-        self.centers = self.positions + self.metadata.size / 2
 
     def fit_model(self):
+        # Build list of connected components from spanning tree with
+        # infinite-error edges discarded.
+        forest = self.spanning_tree.copy()
+        forest.remove_edges_from(
+            e for e, v in self._cache.items() if v[1] == np.inf
+        )
+        components = sorted(nx.connected_components(forest),
+                            key=len, reverse=True)
+        # Fit LR model on positions of largest connected component.
+        cc0 = components[0]
         self.lr = sklearn.linear_model.LinearRegression()
-        self.lr.fit(self.metadata.positions, self.positions)
+        self.lr.fit(self.metadata.positions[cc0], self.positions[cc0])
+        # Adjust position of remaining components so their centroids match
+        # the predictions of the model.
+        for nodes in components[1:]:
+            centroid_m = np.mean(self.metadata.positions[nodes], axis=0)
+            centroid_f = np.mean(self.positions[nodes], axis=0)
+            shift = self.lr.predict([centroid_m])[0] - centroid_f
+            self.positions[nodes] += shift
+        # Adjust positions and model intercept to put origin at 0,0.
+        self.origin = self.positions.min(axis=0)
+        self.positions -= self.origin
+        self.lr.intercept_ -= self.origin
+        self.centers = self.positions + self.metadata.size / 2
+
 
     def register_pair(self, t1, t2):
         """Return relative shift between images and the alignment error."""
@@ -570,9 +590,11 @@ def plot_edge_shifts(aligner, mosaic):
     for xy in np.fliplr(aligner.positions):
         rect = mpatches.Rectangle(xy, w, h, color='black', fill=False, lw=0.5)
         ax.add_patch(rect)
-    shifts = np.array([aligner._cache[tuple(sorted(e))][0]
-                       for e in aligner.spanning_tree.edges()])
-    shift_distances = np.sum(shifts ** 2, axis=1) ** 0.5
+    # Compute per-edge relative shifts from tile positions.
+    edges = np.array(aligner.spanning_tree.edges())
+    dist = aligner.metadata.positions - aligner.positions
+    shifts = dist[edges[:, 0]] - dist[edges[:, 1]]
+    shift_distances = np.linalg.norm(shifts, axis=1)
     # Spanning tree with nodes at new tile positions, edges colored by shift
     # distance (brighter = farther).
     nx.draw(
