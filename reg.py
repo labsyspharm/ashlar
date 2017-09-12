@@ -350,10 +350,21 @@ class LayerAligner(object):
         self.centers = self.positions + self.metadata.size / 2
 
     def constrain_positions(self):
+        # Computed shifts of exactly 0,0 seem to result from failed
+        # registration. We need to throw those out for this purpose.
+        nonzero_shifts = self.shifts[(self.shifts != 0).all(axis=1)]
+        # Take the mean of registered shifts to determine the offset
+        # (translation) from the reference image to this one.
+        self.offset = np.mean(nonzero_shifts, axis=0)
+        # Here we assume the fitted linear model from the reference image is
+        # still appropriate, apart from the extra offset we just computed.
         predictions = self.reference_aligner.lr.predict(self.metadata.positions)
-        shifts = self.positions - predictions
-        max_shift = self.max_shift * self.metadata.size
-        extremes = (np.abs(shifts) > max_shift).any(axis=1)
+        predictions += self.offset
+        # Discard any tile registration that's too far from the linear model,
+        # replacing it with the relevant model prediction.
+        distance = np.linalg.norm(self.positions - predictions, axis=1)
+        max_dist = self.max_shift * max(self.metadata.size)
+        extremes = distance > max_dist
         self.positions[extremes] = predictions[extremes]
 
     def register(self, t):
