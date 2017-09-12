@@ -201,7 +201,7 @@ class EdgeAligner(object):
         forest.remove_edges_from(
             e for e, v in self._cache.items() if v[1] == np.inf
         )
-        components = sorted(nx.connected_components(forest),
+        components = sorted((list(c) for c in nx.connected_components(forest)),
                             key=len, reverse=True)
         # Fit LR model on positions of largest connected component.
         cc0 = components[0]
