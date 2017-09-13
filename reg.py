@@ -39,14 +39,75 @@ def _deinit_bioformats():
 
 class Metadata(object):
 
+    @property
+    def num_images(self):
+        raise NotImplementedError
+
+    @property
+    def num_channels(self):
+        raise NotImplementedError
+
+    @property
+    def pixel_size(self):
+        raise NotImplementedError
+
+    @property
+    def num_images(self):
+        raise NotImplementedError
+
+    def tile_position(self, i):
+        raise NotImplementedError
+
+    def tile_size(self, i):
+        raise NotImplementedError
+
+    @property
+    def grid_dimensions(self):
+        pos = self.positions
+        shape = np.array([len(set(pos[:, d])) for d in range(2)])
+        if np.prod(shape) != self.num_images:
+            raise ValueError("Series positions do not form a grid")
+        return shape
+
+    @property
+    def positions(self):
+        if not hasattr(self, '_positions'):
+            self._positions = np.vstack([
+                self.tile_position(i) for i in range(self.num_images)
+            ])
+        return self._positions
+
+    @property
+    def size(self):
+        if not hasattr(self, '_size'):
+            s0 = self.tile_size(0)
+            image_ids = range(1, self.num_images)
+            if any(any(self.tile_size(i) != s0) for i in image_ids):
+                raise ValueError("Image series must all have the same dimensions")
+            self._size = s0
+        return self._size
+
+    @property
+    def centers(self):
+        return self.positions + self.size / 2
+
+    @property
+    def origin(self):
+        return self.positions.min(axis=0)
+
+
+class Reader(object):
+
+    def read(self, series, c):
+        raise NotImplementedError
+
+
+class BioformatsMetadata(Metadata):
+
     def __init__(self, path):
         _init_bioformats()
         ome_xml = bioformats.get_omexml_metadata(path)
         self._metadata = bioformats.OMEXML(ome_xml)
-        s0 = self.tile_size(0)
-        if any(any(self.tile_size(i) != s0) for i in range(1, self.num_images)):
-            raise ValueError("Image series must all have the same dimensions")
-        self.size = s0
 
     @property
     def num_images(self):
@@ -75,38 +136,13 @@ class Metadata(object):
         pixels = self._metadata.image(i).Pixels
         return np.array([pixels.SizeY, pixels.SizeX])
 
-    @property
-    def grid_dimensions(self):
-        pos = self.positions
-        shape = np.array([len(set(pos[:, d])) for d in range(2)])
-        if np.prod(shape) != self.num_images:
-            raise ValueError("Series positions do not form a grid")
-        return shape
 
-
-    @property
-    def positions(self):
-        if not hasattr(self, '_positions'):
-            self._positions = np.vstack([
-                self.tile_position(i) for i in range(self.num_images)
-            ])
-        return self._positions
-
-    @property
-    def centers(self):
-        return self.positions + self.size / 2
-
-    @property
-    def origin(self):
-        return self.positions.min(axis=0)
-
-
-class Reader(object):
+class BioformatsReader(Reader):
 
     def __init__(self, path):
         _init_bioformats()
         self.path = path
-        self.metadata = Metadata(self.path)
+        self.metadata = BioformatsMetadata(self.path)
         self.ir = bioformats.ImageReader(self.path)
 
     def read(self, series, c):

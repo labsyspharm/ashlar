@@ -14,14 +14,13 @@ if len(filepaths) == 1:
     path = pathlib.Path(filepaths[0])
     if path.is_dir():
         filepaths = sorted(str(p) for p in path.glob('*rcpnl'))
-assert all(p.endswith('.rcpnl') for p in filepaths)
 
 aligners = []
 mosaics = []
 
 print 'Scan 0:'
 print '    reading %s' % filepaths[0]
-reader = reg.Reader(filepaths[0])
+reader = reg.BioformatsReader(filepaths[0])
 aligner = reg.EdgeAligner(reader, verbose=True)
 aligner.run()
 mshape = aligner.mosaic_shape
@@ -33,7 +32,7 @@ mosaics.append(mosaic)
 for scan, filepath in enumerate(filepaths[1:], 1):
     print 'Scan %d:' % scan
     print '    reading %s' % filepath
-    reader = reg.Reader(filepath)
+    reader = reg.BioformatsReader(filepath)
     aligner = reg.LayerAligner(reader, aligners[0], verbose=True)
     aligner.run()
     filename_format = 'scan_%d_%%(channel)d.tif' % scan
