@@ -9,6 +9,7 @@ import skimage.util
 import skimage.feature
 import skimage.filters
 import skimage.restoration.uft
+import skimage.io
 import sklearn.linear_model
 import pyfftw
 import networkx as nx

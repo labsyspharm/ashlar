@@ -1,10 +1,5 @@
 import sys
-try:
-    import pathlib2 as pathlib
-except:
-    pass
-import numpy as np
-import skimage.io
+import pathlib2 as pathlib
 import reg
 
 
