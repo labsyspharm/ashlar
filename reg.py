@@ -673,7 +673,7 @@ def plot_edge_quality(aligner, mosaic):
     # Neighbor graph colored by edge alignment quality (brighter = better).
     nx.draw(
         aligner.neighbors_graph, ax=ax, with_labels=True,
-        pos=np.fliplr(centers), edge_color=error,
+        pos=np.fliplr(centers), edge_color=error, edge_vmin=-1, edge_vmax=1,
         edge_cmap=plt.get_cmap('PRGn'), width=2, node_size=100, font_size=6
     )
     ax = plt.subplot(nrows, ncols, 2)
