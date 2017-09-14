@@ -59,6 +59,8 @@ class Reader(reg.Reader):
 
     def read(self, series, c):
         assert c == 0
-        return skimage.io.imread(self.metadata.images[series].path)
+        img = skimage.io.imread(self.metadata.images[series].path).squeeze()
+        assert img.ndim == 2
+        return img
 
 
