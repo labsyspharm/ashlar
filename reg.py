@@ -411,14 +411,9 @@ class LayerAligner(object):
         shift, error, _ = skimage.feature.register_translation(
             ref_img_f, img_f, 10, 'fourier'
         )
-        # Add offset back in.
-        # FIXME This is currently untested for non-perfectly-overlapping
-        # bounding boxes (i.e. offset1 != [0,0]) as we don't have any datasets
-        # with this property. Once we find one, this section needs to be
-        # evaluated.
+        # Add reported difference in stage positions.
         offset1, _, _ = self.intersection(t)
-        assert (offset1 == 0).all(), "Non-zero offset needs to be tested"
-        shift += offset1
+        shift -= offset1
         return shift, error
 
     def intersection(self, t):
