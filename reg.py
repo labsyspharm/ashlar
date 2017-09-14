@@ -465,16 +465,27 @@ class LayerAligner(object):
 
 class Mosaic(object):
 
-    def __init__(self, aligner, shape, filename_format, verbose=False):
+    def __init__(self, aligner, shape, filename_format, channels=None,
+                 verbose=False):
         self.aligner = aligner
         self.shape = shape
         self.filename_format = filename_format
+        self.channels = self._sanitize_channels(channels)
         self.verbose = verbose
         self.filenames = []
 
+    def _sanitize_channels(self, channels):
+        all_channels = range(self.aligner.metadata.num_channels)
+        if channels is None:
+            channels = all_channels
+        invalid_channels = sorted(set(channels) - set(all_channels))
+        if invalid_channels:
+            raise ValueError("invalid channels: %s" % invalid_channels)
+        return channels
+
     def run(self):
         num_tiles = len(self.aligner.positions)
-        for channel in range(self.aligner.metadata.num_channels):
+        for channel in self.channels:
             if self.verbose:
                 print '    Channel %d:' % channel
             mosaic_image = np.zeros(self.shape, dtype=np.uint16)
