@@ -52,10 +52,6 @@ class Metadata(object):
     def pixel_size(self):
         raise NotImplementedError
 
-    @property
-    def num_images(self):
-        raise NotImplementedError
-
     def tile_position(self, i):
         raise NotImplementedError
 
