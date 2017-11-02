@@ -21,7 +21,8 @@ CMD = ("ffmpeg -v error -r 5 -y -i " + FORMAT + " -an"
        " -vcodec libx264 -profile:v main -level 3 -pix_fmt yuv420p -crf 18"
        " " + MOVIE_FILENAME)
 
-def main(args):
+
+def main(argv=sys.argv):
     # Sort paths by scan number, numerically.
     paths = sorted(glob.glob('scan_*_0.tif'),
                    key=lambda s: int(s.split('_')[1]))
@@ -66,6 +67,7 @@ def main(args):
     print('rendering frames to %s' % (MOVIE_FILENAME))
     subprocess.call(CMD.split(' '))
     return 0
+
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
