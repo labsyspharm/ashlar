@@ -1,6 +1,7 @@
 *.pyc
+*.egg-info
+dist
 
 *.tif
 *.rcpnl
 output/*
-
