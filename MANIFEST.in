@@ -1,0 +1,2 @@
+include versioneer.py
+include ashlar/_version.py

@@ -1,6 +1,7 @@
 import os
 from ConfigParser import ConfigParser
 from setuptools import setup, find_packages
+import versioneer
 
 here = os.path.abspath(os.path.dirname(__file__))
 with open(os.path.join(here, 'README.md')) as f:
@@ -21,13 +22,7 @@ requires = [
 ]
 
 
-def read_version():
-    config = ConfigParser()
-    config.read('setup.cfg')
-    return config.get('metadata', 'version')
-
-
-VERSION = read_version()
+VERSION = versioneer.get_version()
 DESCRIPTION = ('Alignment by Simultaneous Harmonization of Layer/Adjacency '
                'Registration')
 AUTHOR = 'Jeremy Muhlich'
@@ -39,6 +34,7 @@ setup(
     version=VERSION,
     description=DESCRIPTION,
     long_description=README,
+    cmdclass=versioneer.get_cmdclass(),
     packages=find_packages(),
     include_package_data=True,
     install_requires=requires,
