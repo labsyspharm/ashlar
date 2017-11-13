@@ -1,5 +1,4 @@
 import os
-from ConfigParser import ConfigParser
 from setuptools import setup, find_packages
 import versioneer
 
@@ -26,7 +25,8 @@ VERSION = versioneer.get_version()
 DESCRIPTION = ('Alignment by Simultaneous Harmonization of Layer/Adjacency '
                'Registration')
 AUTHOR = 'Jeremy Muhlich'
-LICENSE = 'MIT'
+AUTHOR_EMAIL = 'jeremy_muhlich@hms.harvard.edu',
+LICENSE = 'MIT License'
 HOMEPAGE = 'https://github.com/sorgerlab/ashlar'
 
 setup(
@@ -49,14 +49,14 @@ setup(
         'Development Status :: 5 - Production/Stable',
         'Intended Audience :: End Users/Desktop',
         'Intended Audience :: Science/Research',
-        'License :: OSI Approved :: MIT',
+        'License :: OSI Approved :: %s' % LICENSE,
         'Natural Language :: English',
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 2',
         'Topic :: Scientific/Engineering :: Visualization'
     ],
     author=AUTHOR,
-    author_email='jeremy_muhlich@hms.harvard.edu',
+    author_email=AUTHOR_EMAIL,
     license=LICENSE,
     url=HOMEPAGE,
     download_url='%s/archive/v%s.tar.gz' % (HOMEPAGE, VERSION),
