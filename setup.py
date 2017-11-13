@@ -25,7 +25,7 @@ VERSION = versioneer.get_version()
 DESCRIPTION = ('Alignment by Simultaneous Harmonization of Layer/Adjacency '
                'Registration')
 AUTHOR = 'Jeremy Muhlich'
-AUTHOR_EMAIL = 'jeremy_muhlich@hms.harvard.edu',
+AUTHOR_EMAIL = 'jeremy_muhlich@hms.harvard.edu'
 LICENSE = 'MIT License'
 HOMEPAGE = 'https://github.com/sorgerlab/ashlar'
 
