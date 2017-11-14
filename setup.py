@@ -8,6 +8,7 @@ with open(os.path.join(here, 'README.md')) as f:
 
 requires = [
     'numpy>=1.13.0',
+    'future>=0.16.0',
     'javabridge>=1.0.15',
     'python-bioformats==1.1.0',
     'matplotlib>=2.1.0',
