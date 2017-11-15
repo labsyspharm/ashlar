@@ -191,7 +191,7 @@ class EdgeAligner(object):
 
     def register_all(self):
         n = self.neighbors_graph.size()
-        for i, (t1, t2) in enumerate(self.neighbors_graph.edges_iter(), 1):
+        for i, (t1, t2) in enumerate(self.neighbors_graph.edges(), 1):
             if self.verbose:
                 sys.stdout.write('\r    aligning edge %d/%d' % (i, n))
                 sys.stdout.flush()
