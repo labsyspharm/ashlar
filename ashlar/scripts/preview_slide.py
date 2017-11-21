@@ -8,9 +8,8 @@ from .. import reg
 
 def main(argv=sys.argv):
     filepath = argv[1]
-    assert filepath.endswith('.rcpnl')
 
-    reader = reg.Reader(filepath)
+    reader = reg.BioformatsReader(filepath)
     metadata = reader.metadata
 
     positions = metadata.positions - metadata.origin
