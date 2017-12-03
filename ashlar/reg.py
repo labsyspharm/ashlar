@@ -27,7 +27,8 @@ def _init_bioformats():
     if javabridge._javabridge.get_vm().is_active():
         return
     javabridge.start_vm(class_path=bioformats.JARS)
-    bioformats.log4j.basic_config()
+    DebugTools = javabridge.JClassWrapper("loci.common.DebugTools")
+    DebugTools.setRootLevel("ERROR")
     # Hack module to fix py3 assumptions which break XML parsing.
     bioformats.omexml.str = unicode
 
