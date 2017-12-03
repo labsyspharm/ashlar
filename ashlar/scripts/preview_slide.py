@@ -9,6 +9,10 @@ from .. import reg
 def main(argv=sys.argv):
     filepath = argv[1]
 
+    channel = 0
+    if len(argv) >= 3:
+        channel = int(argv[2])
+
     reader = reg.BioformatsReader(filepath)
     metadata = reader.metadata
 
@@ -20,7 +24,7 @@ def main(argv=sys.argv):
     for i in range(total):
         sys.stdout.write("\rLoading %d/%d" % (i + 1, total))
         sys.stdout.flush()
-        reg.paste(mosaic, reader.read(c=0, series=i), positions[i])
+        reg.paste(mosaic, reader.read(c=channel, series=i), positions[i])
     print
 
     ax = plt.gca()
