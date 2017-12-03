@@ -2,6 +2,7 @@ from __future__ import division
 import sys
 import warnings
 import bioformats
+import bioformats.log4j
 import javabridge
 import numpy as np
 import scipy.ndimage
@@ -26,7 +27,8 @@ def _init_bioformats():
     if javabridge._javabridge.get_vm().is_active():
         return
     javabridge.start_vm(class_path=bioformats.JARS)
-    bioformats.init_logger()
+    DebugTools = javabridge.JClassWrapper("loci.common.DebugTools")
+    DebugTools.setRootLevel("ERROR")
     # Hack module to fix py3 assumptions which break XML parsing.
     bioformats.omexml.str = unicode
 
