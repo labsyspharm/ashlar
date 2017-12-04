@@ -104,8 +104,21 @@ class Reader(object):
 class BioformatsMetadata(Metadata):
 
     def __init__(self, path):
+        self.path = path
+        self._init_metadata()
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['_metadata']
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._init_metadata()
+
+    def _init_metadata(self):
         _init_bioformats()
-        ome_xml = bioformats.get_omexml_metadata(path)
+        ome_xml = bioformats.get_omexml_metadata(self.path)
         self._metadata = bioformats.OMEXML(ome_xml)
 
     @property
@@ -139,9 +152,21 @@ class BioformatsMetadata(Metadata):
 class BioformatsReader(Reader):
 
     def __init__(self, path):
-        _init_bioformats()
         self.path = path
         self.metadata = BioformatsMetadata(self.path)
+        self._init_ir()
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['ir']
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._init_ir()
+
+    def _init_ir(self):
+        _init_bioformats()
         self.ir = bioformats.ImageReader(self.path)
 
     def read(self, series, c):
