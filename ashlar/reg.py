@@ -347,15 +347,19 @@ class EdgeAligner(object):
             shift, error = self._cache[key]
         except KeyError:
             # Register nearest-pixel image overlaps.
+            # TODO add support for increased overlap to allow for larger
+            # shifts to be detected (shift is limited to +/- half the overlap
+            # size due to the nature of the phase correlation algorithm).
             img1, img2 = self.overlap(t1, t2)
             img1_f = fft2(whiten(img1))
             img2_f = fft2(whiten(img2))
             shift, error, _ = skimage.feature.register_translation(
                 img1_f, img2_f, 10, 'fourier'
             )
-            # Add fractional part of offset back in.
-            offset1, offset2, _ = self.intersection(t1, t2)
-            shift += np.modf(offset1 - offset2)[0]
+            # Add fractional part of offset back in, subtract padding.
+            offset1, offset2, _, padding = self.intersection(t1, t2)
+            shift += np.modf(offset2 - offset1)[0]
+            shift -= padding
             # Constrain shift.
             if any(np.abs(shift) > self.max_shift * self.metadata.size):
                 shift[:] = 0
@@ -369,14 +373,15 @@ class EdgeAligner(object):
     def intersection(self, t1, t2):
         corners1 = self.metadata.positions[[t1, t2]]
         corners2 = corners1 + self.metadata.size
-        return intersection(corners1, corners2)
+        min_size = self.max_shift * 2 * self.metadata.size
+        return intersection(corners1, corners2, min_size)
 
     def crop(self, tile, offset, shape):
         img = self.reader.read(series=tile, c=0)
         return crop(img, offset, shape)
 
     def overlap(self, t1, t2):
-        offset1, offset2, shape = self.intersection(t1, t2)
+        offset1, offset2, shape, _ = self.intersection(t1, t2)
         img1 = self.crop(t1, offset1, shape)
         img2 = self.crop(t2, offset2, shape)
         return img1, img2
@@ -420,7 +425,7 @@ class EdgeAligner(object):
         ax.set_xticks([])
         ax.set_yticks([])
         plt.imshow(corr)
-        origin = np.array(corr.shape) / 2
+        origin = np.array(corr.shape) // 2
         plt.plot(origin[1], origin[0], 'r+')
         shift += origin
         plt.plot(shift[1], shift[0], 'rx')
@@ -499,14 +504,14 @@ class LayerAligner(object):
         )
         # Add reported difference in stage positions.
         offset1, _, _ = self.intersection(t)
-        shift -= offset1
+        shift += offset1
         return shift, error
 
     def intersection(self, t):
         corners1 = np.vstack([self.reference_positions[t],
                               self.tile_positions[t]])
         corners2 = corners1 + self.reader.metadata.size
-        offset1, offset2, shape = intersection(corners1, corners2)
+        offset1, offset2, shape, _ = intersection(corners1, corners2)
         shape = shape // 32 * 32
         return offset1, offset2, shape
 
@@ -542,7 +547,7 @@ class LayerAligner(object):
         ax.set_xticks([])
         ax.set_yticks([])
         plt.imshow(corr)
-        origin = np.array(corr.shape) / 2
+        origin = np.array(corr.shape) // 2
         plt.plot(origin[1], origin[0], 'r+')
         shift += origin
         plt.plot(shift[1], shift[0], 'rx')
@@ -668,18 +673,22 @@ def whiten(img):
     #img = img - scipy.ndimage.filters.gaussian_filter(img, 2) + 0.5
 
 
-def intersection(corners1, corners2):
+def intersection(corners1, corners2, min_size=None):
+    if min_size is None:
+        min_size = np.zeros(2)
     position = corners1.max(axis=0)
     shape = np.ceil(corners2.min(axis=0) - position).astype(int)
     if any(shape <= 0):
         raise ValueError("Tiles do not intersect")
-    offset1, offset2 = corners1 - position
-    return offset1, offset2, shape
+    final_shape = np.ceil(np.maximum(shape, min_size)).astype(int)
+    padding = final_shape - shape
+    offset1, offset2 = np.maximum(position - corners1 - padding, 0)
+    return offset1, offset2, final_shape, padding
 
 
 def crop(img, offset, shape):
     # Note that this only crops to the nearest whole-pixel offset.
-    start = -offset.astype(int)
+    start = offset.astype(int)
     end = start + shape
     img = img[start[0]:end[0], start[1]:end[1]]
     return img
