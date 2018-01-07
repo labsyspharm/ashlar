@@ -350,16 +350,15 @@ class EdgeAligner(object):
             # TODO add support for increased overlap to allow for larger
             # shifts to be detected (shift is limited to +/- half the overlap
             # size due to the nature of the phase correlation algorithm).
-            img1, img2 = self.overlap(t1, t2)
+            its, img1, img2 = self.overlap(t1, t2)
             img1_f = fft2(whiten(img1))
             img2_f = fft2(whiten(img2))
             shift, error, _ = skimage.feature.register_translation(
                 img1_f, img2_f, 10, 'fourier'
             )
             # Add fractional part of offset back in, subtract padding.
-            offset1, offset2, _, padding = self.intersection(t1, t2)
-            shift += np.modf(offset2 - offset1)[0]
-            shift -= padding
+            shift += np.modf(its.offsets[1] - its.offsets[0])[0]
+            shift -= its.padding
             # Constrain shift.
             if any(np.abs(shift) > self.max_shift * self.metadata.size):
                 shift[:] = 0
@@ -373,18 +372,18 @@ class EdgeAligner(object):
     def intersection(self, t1, t2):
         corners1 = self.metadata.positions[[t1, t2]]
         corners2 = corners1 + self.metadata.size
-        min_size = self.max_shift * 2 * self.metadata.size
-        return intersection(corners1, corners2, min_size)
+        min_size = self.max_shift * 2 * self.metadata.size / 2
+        return Intersection(corners1, corners2, min_size)
 
     def crop(self, tile, offset, shape):
         img = self.reader.read(series=tile, c=0)
         return crop(img, offset, shape)
 
     def overlap(self, t1, t2):
-        offset1, offset2, shape, _ = self.intersection(t1, t2)
-        img1 = self.crop(t1, offset1, shape)
-        img2 = self.crop(t2, offset2, shape)
-        return img1, img2
+        its = self.intersection(t1, t2)
+        img1 = self.crop(t1, its.offsets[0], its.shape)
+        img2 = self.crop(t2, its.offsets[1], its.shape)
+        return its, img1, img2
 
     @property
     def best_edge(self):
@@ -403,7 +402,7 @@ class EdgeAligner(object):
 
     def debug(self, t1, t2):
         shift, _ = self.register_pair(t1, t2)
-        o1, o2 = self.overlap(t1, t2)
+        its, o1, o2 = self.overlap(t1, t2)
         w1 = whiten(o1)
         w2 = whiten(o2)
         corr = np.fft.fftshift(np.abs(np.fft.ifft2(
@@ -427,7 +426,8 @@ class EdgeAligner(object):
         plt.imshow(corr)
         origin = np.array(corr.shape) // 2
         plt.plot(origin[1], origin[0], 'r+')
-        shift += origin
+        # FIXME This is wrong when t1 > t2.
+        shift += origin + its.padding
         plt.plot(shift[1], shift[0], 'rx')
         plt.colorbar()
         plt.tight_layout(0, 0, 0)
@@ -496,33 +496,32 @@ class LayerAligner(object):
 
     def register(self, t):
         """Return relative shift between images and the alignment error."""
-        ref_img, img = self.overlap(t)
+        its, ref_img, img = self.overlap(t)
         ref_img_f = fft2(whiten(ref_img))
         img_f = fft2(whiten(img))
         shift, error, _ = skimage.feature.register_translation(
             ref_img_f, img_f, 10, 'fourier'
         )
         # Add reported difference in stage positions.
-        offset1, _, _ = self.intersection(t)
-        shift += offset1
+        shift += its.offsets[0]
         return shift, error
 
     def intersection(self, t):
         corners1 = np.vstack([self.reference_positions[t],
                               self.tile_positions[t]])
         corners2 = corners1 + self.reader.metadata.size
-        offset1, offset2, shape, _ = intersection(corners1, corners2)
-        shape = shape // 32 * 32
-        return offset1, offset2, shape
+        its = Intersection(corners1, corners2)
+        its.shape = its.shape // 32 * 32
+        return its
 
     def overlap(self, t):
-        offset1, offset2, shape = self.intersection(t)
+        its = self.intersection(t)
         ref_t = self.reference_idx[t]
         img1 = self.reference_aligner.reader.read(series=ref_t, c=0)
         img2 = self.reader.read(series=t, c=0)
-        ov1 = crop(img1, offset1, shape)
-        ov2 = crop(img2, offset2, shape)
-        return ov1, ov2
+        ov1 = crop(img1, its.offsets[0], its.shape)
+        ov2 = crop(img2, its.offsets[1], its.shape)
+        return its, ov1, ov2
 
     @property
     def metadata(self):
@@ -530,7 +529,7 @@ class LayerAligner(object):
 
     def debug(self, t):
         shift, _ = self.register(t)
-        o1, o2 = self.overlap(t)
+        its, o1, o2 = self.overlap(t)
         w1 = whiten(o1)
         w2 = whiten(o2)
         corr = np.fft.fftshift(np.abs(np.fft.ifft2(
@@ -552,6 +551,28 @@ class LayerAligner(object):
         shift += origin
         plt.plot(shift[1], shift[0], 'rx')
         plt.tight_layout(0, 0, 0)
+
+
+class Intersection(object):
+
+    def __init__(self, corners1, corners2, min_size=None):
+        if min_size is None:
+            min_size = np.zeros(2)
+        self._calculate(corners1, corners2, min_size)
+
+    def _calculate(self, corners1, corners2, min_size):
+        position = corners1.max(axis=0)
+        initial_shape = np.ceil(corners2.min(axis=0) - position).astype(int)
+        if any(initial_shape <= 0):
+            raise ValueError("Tiles do not intersect")
+        clipped_shape = np.maximum(initial_shape, min_size)
+        self.shape = np.ceil(clipped_shape).astype(int)
+        self.padding = self.shape - initial_shape
+        self.offsets = np.maximum(position - corners1 - self.padding, 0)
+
+    def __repr__(self):
+        s = 'shape: {0.shape}\npadding: {0.padding}\noffsets:\n{0.offsets}'
+        return s.format(self)
 
 
 class Mosaic(object):
@@ -671,19 +692,6 @@ def whiten(img):
     #img = skimage.filters.sobel(img)
     #img = np.log(img)
     #img = img - scipy.ndimage.filters.gaussian_filter(img, 2) + 0.5
-
-
-def intersection(corners1, corners2, min_size=None):
-    if min_size is None:
-        min_size = np.zeros(2)
-    position = corners1.max(axis=0)
-    shape = np.ceil(corners2.min(axis=0) - position).astype(int)
-    if any(shape <= 0):
-        raise ValueError("Tiles do not intersect")
-    final_shape = np.ceil(np.maximum(shape, min_size)).astype(int)
-    padding = final_shape - shape
-    offset1, offset2 = np.maximum(position - corners1 - padding, 0)
-    return offset1, offset2, final_shape, padding
 
 
 def crop(img, offset, shape):
