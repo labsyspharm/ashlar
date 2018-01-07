@@ -346,41 +346,62 @@ class EdgeAligner(object):
         try:
             shift, error = self._cache[key]
         except KeyError:
-            # Register nearest-pixel image overlaps.
-            # TODO add support for increased overlap to allow for larger
-            # shifts to be detected (shift is limited to +/- half the overlap
-            # size due to the nature of the phase correlation algorithm).
-            its, img1, img2 = self.overlap(t1, t2)
-            img1_f = fft2(whiten(img1))
-            img2_f = fft2(whiten(img2))
-            shift, error, _ = skimage.feature.register_translation(
-                img1_f, img2_f, 10, 'fourier'
-            )
-            # Add fractional part of offset back in, subtract padding.
-            shift += np.modf(its.offsets[1] - its.offsets[0])[0]
-            shift -= its.padding
-            # Constrain shift.
-            if any(np.abs(shift) > self.max_shift * self.metadata.size):
-                shift[:] = 0
-                error = np.inf
+            # Phase correlation can only report a shift of up to half of the
+            # image size in any given direction. Here we calculate the tile
+            # overlap image size that will support observing the maximum allowed
+            # shift.
+            max_its_size = self.max_shift * 2 * self.metadata.size
+            results = []
+            # Perform registration with increasingly larger minimum overlap
+            # sizes, starting from the "native" overlap and repeatedly doubling
+            # it until we reach or exceed the maximum required overlap
+            # calculated above. We then choose the result with the lowest
+            # error. This is necessary because the phase correlation can't
+            # detect a shift greater than half of the overlap size.
+            native_its = self.intersection(t1, t2, None)
+            min_size = native_its.shape
+            while any(min_size <= 2 * max_its_size):
+                shift, error = self._register(t1, t2, min_size)
+                # Constrain shift.
+                if any(np.abs(shift) > self.max_shift * self.metadata.size):
+                    shift[:] = 0
+                    error = np.inf
+                results.append([shift, error])
+                min_size *= 2
+            # Take result with lowest error.
+            shift, error = min(results, key=lambda x: x[1])
             self._cache[key] = (shift, error)
         if t1 > t2:
             shift = -shift
         # Return copy of shift to prevent corruption of cached values.
         return shift.copy(), error
 
-    def intersection(self, t1, t2):
+    def _register(self, t1, t2, min_size):
+        # Perform the actual pixel-based alignment, given a minimum size for the
+        # overlap region.
+        its, img1, img2 = self.overlap(t1, t2, min_size)
+        img1_f = fft2(whiten(img1))
+        img2_f = fft2(whiten(img2))
+        shift, error, _ = skimage.feature.register_translation(
+            img1_f, img2_f, 10, 'fourier'
+        )
+        # Add fractional part of offset back in.
+        shift += np.modf(its.offsets[1] - its.offsets[0])[0]
+        # Account for padding.
+        shift += its.padding
+        return shift, error
+
+    def intersection(self, t1, t2, min_size):
         corners1 = self.metadata.positions[[t1, t2]]
         corners2 = corners1 + self.metadata.size
-        min_size = self.max_shift * 2 * self.metadata.size / 2
         return Intersection(corners1, corners2, min_size)
 
     def crop(self, tile, offset, shape):
         img = self.reader.read(series=tile, c=0)
         return crop(img, offset, shape)
 
-    def overlap(self, t1, t2):
-        its = self.intersection(t1, t2)
+    def overlap(self, t1, t2, min_size):
+        its = self.intersection(t1, t2, min_size)
         img1 = self.crop(t1, its.offsets[0], its.shape)
         img2 = self.crop(t2, its.offsets[1], its.shape)
         return its, img1, img2
@@ -400,9 +421,9 @@ class EdgeAligner(object):
         max_dimensions = upper_corners.max(axis=0)
         return np.ceil(max_dimensions).astype(int)
 
-    def debug(self, t1, t2):
+    def debug(self, t1, t2, min_size=None):
         shift, _ = self.register_pair(t1, t2)
-        its, o1, o2 = self.overlap(t1, t2)
+        its, o1, o2 = self.overlap(t1, t2, min_size)
         w1 = whiten(o1)
         w2 = whiten(o2)
         corr = np.fft.fftshift(np.abs(np.fft.ifft2(
@@ -561,6 +582,8 @@ class Intersection(object):
         self._calculate(corners1, corners2, min_size)
 
     def _calculate(self, corners1, corners2, min_size):
+        max_shape = (corners2 - corners1).max(axis=0)
+        min_size = min_size.clip(0, max_shape)
         position = corners1.max(axis=0)
         initial_shape = np.ceil(corners2.min(axis=0) - position).astype(int)
         if any(initial_shape <= 0):
