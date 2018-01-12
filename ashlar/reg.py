@@ -493,11 +493,13 @@ class LayerAligner(object):
 class Mosaic(object):
 
     def __init__(self, aligner, shape, filename_format, channels=None,
-                 verbose=False):
+                 ffp_path=None, verbose=False):
         self.aligner = aligner
         self.shape = shape
         self.filename_format = filename_format
         self.channels = self._sanitize_channels(channels)
+        self.ffp = self._load_ffp(ffp_path)
+        self.has_ffp = self.ffp is not None
         self.verbose = verbose
         self.filenames = []
 
@@ -509,6 +511,12 @@ class Mosaic(object):
         if invalid_channels:
             raise ValueError("invalid channels: %s" % invalid_channels)
         return channels
+
+    def _load_ffp(self, path):
+        if path:
+            return skimage.io.imread(path)
+        else:
+            return None
 
     def run(self):
         num_tiles = len(self.aligner.positions)
@@ -522,6 +530,7 @@ class Mosaic(object):
                                      % (tile + 1, num_tiles))
                     sys.stdout.flush()
                 tile_image = self.aligner.reader.read(c=channel, series=tile)
+                tile_image = self.correct_illumination(tile_image, channel)
                 paste(mosaic_image, tile_image, position)
             if self.verbose:
                 print
@@ -535,6 +544,12 @@ class Mosaic(object):
                     '^skimage\.io'
                 )
                 skimage.io.imsave(filename, mosaic_image)
+
+    def correct_illumination(self, img, channel):
+        img = skimage.img_as_float(img)
+        if self.has_ffp:
+            img /= self.ffp[..., channel]
+        return img
 
 
 def fft2(img):
