@@ -1,12 +1,19 @@
+from __future__ import print_function
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import modest_image
 from .. import reg
 
 
 def main(argv=sys.argv):
+
+    try:
+        import modest_image
+    except ImportError:
+        print("Please install ModestImage (Python 2.7 only) to use this script.")
+        exit()
+
     filepath = argv[1]
 
     channel = 0
@@ -25,7 +32,7 @@ def main(argv=sys.argv):
         sys.stdout.write("\rLoading %d/%d" % (i + 1, total))
         sys.stdout.flush()
         reg.paste(mosaic, reader.read(c=channel, series=i), positions[i])
-    print
+    print()
 
     ax = plt.gca()
 

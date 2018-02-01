@@ -1,50 +1,46 @@
 # ASHLAR: Alignment by Simultaneous Harmonization of Layer/Adjacency Registration
 
-## Installation (Linux)
-
-ASHLAR is written in Python, but has python dependencies which make use of C.
-
-The recommended way to install ASHLAR is to make use of a fairly comprehensive
-distribution of python binaries called miniconda.
-
-Note: Users with an existing python environment may wish to skip the final step
-adding the conda bin directory to the `PATH` as this will override the current
-for all shells. Instead, the `PATH` can be added as and when needed.
-
-```bash
-# Define an installation directory, e.g.
-export CONDA_ROOT=/opt/ashlarconda
-
-# Download Minconda (Python 2) installer
-wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh
-
-# Run miniconda installer
-sh Miniconda2-latest-Linux-x86_64.sh -b -u -p ${CONDA_ROOT}
-
-# Install conda packages required
-${CONDA_ROOT}/bin/conda install -q -y numpy matplotlib networkx pathlib2 \
-    scipy scikit-image scikit-learn
-
-# Install conda packages from other channels required
-${CONDA_ROOT}/bin/conda install -q -y -c conda-forge pyfftw
-
-# Install pip packages required (not available or up-to-date in conda)
-${CONDA_ROOT}/bin/pip install -q -U ModestImage javabridge python-bioformats
-
-# Install ASHLAR
-${CONDA_ROOT}/bin/pip install -q -U \
-    git+https://github.com/dpwrussell/ashlar@module
-
-# Make this conda install available on your PATH
-echo ${CONDA_ROOT}/bin':$PATH' >> ~/.bashrc
-```
-
-## Installation (Windows)
-
-TBD
-
 ## Usage
 
-```bash
-mosaic <scan_path> [--ffp <flat_field_path>]
 ```
+ashlar [-h] [-q] [--ffp FFP_FILE] FILE [FILE ...]
+
+positional arguments:
+  FILE            an image file to be processed
+
+optional arguments:
+  -h, --help      show this help message and exit
+  -q, --quiet     suppress progress display
+  --ffp FFP_FILE  path to flat field profile image
+```
+
+## Installation
+
+### Linux
+
+On Linux, installation is fairly straightforward, but you must first install
+your distribution's development package for libfftw3 and a JDK (any one of
+versions 1.6, 1.7 or 1.8). You will also have to manually run `pip install
+numpy` before `pip install ashlar` due to a requirement of one of the required
+packages.
+
+### Using Anaconda Python for MacOS (or Linux)
+
+On MacOS, obtaining and configuring the necessary native libraries can be a bit
+challenging. For users on those platforms, or for Linux users having trouble
+with the instructions above, the Anaconda Python distribution can simplify the
+process.
+
+If you don't already have Anaconda, download it from
+https://www.anaconda.com/download/ and install. Then, run the following
+commands from a terminal:
+
+```bash
+conda install -q -y -c conda-forge pyfftw
+pip install -q -U ashlar
+```
+
+### Windows
+
+The pyfftw dependency is not currently supported on Windows. We are currently
+investigating a workaround.

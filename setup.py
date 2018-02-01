@@ -12,9 +12,7 @@ requires = [
     'javabridge>=1.0.15',
     'python-bioformats>=1.3.2',
     'matplotlib>=2.1.0',
-    'ModestImage>=0.1',
     'networkx>=2.0',
-    'pathlib2>=2.3.0',
     'pyfftw>=0.10.4',
     'scipy>=0.19.1',
     'scikit-image>=0.13.0',
@@ -39,9 +37,12 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=requires,
+    extras_require={
+        ':python_version <= "3.3"': ['pathlib2'],
+    },
     entry_points={
         'console_scripts': [
-            'mosaic=ashlar.scripts.mosaic:main',
+            'ashlar=ashlar.scripts.ashlar:main',
             'preview_slide=ashlar.scripts.preview_slide:main',
             'make_alignment_movie=ashlar.scripts.make_alignment_movie:main'
         ]
@@ -54,6 +55,7 @@ setup(
         'Natural Language :: English',
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 3',
         'Topic :: Scientific/Engineering :: Visualization'
     ],
     author=AUTHOR,
