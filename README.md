@@ -46,5 +46,5 @@ TBD
 ## Usage
 
 ```bash
-mosaic <scan_path> [--ffc <flat_field_path>]
+mosaic <scan_path> [--ffp <flat_field_path>]
 ```
