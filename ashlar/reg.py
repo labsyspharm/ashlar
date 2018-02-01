@@ -550,8 +550,8 @@ class Mosaic(object):
                 skimage.io.imsave(filename, mosaic_image)
 
     def correct_illumination(self, img, channel):
-        img = skimage.img_as_float(img)
         if self.has_ffp:
+            img = skimage.img_as_float(img)
             img /= self.ffp[..., channel]
         return img
 
@@ -666,7 +666,7 @@ def paste(target, img, pos):
     target_slice = target[yi:yi+img.shape[0], xi:xi+img.shape[1]]
     img = crop_like(img, target_slice)
     img = scipy.ndimage.shift(img, pos_f)
-    if np.issubdtype(img.dtype, float):
+    if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     img = skimage.util.dtype.convert(img, target.dtype)
     target_slice[:, :] = np.maximum(target_slice, img)
