@@ -42,7 +42,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'mosaic=ashlar.scripts.mosaic:main',
+            'ashlar=ashlar.scripts.ashlar:main',
             'preview_slide=ashlar.scripts.preview_slide:main',
             'make_alignment_movie=ashlar.scripts.make_alignment_movie:main'
         ]
