@@ -1,4 +1,4 @@
-from __future__ import division
+from __future__ import division, print_function
 import sys
 import warnings
 import bioformats
@@ -17,7 +17,10 @@ import networkx as nx
 import queue
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import modest_image
+try:
+    import modest_image
+except ImportError:
+    modest_image = None
 
 # Patch np.fft to use pyfftw so skimage utilities can benefit.
 np.fft = pyfftw.interfaces.numpy_fft
@@ -29,8 +32,9 @@ def _init_bioformats():
     javabridge.start_vm(class_path=bioformats.JARS)
     DebugTools = javabridge.JClassWrapper("loci.common.DebugTools")
     DebugTools.setRootLevel("ERROR")
-    # Hack module to fix py3 assumptions which break XML parsing.
-    bioformats.omexml.str = unicode
+    if sys.version_info.major == 2:
+        # Hack module to fix py3 assumptions which break XML parsing.
+        bioformats.omexml.str = unicode
 
 def _deinit_bioformats():
     javabridge.kill_vm()
@@ -133,7 +137,7 @@ class BioformatsMetadata(Metadata):
     def pixel_size(self):
         px_node = self._metadata.image(0).Pixels.node
         return np.array([
-            float(px_node.get('PhysicalSize%s' % d)) for d in 'Y', 'X'
+            float(px_node.get('PhysicalSize%s' % d)) for d in ('Y', 'X')
         ])
 
     def tile_position(self, i):
@@ -224,7 +228,7 @@ class EdgeAligner(object):
                 sys.stdout.flush()
             self.register_pair(t1, t2)
         if self.verbose:
-            print
+            print()
 
     def build_spanning_tree(self):
         line_graph = nx.line_graph(self.neighbors_graph)
@@ -251,7 +255,7 @@ class EdgeAligner(object):
             if source not in shifts:
                 source, dest = dest, source
             shifts[dest] = shifts[source] + self.register_pair(source, dest)[0]
-        self.shifts = np.array(zip(*sorted(shifts.items()))[1])
+        self.shifts = np.array([s for _, s in sorted(shifts.items())])
         self.positions = self.metadata.positions + self.shifts
 
     def fit_model(self):
@@ -402,7 +406,7 @@ class LayerAligner(object):
             self.shifts[i] = shift
             self.errors[i] = error
         if self.verbose:
-            print
+            print()
 
     def calculate_positions(self):
         self.positions = self.reference_aligner.positions + self.shifts
@@ -522,7 +526,7 @@ class Mosaic(object):
         num_tiles = len(self.aligner.positions)
         for channel in self.channels:
             if self.verbose:
-                print '    Channel %d:' % channel
+                print('    Channel %d:' % channel)
             mosaic_image = np.zeros(self.shape, dtype=np.uint16)
             for tile, position in enumerate(self.aligner.positions):
                 if self.verbose:
@@ -533,11 +537,11 @@ class Mosaic(object):
                 tile_image = self.correct_illumination(tile_image, channel)
                 paste(mosaic_image, tile_image, position)
             if self.verbose:
-                print
+                print()
             filename = self.filename_format % {'channel': channel}
             self.filenames.append(filename)
             if self.verbose:
-                print "        writing %s" % filename
+                print("        writing %s" % filename)
             with warnings.catch_warnings():
                 warnings.filterwarnings(
                     'ignore', r'.* is a low contrast image', UserWarning,
@@ -677,6 +681,10 @@ def crop_like(img, target):
 
 
 def plot_edge_shifts(aligner, mosaic=None):
+    if mosaic and not modest_image:
+        warnings.warn('Please install ModestImage for image display'
+                      'functionality (Python 2.7 only)')
+        mosaic = None
     plt.figure()
     ax = plt.gca()
     if mosaic is not None:
@@ -700,6 +708,10 @@ def plot_edge_shifts(aligner, mosaic=None):
     )
 
 def plot_edge_quality(aligner, mosaic=None):
+    if mosaic and not modest_image:
+        warnings.warn('Please install ModestImage for image display'
+                      'functionality (Python 2.7 only)')
+        mosaic = None
     centers = aligner.reader.metadata.centers - aligner.reader.metadata.origin
     nrows, ncols = 1, 2
     if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] < 4 / 3:
@@ -737,6 +749,10 @@ def plot_edge_quality(aligner, mosaic=None):
     )
 
 def plot_layer_shifts(aligner, mosaic=None):
+    if mosaic and not modest_image:
+        warnings.warn('Please install ModestImage for image display'
+                      'functionality (Python 2.7 only)')
+        mosaic = None
     plt.figure()
     ax = plt.gca()
     if mosaic is not None:

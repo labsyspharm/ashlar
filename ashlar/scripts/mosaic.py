@@ -1,6 +1,9 @@
 import sys
 import argparse
-import pathlib2 as pathlib
+try:
+    import pathlib
+except ImportError:
+    import pathlib2 as pathlib
 from .. import reg
 
 
@@ -36,8 +39,8 @@ def main(argv=sys.argv):
     mosaics = []
 
     if not args.quiet:
-        print 'Scan 0:'
-        print '    reading %s' % filepaths[0]
+        print('Scan 0:')
+        print('    reading %s' % filepaths[0])
     reader = reg.BioformatsReader(filepaths[0])
     aligner = reg.EdgeAligner(reader, verbose=not args.quiet)
     aligner.run()
@@ -54,8 +57,8 @@ def main(argv=sys.argv):
 
     for scan, filepath in enumerate(filepaths[1:], 1):
         if not args.quiet:
-            print 'Scan %d:' % scan
-            print '    reading %s' % filepath
+            print('Scan %d:' % scan)
+            print('    reading %s' % filepath)
         reader = reg.BioformatsReader(filepath)
         aligner = reg.LayerAligner(reader, aligners[0],
                                    verbose=not args.quiet)
