@@ -661,10 +661,11 @@ def crop_like(img, target):
     return img
 
 
-def plot_edge_shifts(aligner, mosaic):
+def plot_edge_shifts(aligner, mosaic=None):
     plt.figure()
     ax = plt.gca()
-    modest_image.imshow(ax, mosaic)
+    if mosaic is not None:
+        modest_image.imshow(ax, mosaic)
     h, w = aligner.reader.metadata.size
     # Bounding boxes denoting new tile positions.
     for xy in np.fliplr(aligner.positions):
@@ -683,14 +684,15 @@ def plot_edge_shifts(aligner, mosaic):
         edge_cmap=plt.get_cmap('Blues_r'), width=2, node_size=100, font_size=6
     )
 
-def plot_edge_quality(aligner, mosaic):
+def plot_edge_quality(aligner, mosaic=None):
     centers = aligner.reader.metadata.centers - aligner.reader.metadata.origin
     nrows, ncols = 1, 2
-    if mosaic.shape[1] * 2 / mosaic.shape[0] < 4 / 3:
+    if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] < 4 / 3:
         nrows, ncols = ncols, nrows
     plt.figure()
     ax = plt.subplot(nrows, ncols,1)
-    modest_image.imshow(ax, mosaic)
+    if mosaic is not None:
+        modest_image.imshow(ax, mosaic)
     error = np.array([aligner._cache[tuple(sorted(e))][1]
                       for e in aligner.neighbors_graph.edges()])
     # Manually center and scale data to 0-1, except infinity which is set to -1.
@@ -710,7 +712,8 @@ def plot_edge_quality(aligner, mosaic):
         edge_cmap=plt.get_cmap('PRGn'), width=2, node_size=100, font_size=6
     )
     ax = plt.subplot(nrows, ncols, 2)
-    modest_image.imshow(ax, mosaic)
+    if mosaic is not None:
+        modest_image.imshow(ax, mosaic)
     # Spanning tree with nodes at original tile positions.
     nx.draw(
         aligner.spanning_tree, ax=ax, with_labels=True,
@@ -718,10 +721,11 @@ def plot_edge_quality(aligner, mosaic):
         width=2, node_size=100, font_size=6
     )
 
-def plot_layer_shifts(aligner, mosaic):
+def plot_layer_shifts(aligner, mosaic=None):
     plt.figure()
     ax = plt.gca()
-    modest_image.imshow(ax, mosaic)
+    if mosaic is not None:
+        modest_image.imshow(ax, mosaic)
     h, w = aligner.metadata.size
     # Bounding boxes denoting new tile positions.
     for xy in np.fliplr(aligner.positions):
