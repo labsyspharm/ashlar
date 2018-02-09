@@ -538,7 +538,7 @@ class Mosaic(object):
                 paste(mosaic_image, tile_image, position)
             if self.verbose:
                 print()
-            filename = self.filename_format % {'channel': channel}
+            filename = self.filename_format.format(channel=channel)
             self.filenames.append(filename)
             if self.verbose:
                 print("        writing %s" % filename)
