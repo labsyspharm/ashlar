@@ -680,15 +680,10 @@ def crop_like(img, target):
     return img
 
 
-def plot_edge_shifts(aligner, mosaic=None):
-    if mosaic and not modest_image:
-        warnings.warn('Please install ModestImage for image display'
-                      'functionality (Python 2.7 only)')
-        mosaic = None
+def plot_edge_shifts(aligner, img=None):
     plt.figure()
     ax = plt.gca()
-    if mosaic is not None:
-        modest_image.imshow(ax, mosaic)
+    draw_mosaic_image(ax, aligner, img)
     h, w = aligner.reader.metadata.size
     # Bounding boxes denoting new tile positions.
     for xy in np.fliplr(aligner.positions):
@@ -707,19 +702,15 @@ def plot_edge_shifts(aligner, mosaic=None):
         edge_cmap=plt.get_cmap('Blues_r'), width=2, node_size=100, font_size=6
     )
 
-def plot_edge_quality(aligner, mosaic=None):
-    if mosaic and not modest_image:
-        warnings.warn('Please install ModestImage for image display'
-                      'functionality (Python 2.7 only)')
-        mosaic = None
+
+def plot_edge_quality(aligner, img=None):
     centers = aligner.reader.metadata.centers - aligner.reader.metadata.origin
     nrows, ncols = 1, 2
     if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] < 4 / 3:
         nrows, ncols = ncols, nrows
     plt.figure()
     ax = plt.subplot(nrows, ncols,1)
-    if mosaic is not None:
-        modest_image.imshow(ax, mosaic)
+    draw_mosaic_image(ax, aligner, img)
     error = np.array([aligner._cache[tuple(sorted(e))][1]
                       for e in aligner.neighbors_graph.edges()])
     # Manually center and scale data to 0-1, except infinity which is set to -1.
@@ -739,8 +730,7 @@ def plot_edge_quality(aligner, mosaic=None):
         edge_cmap=plt.get_cmap('PRGn'), width=2, node_size=100, font_size=6
     )
     ax = plt.subplot(nrows, ncols, 2)
-    if mosaic is not None:
-        modest_image.imshow(ax, mosaic)
+    draw_mosaic_image(ax, aligner, img)
     # Spanning tree with nodes at original tile positions.
     nx.draw(
         aligner.spanning_tree, ax=ax, with_labels=True,
@@ -748,15 +738,11 @@ def plot_edge_quality(aligner, mosaic=None):
         width=2, node_size=100, font_size=6
     )
 
-def plot_layer_shifts(aligner, mosaic=None):
-    if mosaic and not modest_image:
-        warnings.warn('Please install ModestImage for image display'
-                      'functionality (Python 2.7 only)')
-        mosaic = None
+
+def plot_layer_shifts(aligner, img=None):
     plt.figure()
     ax = plt.gca()
-    if mosaic is not None:
-        modest_image.imshow(ax, mosaic)
+    draw_mosaic_shape(ax, aligner, img)
     h, w = aligner.metadata.size
     # Bounding boxes denoting new tile positions.
     for xy in np.fliplr(aligner.positions):
@@ -768,3 +754,22 @@ def plot_layer_shifts(aligner, mosaic=None):
         pos=np.fliplr(aligner.centers), edge_color='none',
         node_size=100, font_size=6
     )
+
+
+def draw_mosaic_image(ax, aligner, img):
+    if img is not None:
+        if sys.version_info[0] != 2:
+            warnings.warn('ModestImage module (required for image display)'
+                          ' is only compatible with Python 2')
+            img = None
+        elif modest_image is None:
+            warnings.warn('Please install ModestImage for image display')
+            img = None
+    if img is not None:
+        modest_image.imshow(ax, img)
+    else:
+        h, w = aligner.mosaic_shape
+        # Draw a single-pixel image in the lowest color in the colormap,
+        # stretched across the same extent that the real image would be.
+        # This makes the graph edge colors visible even if there's no image.
+        ax.imshow([[0]], extent=(-0.5, w-0.5, h-0.5, -0.5))
