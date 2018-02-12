@@ -385,10 +385,12 @@ class EdgeAligner(object):
         shift, error, _ = skimage.feature.register_translation(
             img1_f, img2_f, 10, 'fourier'
         )
-        # Add fractional part of offset back in.
-        shift += np.modf(its.offsets[1] - its.offsets[0])[0]
-        # Account for padding.
-        shift += its.padding
+        # Account for padding, flipping the sign depending on the direction
+        # between the tiles.
+        p1, p2 = self.metadata.positions[[t1, t2]]
+        sx = 1 if p1[1] > p2[1] else -1
+        sy = 1 if p1[0] > p2[0] else -1
+        shift += its.padding * [sy, sx]
         return shift, error
 
     def intersection(self, t1, t2, min_size):
@@ -422,7 +424,7 @@ class EdgeAligner(object):
         return np.ceil(max_dimensions).astype(int)
 
     def debug(self, t1, t2, min_size=None):
-        shift, _ = self.register_pair(t1, t2)
+        shift, _ = self._register(t1, t2, min_size)
         its, o1, o2 = self.overlap(t1, t2, min_size)
         w1 = whiten(o1)
         w2 = whiten(o2)
