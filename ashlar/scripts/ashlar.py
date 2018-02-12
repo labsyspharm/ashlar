@@ -30,13 +30,18 @@ def main_inner(argv):
         '-o', '--output', dest='output', default='.', metavar='DIR',
         help='write output image files to DIR; default is the current directory'
     )
+    parser.add_argument(
+        '-c', '--channels', dest='channels',
+        help=('output only channels listed in CHANNELS; format is a comma-'
+              'separated list of channel numbers, numbering starts at 0')
+    )
     arg_f_default = 'cycle_{cycle}_channel_{channel}.tif'
     parser.add_argument(
-        '-f', '--output-format', dest='output_format',
+        '-f', '--filename-format', dest='filename_format',
         default=arg_f_default, metavar='FORMAT',
         help=('use FORMAT to generate output filenames, with {{cycle}} and'
               ' {{channel}} as required placeholders for the cycle and channel'
-              ' numbers; default is {default}'.format(default=arg_f_default)),
+              ' numbers; default is {default}'.format(default=arg_f_default))
     )
     parser.add_argument(
         '--ffp', metavar='FILE',
@@ -63,25 +68,36 @@ def main_inner(argv):
         print("Output directory '{}' does not exist".format(output_path))
         return 1
 
+    if args.channels:
+        try:
+            args.channels = [int(x) for x in args.channels.split(',')]
+        except ValueError:
+            print("Channel list must be a comma-separated list of integers")
+            return 1
+
     aligners = []
     mosaics = []
 
     if not args.quiet:
         print('Cycle 0:')
         print('    reading %s' % filepaths[0])
+
     reader = reg.BioformatsReader(filepaths[0])
     aligner = reg.EdgeAligner(reader, verbose=not args.quiet)
     aligner.run()
     mshape = aligner.mosaic_shape
+
     margs = {}
+    if args.channels:
+        margs['channels'] = args.channels
     if args.ffp:
         margs['ffp_path'] = args.ffp
     if args.quiet is False:
         margs['verbose'] = True
-
-    m_format = str(output_path / args.output_format)
+    m_format = str(output_path / args.filename_format)
     mosaic = reg.Mosaic(aligner, mshape, format_cycle(m_format, 0), **margs)
     mosaic.run()
+
     aligners.append(aligner)
     mosaics.append(mosaic)
 
