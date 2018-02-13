@@ -286,49 +286,50 @@ class EdgeAligner(object):
             print()
 
     def build_spanning_tree(self):
-        line_graph = nx.line_graph(self.neighbors_graph)
+        # Note that this may be disconnected, so it's technically a forest.
+        g = nx.Graph()
+        g.add_nodes_from(self.neighbors_graph)
+        g.add_weighted_edges_from(
+            (t1, t2, error)
+            for (t1, t2), (_, error) in self._cache.items()
+            if np.isfinite(error)
+        )
         spanning_tree = nx.Graph()
-        fringe = queue.PriorityQueue()
-        start_edge = self.best_edge
-        fringe.put((self.register_pair(*start_edge)[1], start_edge))
-        while not fringe.empty():
-            _, edge = fringe.get()
-            if edge[0] in spanning_tree and edge[1] in spanning_tree:
-                continue
-            spanning_tree.add_edge(*edge)
-            for next_edge in set(line_graph.neighbors(edge)):
-                fringe.put((self.register_pair(*next_edge)[1], next_edge))
+        spanning_tree.add_nodes_from(g)
+        for cc in nx.connected_component_subgraphs(g):
+            center = nx.center(cc)[0]
+            paths = nx.single_source_dijkstra_path(cc, center).values()
+            for path in paths:
+                spanning_tree.add_path(path)
         self.spanning_tree = spanning_tree
 
     def calculate_positions(self):
-        # Use the source node of the edge with the best alignment quality as the
-        # reference tile against which all others will be aligned.
-        reference_node = self.best_edge[0]
-        shifts = {reference_node: np.array([0, 0])}
-        for edge in nx.traversal.dfs_edges(self.spanning_tree, reference_node):
-            source, dest = edge
-            if source not in shifts:
-                source, dest = dest, source
-            shifts[dest] = shifts[source] + self.register_pair(source, dest)[0]
+        shifts = {}
+        for cc in nx.connected_component_subgraphs(self.spanning_tree):
+            center = nx.center(cc)[0]
+            shifts[center] = np.array([0, 0])
+            for edge in nx.traversal.bfs_edges(cc, center):
+                source, dest = edge
+                if source not in shifts:
+                    source, dest = dest, source
+                shift = self.register_pair(source, dest)[0]
+                shifts[dest] = shifts[source] + shift
         self.shifts = np.array([s for _, s in sorted(shifts.items())])
         self.positions = self.metadata.positions + self.shifts
 
     def fit_model(self):
-        # Build list of connected components from spanning tree with
-        # infinite-error edges discarded.
-        forest = self.spanning_tree.copy()
-        forest.remove_edges_from(
-            e for e, v in self._cache.items() if v[1] == np.inf
+        components = sorted(
+            nx.connected_component_subgraphs(self.spanning_tree),
+            key=len, reverse=True
         )
-        components = sorted((list(c) for c in nx.connected_components(forest)),
-                            key=len, reverse=True)
         # Fit LR model on positions of largest connected component.
-        cc0 = components[0]
+        cc0 = list(components[0])
         self.lr = sklearn.linear_model.LinearRegression()
         self.lr.fit(self.metadata.positions[cc0], self.positions[cc0])
         # Adjust position of remaining components so their centroids match
         # the predictions of the model.
-        for nodes in components[1:]:
+        for cc in components[1:]:
+            nodes = list(cc)
             centroid_m = np.mean(self.metadata.positions[nodes], axis=0)
             centroid_f = np.mean(self.positions[nodes], axis=0)
             shift = self.lr.predict([centroid_m])[0] - centroid_f
