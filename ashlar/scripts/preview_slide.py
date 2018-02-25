@@ -45,11 +45,5 @@ def main(argv=sys.argv):
     plt.show()
 
 
-    try:
-        __IPYTHON__
-    except:
-        reg._deinit_bioformats()
-
-
 if __name__ == '__main__':
     main()

@@ -1,9 +1,13 @@
 from __future__ import division, print_function
 import sys
 import warnings
+import xml.etree.ElementTree
+try:
+    import pathlib
+except ImportError:
+    import pathlib2 as pathlib
+import jnius_config
 import bioformats
-import bioformats.log4j
-import javabridge
 import numpy as np
 import scipy.ndimage
 import skimage.util
@@ -27,18 +31,24 @@ except ImportError:
 np.fft = pyfftw.interfaces.numpy_fft
 
 
-def _init_bioformats():
-    if javabridge._javabridge.get_vm().is_active():
-        return
-    javabridge.start_vm(class_path=bioformats.JARS)
-    DebugTools = javabridge.JClassWrapper("loci.common.DebugTools")
-    DebugTools.setRootLevel("ERROR")
-    if sys.version_info.major == 2:
-        # Hack module to fix py3 assumptions which break XML parsing.
-        bioformats.omexml.str = unicode
+if not jnius_config.vm_running:
+    bf_jar_parent = pathlib.Path(bioformats._jars_dir)
+    bf_jar_path = (bf_jar_parent / 'loci_tools.jar').resolve()
+    if not bf_jar_path.exists():
+        raise RuntimeError("Could not find loci_tools.jar in python-bioformats"
+                           " package (expected it at %s)" % bf_jar_path)
+    jnius_config.add_classpath(str(bf_jar_path))
 
-def _deinit_bioformats():
-    javabridge.kill_vm()
+import jnius
+
+DebugTools = jnius.autoclass('loci.common.DebugTools')
+IFormatReader = jnius.autoclass('loci.formats.IFormatReader')
+MetadataStore = jnius.autoclass('loci.formats.meta.MetadataStore')
+ServiceFactory = jnius.autoclass('loci.common.services.ServiceFactory')
+OMEXMLService = jnius.autoclass('loci.formats.services.OMEXMLService')
+ImageReader = jnius.autoclass('loci.formats.ImageReader')
+
+DebugTools.setRootLevel("ERROR")
 
 
 # TODO:
@@ -57,6 +67,10 @@ class Metadata(object):
 
     @property
     def pixel_size(self):
+        raise NotImplementedError
+
+    @property
+    def pixel_dtype(self):
         raise NotImplementedError
 
     def tile_position(self, i):
@@ -108,6 +122,10 @@ class Reader(object):
 
 class BioformatsMetadata(Metadata):
 
+    _pixel_dtypes = {
+        'uint16': np.uint16,
+    }
+
     def __init__(self, path):
         self.path = path
         self._init_metadata()
@@ -122,36 +140,59 @@ class BioformatsMetadata(Metadata):
         self._init_metadata()
 
     def _init_metadata(self):
-        _init_bioformats()
-        ome_xml = bioformats.get_omexml_metadata(self.path)
-        self._metadata = bioformats.OMEXML(ome_xml)
+
+        factory = ServiceFactory()
+        service = jnius.cast(OMEXMLService, factory.getInstance(OMEXMLService))
+        metadata = service.createOMEXMLMetadata()
+        reader = ImageReader()
+        reader.setMetadataStore(metadata)
+        reader.setId(self.path)
+
+        xml_content = metadata.dumpXML()
+        self._metadata = metadata
+        self._omexml_root = xml.etree.ElementTree.fromstring(xml_content)
 
     @property
     def num_images(self):
-        return self._metadata.image_count
+        return self._metadata.imageCount
 
     @property
     def num_channels(self):
-        return self._metadata.image(0).Pixels.channel_count
+        return self._metadata.getChannelCount(0)
 
     @property
     def pixel_size(self):
-        px_node = self._metadata.image(0).Pixels.node
-        return np.array([
-            float(px_node.get('PhysicalSize%s' % d)) for d in ('Y', 'X')
-        ])
+        values = []
+        for dim in ('Y', 'X'):
+            method = getattr(self._metadata, 'getPixelsPhysicalSize%s' % dim)
+            v = method(0).value().doubleValue()
+            values.append(v)
+        return np.array(values, dtype=float)
+
+    @property
+    def pixel_dtype(self):
+        return self._pixel_dtypes[self._metadata.getPixelsType(0).value]
 
     def tile_position(self, i):
-        plane = self._metadata.image(i).Pixels.Plane(0)
+        values = []
+        for dim in ('Y', 'X'):
+            method = getattr(self._metadata, 'getPlanePosition%s' % dim)
+            # FIXME verify all planes have the same X,Y position.
+            v = method(i, 0).value().doubleValue()
+            values.append(v)
         # Invert Y so that stage position coordinates and image pixel
         # coordinates are aligned.
-        position_microns = np.array([-plane.PositionY, plane.PositionX])
+        position_microns = np.array(values, dtype=float) * [-1, 1]
         position_pixels = position_microns / self.pixel_size
         return position_pixels
 
     def tile_size(self, i):
-        pixels = self._metadata.image(i).Pixels
-        return np.array([pixels.SizeY, pixels.SizeX])
+        values = []
+        for dim in ('Y', 'X'):
+            method = getattr(self._metadata, 'getPixelsSize%s' % dim)
+            v = method(i).value
+            values.append(v)
+        return np.array(values, dtype=int)
 
 
 class BioformatsReader(Reader):
@@ -171,11 +212,18 @@ class BioformatsReader(Reader):
         self._init_ir()
 
     def _init_ir(self):
-        _init_bioformats()
-        self.ir = bioformats.ImageReader(self.path)
+        ImageReader = jnius.autoclass('loci.formats.ImageReader')
+        self._reader = ImageReader()
+        self._reader.setId(self.path)
 
     def read(self, series, c):
-        return self.ir.read(c=c, series=series, rescale=False)
+        self._reader.setSeries(series)
+        index = self._reader.getIndex(0, c, 0)
+        byte_array = self._reader.openBytes(index)
+        dtype = self.metadata.pixel_dtype
+        shape = self.metadata.tile_size(series)
+        img = np.frombuffer(byte_array.tostring(), dtype=dtype).reshape(shape)
+        return img
 
 
 # TileStatistics = collections.namedtuple(
