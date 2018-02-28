@@ -11,6 +11,7 @@ import skimage.feature
 import skimage.filters
 import skimage.restoration.uft
 import skimage.io
+import skimage.exposure
 import sklearn.linear_model
 import pyfftw
 import networkx as nx
@@ -499,7 +500,7 @@ class Mosaic(object):
     def __init__(self, aligner, shape, filename_format, channels=None,
                  ffp_path=None, verbose=False):
         self.aligner = aligner
-        self.shape = shape
+        self.shape = tuple(shape)
         self.filename_format = filename_format
         self.channels = self._sanitize_channels(channels)
         self.ffp = self._load_ffp(ffp_path)
@@ -522,12 +523,23 @@ class Mosaic(object):
         else:
             return None
 
-    def run(self):
+    def run(self, mode='write', debug=False):
+        if mode not in ('write', 'return'):
+            raise ValueError('Invalid mode')
         num_tiles = len(self.aligner.positions)
+        all_images = []
+        if debug:
+            node_colors = nx.greedy_color(self.aligner.neighbors_graph)
+            num_colors = max(node_colors.values()) + 1
+            if num_colors > 3:
+                raise ValueError("neighbor graph requires more than 3 colors")
         for channel in self.channels:
             if self.verbose:
                 print('    Channel %d:' % channel)
-            mosaic_image = np.zeros(self.shape, dtype=np.uint16)
+            if not debug:
+                mosaic_image = np.zeros(self.shape, np.uint16)
+            else:
+                mosaic_image = np.zeros(self.shape + (3,), np.float32)
             for tile, position in enumerate(self.aligner.positions):
                 if self.verbose:
                     sys.stdout.write('\r        merging tile %d/%d'
@@ -535,19 +547,39 @@ class Mosaic(object):
                     sys.stdout.flush()
                 tile_image = self.aligner.reader.read(c=channel, series=tile)
                 tile_image = self.correct_illumination(tile_image, channel)
-                paste(mosaic_image, tile_image, position)
+                if debug:
+                    color_channel = node_colors[tile]
+                    rgb_image = np.zeros(tile_image.shape + (3,),
+                                         tile_image.dtype)
+                    rgb_image[:,:,color_channel] = tile_image
+                    tile_image = rgb_image
+                func = None if not debug else np.add
+                paste(mosaic_image, tile_image, position, func=func)
+            if debug:
+                np.clip(mosaic_image, 0, 1, out=mosaic_image)
+                w = int(1e6)
+                mi_flat = mosaic_image.reshape(-1, 3)
+                for p in np.arange(0, mi_flat.shape[0], w, dtype=int):
+                    mi_flat[p:p+w] = skimage.exposure.adjust_gamma(
+                        mi_flat[p:p+w], 1/2.2
+                    )
             if self.verbose:
                 print()
-            filename = self.filename_format % {'channel': channel}
-            self.filenames.append(filename)
-            if self.verbose:
-                print("        writing %s" % filename)
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    'ignore', r'.* is a low contrast image', UserWarning,
-                    '^skimage\.io'
-                )
-                skimage.io.imsave(filename, mosaic_image)
+            if mode == 'write':
+                filename = self.filename_format.format(channel=channel)
+                self.filenames.append(filename)
+                if self.verbose:
+                    print("        writing %s" % filename)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        'ignore', r'.* is a low contrast image', UserWarning,
+                        '^skimage\.io'
+                    )
+                    skimage.io.imsave(filename, mosaic_image)
+            elif mode == 'return':
+                all_images.append(mosaic_image)
+        if mode == 'return':
+            return all_images
 
     def correct_illumination(self, img, channel):
         if self.has_ffp:
@@ -648,8 +680,10 @@ def fourier_shift(img, shift):
     return img_s.real
 
 
-def paste(target, img, pos):
-    """Composite img into target using maximum intensity projection."""
+def paste(target, img, pos, func=None):
+    """Composite img into target."""
+    if func is None:
+        func = np.maximum
     pos_f, pos_i = np.modf(pos)
     yi, xi = pos_i.astype('i8')
     # Clip img to the edges of the mosaic.
@@ -665,11 +699,18 @@ def paste(target, img, pos):
     # application have far more overlap than a single pixel, it's irrelevant.
     target_slice = target[yi:yi+img.shape[0], xi:xi+img.shape[1]]
     img = crop_like(img, target_slice)
-    img = scipy.ndimage.shift(img, pos_f)
+    if img.ndim == 2:
+        img = scipy.ndimage.shift(img, pos_f)
+    else:
+        for c in range(img.shape[2]):
+            img[...,c] = scipy.ndimage.shift(img[...,c], pos_f)
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     img = skimage.util.dtype.convert(img, target.dtype)
-    target_slice[:, :] = np.maximum(target_slice, img)
+    if isinstance(func, np.ufunc):
+        func(target_slice, img, out=target_slice)
+    else:
+        target_slice[:,:] = func(target_slice, img)
 
 
 def crop_like(img, target):
@@ -680,20 +721,17 @@ def crop_like(img, target):
     return img
 
 
-def plot_edge_shifts(aligner, mosaic=None):
-    if mosaic and not modest_image:
-        warnings.warn('Please install ModestImage for image display'
-                      'functionality (Python 2.7 only)')
-        mosaic = None
-    plt.figure()
+def plot_edge_shifts(aligner, img=None, bounds=True):
+    fig = plt.figure()
     ax = plt.gca()
-    if mosaic is not None:
-        modest_image.imshow(ax, mosaic)
+    draw_mosaic_image(ax, aligner, img)
     h, w = aligner.reader.metadata.size
-    # Bounding boxes denoting new tile positions.
-    for xy in np.fliplr(aligner.positions):
-        rect = mpatches.Rectangle(xy, w, h, color='black', fill=False, lw=0.5)
-        ax.add_patch(rect)
+    if bounds:
+        # Bounding boxes denoting new tile positions.
+        for xy in np.fliplr(aligner.positions):
+            rect = mpatches.Rectangle(xy, w, h, color='black', fill=False,
+                                      lw=0.5)
+            ax.add_patch(rect)
     # Compute per-edge relative shifts from tile positions.
     edges = np.array(aligner.spanning_tree.edges())
     dist = aligner.metadata.positions - aligner.positions
@@ -706,20 +744,17 @@ def plot_edge_shifts(aligner, mosaic=None):
         pos=np.fliplr(aligner.centers), edge_color=shift_distances,
         edge_cmap=plt.get_cmap('Blues_r'), width=2, node_size=100, font_size=6
     )
+    fig.set_facecolor('black')
 
-def plot_edge_quality(aligner, mosaic=None):
-    if mosaic and not modest_image:
-        warnings.warn('Please install ModestImage for image display'
-                      'functionality (Python 2.7 only)')
-        mosaic = None
+
+def plot_edge_quality(aligner, img=None):
     centers = aligner.reader.metadata.centers - aligner.reader.metadata.origin
     nrows, ncols = 1, 2
     if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] < 4 / 3:
         nrows, ncols = ncols, nrows
     plt.figure()
     ax = plt.subplot(nrows, ncols,1)
-    if mosaic is not None:
-        modest_image.imshow(ax, mosaic)
+    draw_mosaic_image(ax, aligner, img)
     error = np.array([aligner._cache[tuple(sorted(e))][1]
                       for e in aligner.neighbors_graph.edges()])
     # Manually center and scale data to 0-1, except infinity which is set to -1.
@@ -739,24 +774,20 @@ def plot_edge_quality(aligner, mosaic=None):
         edge_cmap=plt.get_cmap('PRGn'), width=2, node_size=100, font_size=6
     )
     ax = plt.subplot(nrows, ncols, 2)
-    if mosaic is not None:
-        modest_image.imshow(ax, mosaic)
+    draw_mosaic_image(ax, aligner, img)
     # Spanning tree with nodes at original tile positions.
     nx.draw(
         aligner.spanning_tree, ax=ax, with_labels=True,
         pos=np.fliplr(centers), edge_color='royalblue',
         width=2, node_size=100, font_size=6
     )
+    fig.set_facecolor('black')
 
-def plot_layer_shifts(aligner, mosaic=None):
-    if mosaic and not modest_image:
-        warnings.warn('Please install ModestImage for image display'
-                      'functionality (Python 2.7 only)')
-        mosaic = None
+
+def plot_layer_shifts(aligner, img=None):
     plt.figure()
     ax = plt.gca()
-    if mosaic is not None:
-        modest_image.imshow(ax, mosaic)
+    draw_mosaic_shape(ax, aligner, img)
     h, w = aligner.metadata.size
     # Bounding boxes denoting new tile positions.
     for xy in np.fliplr(aligner.positions):
@@ -768,3 +799,23 @@ def plot_layer_shifts(aligner, mosaic=None):
         pos=np.fliplr(aligner.centers), edge_color='none',
         node_size=100, font_size=6
     )
+    fig.set_facecolor('black')
+
+
+def draw_mosaic_image(ax, aligner, img):
+    if img is not None:
+        if sys.version_info[0] != 2:
+            warnings.warn('ModestImage module (required for image display)'
+                          ' is only compatible with Python 2')
+            img = None
+        elif modest_image is None:
+            warnings.warn('Please install ModestImage for image display')
+            img = None
+    if img is not None:
+        modest_image.imshow(ax, img)
+    else:
+        h, w = aligner.mosaic_shape
+        # Draw a single-pixel image in the lowest color in the colormap,
+        # stretched across the same extent that the real image would be.
+        # This makes the graph edge colors visible even if there's no image.
+        ax.imshow([[0]], extent=(-0.5, w-0.5, h-0.5, -0.5))
