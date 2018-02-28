@@ -32,11 +32,11 @@ np.fft = pyfftw.interfaces.numpy_fft
 
 
 if not jnius_config.vm_running:
-    bf_jar_parent = pathlib.Path(bioformats._jars_dir)
-    bf_jar_path = (bf_jar_parent / 'loci_tools.jar').resolve()
+    pkg_root = pathlib.Path(__file__).parent.resolve()
+    bf_jar_path = pkg_root / 'jars' / 'loci_tools.jar'
     if not bf_jar_path.exists():
-        raise RuntimeError("Could not find loci_tools.jar in python-bioformats"
-                           " package (expected it at %s)" % bf_jar_path)
+        raise RuntimeError("loci_tools.jar missing from distribution"
+                           " (expected it at %s)" % bf_jar_path)
     jnius_config.add_classpath(str(bf_jar_path))
 
 import jnius
