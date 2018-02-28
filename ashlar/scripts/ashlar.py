@@ -11,7 +11,10 @@ def main(argv=sys.argv):
     try:
         return(main_inner(argv))
     finally:
-        reg._deinit_bioformats()
+        # FIXME This whole main wrapper is unneeded with the new jnius
+        # implementation, but I'm leaving this block intact for now to avoid
+        # potential rebase problems.
+        pass
 
 
 def main_inner(argv):
