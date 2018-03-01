@@ -7,7 +7,6 @@ try:
 except ImportError:
     import pathlib2 as pathlib
 import jnius_config
-import bioformats
 import numpy as np
 import scipy.ndimage
 import skimage.util
