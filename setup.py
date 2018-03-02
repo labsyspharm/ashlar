@@ -1,6 +1,9 @@
 from __future__ import print_function
 import os
-import urllib2
+try:
+    from urllib.request import urlopen
+except ImportError:
+    from urllib2 import urlopen
 import hashlib
 from setuptools import setup, find_packages
 from setuptools.command.develop import develop
@@ -54,7 +57,7 @@ def download_bioformats():
         pass
     print("    Downloading BioFormats from %s ..." % LOCI_TOOLS_URL)
     # FIXME add progress bar
-    content = urllib2.urlopen(LOCI_TOOLS_URL).read()
+    content = urlopen(LOCI_TOOLS_URL).read()
     content_sha1 = hashlib.sha1(content).hexdigest()
     with open(lt_jar_path, 'wb') as f:
         f.write(content)
