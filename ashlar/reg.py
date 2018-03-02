@@ -40,6 +40,7 @@ if not jnius_config.vm_running:
 
 import jnius
 
+JString = jnius.autoclass('java.lang.String')
 DebugTools = jnius.autoclass('loci.common.DebugTools')
 IFormatReader = jnius.autoclass('loci.formats.IFormatReader')
 MetadataStore = jnius.autoclass('loci.formats.meta.MetadataStore')
@@ -145,7 +146,11 @@ class BioformatsMetadata(Metadata):
         metadata = service.createOMEXMLMetadata()
         reader = ImageReader()
         reader.setMetadataStore(metadata)
-        reader.setId(self.path)
+        # FIXME Workaround for pyjnius #300 until there is a new release.
+        # Passing a python string directly here corrupts the value under Python
+        # 3, but explicitly converting it into a Java string works.
+        path_jstring = JString(self.path)
+        reader.setId(path_jstring)
 
         xml_content = metadata.dumpXML()
         self._metadata = metadata
@@ -213,7 +218,9 @@ class BioformatsReader(Reader):
     def _init_ir(self):
         ImageReader = jnius.autoclass('loci.formats.ImageReader')
         self._reader = ImageReader()
-        self._reader.setId(self.path)
+        # FIXME Workaround for pyjnius #300 (see above for details).
+        path_jstring = JString(self.path)
+        self._reader.setId(path_jstring)
 
     def read(self, series, c):
         self._reader.setSeries(series)
