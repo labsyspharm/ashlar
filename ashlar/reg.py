@@ -659,7 +659,7 @@ class Mosaic(object):
                                          tile_image.dtype)
                     rgb_image[:,:,color_channel] = tile_image
                     tile_image = rgb_image
-                func = None if not debug else np.add
+                func = pastefunc_blend if not debug else np.add
                 paste(mosaic_image, tile_image, position, func=func)
             if debug:
                 np.clip(mosaic_image, 0, 1, out=mosaic_image)
@@ -779,8 +779,6 @@ def fourier_shift(img, shift):
 
 def paste(target, img, pos, func=None):
     """Composite img into target."""
-    if func is None:
-        func = np.maximum
     pos_f, pos_i = np.modf(pos)
     yi, xi = pos_i.astype('i8')
     # Clip img to the edges of the mosaic.
@@ -804,10 +802,23 @@ def paste(target, img, pos, func=None):
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     img = skimage.util.dtype.convert(img, target.dtype)
-    if isinstance(func, np.ufunc):
+    if func is None:
+        target_slice[1:-1,1:-1] = img[1:-1,1:-1]
+    elif isinstance(func, np.ufunc):
         func(target_slice, img, out=target_slice)
     else:
-        target_slice[:,:] = func(target_slice, img)
+        target_slice[:] = func(target_slice, img)
+
+
+def pastefunc_blend(target, img):
+    # Linear blend based on distance to unfilled space in target.
+    dist = scipy.ndimage.distance_transform_cdt(target)
+    dmax = dist.max()
+    if dmax == 0:
+        alpha = 0
+    else:
+        alpha = dist / dist.max()
+    return target * alpha + img * (1 - alpha)
 
 
 def crop_like(img, target):
