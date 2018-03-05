@@ -616,13 +616,13 @@ class Intersection(object):
 class Mosaic(object):
 
     def __init__(self, aligner, shape, filename_format, channels=None,
-                 ffp_path=None, verbose=False):
+                 ffp_path=None, dfp_path=None, verbose=False):
         self.aligner = aligner
         self.shape = tuple(shape)
         self.filename_format = filename_format
         self.channels = self._sanitize_channels(channels)
-        self.ffp = self._load_ffp(ffp_path)
-        self.has_ffp = self.ffp is not None
+        self.dtype = np.uint16
+        self._load_correction_profiles(dfp_path, ffp_path)
         self.verbose = verbose
         self.filenames = []
 
@@ -635,11 +635,15 @@ class Mosaic(object):
             raise ValueError("invalid channels: %s" % invalid_channels)
         return channels
 
-    def _load_ffp(self, path):
-        if path:
-            return skimage.io.imread(path)
+    def _load_correction_profiles(self, dfp_path, ffp_path):
+        if dfp_path or ffp_path:
+            c = max(self.channels) + 1
+            self.dfp = skimage.io.imread(dfp_path) if dfp_path else np.zeros(c)
+            self.ffp = skimage.io.imread(ffp_path) if ffp_path else np.ones(c)
+            self.dfp /= np.iinfo(self.dtype).max
+            self.do_correction = True
         else:
-            return None
+            self.do_correction = False
 
     def run(self, mode='write', debug=False):
         if mode not in ('write', 'return'):
@@ -655,7 +659,7 @@ class Mosaic(object):
             if self.verbose:
                 print('    Channel %d:' % channel)
             if not debug:
-                mosaic_image = np.zeros(self.shape, np.uint16)
+                mosaic_image = np.zeros(self.shape, self.dtype)
             else:
                 mosaic_image = np.zeros(self.shape + (3,), np.float32)
             for tile, position in enumerate(self.aligner.positions):
@@ -700,9 +704,11 @@ class Mosaic(object):
             return all_images
 
     def correct_illumination(self, img, channel):
-        if self.has_ffp:
-            img = skimage.img_as_float(img)
+        if self.do_correction:
+            img = skimage.img_as_float(img, force_copy=True)
+            img -= self.dfp[..., channel]
             img /= self.ffp[..., channel]
+            img.clip(0, 1, out=img)
         return img
 
 
