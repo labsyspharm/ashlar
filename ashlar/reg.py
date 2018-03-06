@@ -501,9 +501,9 @@ class LayerAligner(object):
         # Computed shifts of exactly 0,0 seem to result from failed
         # registration. We need to throw those out for this purpose.
         discard = (self.shifts == 0).all(axis=1)
-        # Take the mean of registered shifts to determine the offset
+        # Take the median of registered shifts to determine the offset
         # (translation) from the reference image to this one.
-        offset = np.nan_to_num(np.mean(self.shifts[~discard], axis=0))
+        offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
         # Here we assume the fitted linear model from the reference image is
         # still appropriate, apart from the extra offset we just computed.
         predictions = self.reference_aligner.lr.predict(self.metadata.positions)
