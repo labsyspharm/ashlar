@@ -261,8 +261,9 @@ def neighbors_graph(aligner):
 
 class EdgeAligner(object):
 
-    def __init__(self, reader, verbose=False):
+    def __init__(self, reader, channel=0, verbose=False):
         self.reader = reader
+        self.channel = channel
         self.verbose = verbose
         self.max_shift = 0.05
         self._cache = {}
@@ -400,7 +401,7 @@ class EdgeAligner(object):
         return Intersection(corners1, corners2, min_size)
 
     def crop(self, tile, offset, shape):
-        img = self.reader.read(series=tile, c=0)
+        img = self.reader.read(series=tile, c=self.channel)
         return crop(img, offset, shape)
 
     def overlap(self, t1, t2, min_size):
@@ -459,9 +460,12 @@ class EdgeAligner(object):
 
 class LayerAligner(object):
 
-    def __init__(self, reader, reference_aligner, verbose=False):
+    def __init__(self, reader, reference_aligner, channel=None, verbose=False):
         self.reader = reader
         self.reference_aligner = reference_aligner
+        if channel is None:
+            channel = reference_aligner.channel
+        self.channel = channel
         self.verbose = verbose
         self.max_shift = 0.05
         self.tile_positions = self.metadata.positions - reference_aligner.origin
@@ -542,7 +546,7 @@ class LayerAligner(object):
         its = self.intersection(t)
         ref_t = self.reference_idx[t]
         img1 = self.reference_aligner.reader.read(series=ref_t, c=0)
-        img2 = self.reader.read(series=t, c=0)
+        img2 = self.reader.read(series=t, c=self.channel)
         ov1 = crop(img1, its.offsets[0], its.shape)
         ov2 = crop(img2, its.offsets[1], its.shape)
         return its, ov1, ov2

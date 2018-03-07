@@ -31,9 +31,14 @@ def main_inner(argv):
         help='write output image files to DIR; default is the current directory'
     )
     parser.add_argument(
-        '-c', '--channels', dest='channels',
-        help=('output only channels listed in CHANNELS; format is a comma-'
-              'separated list of channel numbers, numbering starts at 0')
+        '-c', '--align-channel', dest='align_channel', nargs='?', type=int,
+        default='0', metavar='CHANNEL',
+        help=('align images using channel number CHANNEL; numbering starts'
+              ' at 0')
+    )
+    parser.add_argument(
+        '--output-channels', nargs='*', type=int, metavar='CHANNELS',
+        help=('output only channels listed in CHANNELS; numbering starts at 0')
     )
     arg_f_default = 'cycle_{cycle}_channel_{channel}.tif'
     parser.add_argument(
@@ -68,13 +73,6 @@ def main_inner(argv):
         print("Output directory '{}' does not exist".format(output_path))
         return 1
 
-    if args.channels:
-        try:
-            args.channels = [int(x) for x in args.channels.split(',')]
-        except ValueError:
-            print("Channel list must be a comma-separated list of integers")
-            return 1
-
     aligners = []
     mosaics = []
 
@@ -82,14 +80,17 @@ def main_inner(argv):
         print('Cycle 0:')
         print('    reading %s' % filepaths[0])
 
+    aargs = {}
+    aargs['channel'] = args.align_channel
+    aargs['verbose'] = not args.quiet
     reader = reg.BioformatsReader(filepaths[0])
-    aligner = reg.EdgeAligner(reader, verbose=not args.quiet)
+    aligner = reg.EdgeAligner(reader, **aargs)
     aligner.run()
     mshape = aligner.mosaic_shape
 
     margs = {}
-    if args.channels:
-        margs['channels'] = args.channels
+    if args.output_channels:
+        margs['channels'] = args.output_channels
     if args.ffp:
         margs['ffp_path'] = args.ffp
     if args.quiet is False:
@@ -106,8 +107,7 @@ def main_inner(argv):
             print('Cycle %d:' % cycle)
             print('    reading %s' % filepath)
         reader = reg.BioformatsReader(filepath)
-        aligner = reg.LayerAligner(reader, aligners[0],
-                                   verbose=not args.quiet)
+        aligner = reg.LayerAligner(reader, aligners[0], **aargs)
         aligner.run()
         mosaic = reg.Mosaic(aligner, mshape, format_cycle(m_format, cycle),
                             **margs)
