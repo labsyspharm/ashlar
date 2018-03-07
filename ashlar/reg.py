@@ -572,7 +572,7 @@ class LayerAligner(object):
         plt.imshow(corr)
         origin = np.array(corr.shape) // 2
         plt.plot(origin[1], origin[0], 'r+')
-        shift += origin
+        shift += origin - its.offsets[0]
         plt.plot(shift[1], shift[0], 'rx')
         plt.tight_layout(0, 0, 0)
 
@@ -864,7 +864,7 @@ def plot_edge_quality(aligner, img=None):
     nrows, ncols = 1, 2
     if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] < 4 / 3:
         nrows, ncols = ncols, nrows
-    plt.figure()
+    fig = plt.figure()
     ax = plt.subplot(nrows, ncols,1)
     draw_mosaic_image(ax, aligner, img)
     error = np.array([aligner._cache[tuple(sorted(e))][1]
@@ -897,9 +897,9 @@ def plot_edge_quality(aligner, img=None):
 
 
 def plot_layer_shifts(aligner, img=None):
-    plt.figure()
+    fig = plt.figure()
     ax = plt.gca()
-    draw_mosaic_shape(ax, aligner, img)
+    draw_mosaic_image(ax, aligner, img)
     h, w = aligner.metadata.size
     # Bounding boxes denoting new tile positions.
     for xy in np.fliplr(aligner.positions):
