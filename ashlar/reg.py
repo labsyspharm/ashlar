@@ -799,11 +799,15 @@ def paste(target, img, pos, func=None):
     else:
         for c in range(img.shape[2]):
             img[...,c] = scipy.ndimage.shift(img[...,c], pos_f)
+    # Drop one pixel on all edges to avoid artifacts from the subpixel shift.
+    # FIXME We should only drop the edges opposite the shift direction.
+    img = img[1:-1,1:-1]
+    target_slice = target_slice[1:-1,1:-1]
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     img = skimage.util.dtype.convert(img, target.dtype)
     if func is None:
-        target_slice[1:-1,1:-1] = img[1:-1,1:-1]
+        target_slice[:] = img
     elif isinstance(func, np.ufunc):
         func(target_slice, img, out=target_slice)
     else:
