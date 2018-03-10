@@ -155,10 +155,16 @@ class BioformatsMetadata(Metadata):
         xml_content = metadata.dumpXML()
         self._metadata = metadata
         self._omexml_root = xml.etree.ElementTree.fromstring(xml_content)
+        self.format_name = reader.getFormat()
 
     @property
     def num_images(self):
-        return self._metadata.imageCount
+        count = self._metadata.imageCount
+        # Skip final overview slide in Metamorph Slide Scan data if present.
+        if (self.format_name == 'Metamorph STK'
+            and 'overview' in self._metadata.getImageName(count - 1).lower()):
+            count -= 1
+        return count
 
     @property
     def num_channels(self):
@@ -184,9 +190,11 @@ class BioformatsMetadata(Metadata):
             # FIXME verify all planes have the same X,Y position.
             v = method(i, 0).value().doubleValue()
             values.append(v)
-        # Invert Y so that stage position coordinates and image pixel
-        # coordinates are aligned.
-        position_microns = np.array(values, dtype=float) * [-1, 1]
+        position_microns = np.array(values, dtype=float)
+        if self.format_name != 'Metamorph STK':
+            # Invert Y so that stage position coordinates and image pixel
+            # coordinates are aligned.
+            position_microns *= [-1, 1]
         position_pixels = position_microns / self.pixel_size
         return position_pixels
 
