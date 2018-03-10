@@ -53,6 +53,10 @@ def main_inner(argv):
         help='read flat field profile image from FILE'
     )
     parser.add_argument(
+        '--dfp', metavar='FILE',
+        help='read dark field profile image from FILE'
+    )
+    parser.add_argument(
         '-q', '--quiet', dest='quiet', default=False, action='store_true',
         help='suppress progress display'
     )
@@ -93,6 +97,8 @@ def main_inner(argv):
         margs['channels'] = args.output_channels
     if args.ffp:
         margs['ffp_path'] = args.ffp
+    if args.dfp:
+        margs['dfp_path'] = args.dfp
     if args.quiet is False:
         margs['verbose'] = True
     m_format = str(output_path / args.filename_format)
