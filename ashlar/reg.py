@@ -261,8 +261,9 @@ def neighbors_graph(aligner):
 
 class EdgeAligner(object):
 
-    def __init__(self, reader, verbose=False):
+    def __init__(self, reader, channel=0, verbose=False):
         self.reader = reader
+        self.channel = channel
         self.verbose = verbose
         self.max_shift = 0.05
         self._cache = {}
@@ -400,7 +401,7 @@ class EdgeAligner(object):
         return Intersection(corners1, corners2, min_size)
 
     def crop(self, tile, offset, shape):
-        img = self.reader.read(series=tile, c=0)
+        img = self.reader.read(series=tile, c=self.channel)
         return crop(img, offset, shape)
 
     def overlap(self, t1, t2, min_size):
@@ -459,9 +460,12 @@ class EdgeAligner(object):
 
 class LayerAligner(object):
 
-    def __init__(self, reader, reference_aligner, verbose=False):
+    def __init__(self, reader, reference_aligner, channel=None, verbose=False):
         self.reader = reader
         self.reference_aligner = reference_aligner
+        if channel is None:
+            channel = reference_aligner.channel
+        self.channel = channel
         self.verbose = verbose
         self.max_shift = 0.05
         self.tile_positions = self.metadata.positions - reference_aligner.origin
@@ -501,9 +505,9 @@ class LayerAligner(object):
         # Computed shifts of exactly 0,0 seem to result from failed
         # registration. We need to throw those out for this purpose.
         discard = (self.shifts == 0).all(axis=1)
-        # Take the mean of registered shifts to determine the offset
+        # Take the median of registered shifts to determine the offset
         # (translation) from the reference image to this one.
-        offset = np.nan_to_num(np.mean(self.shifts[~discard], axis=0))
+        offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
         # Here we assume the fitted linear model from the reference image is
         # still appropriate, apart from the extra offset we just computed.
         predictions = self.reference_aligner.lr.predict(self.metadata.positions)
@@ -542,7 +546,7 @@ class LayerAligner(object):
         its = self.intersection(t)
         ref_t = self.reference_idx[t]
         img1 = self.reference_aligner.reader.read(series=ref_t, c=0)
-        img2 = self.reader.read(series=t, c=0)
+        img2 = self.reader.read(series=t, c=self.channel)
         ov1 = crop(img1, its.offsets[0], its.shape)
         ov2 = crop(img2, its.offsets[1], its.shape)
         return its, ov1, ov2
@@ -572,7 +576,7 @@ class LayerAligner(object):
         plt.imshow(corr)
         origin = np.array(corr.shape) // 2
         plt.plot(origin[1], origin[0], 'r+')
-        shift += origin
+        shift += origin - its.offsets[0]
         plt.plot(shift[1], shift[0], 'rx')
         plt.tight_layout(0, 0, 0)
 
@@ -799,11 +803,15 @@ def paste(target, img, pos, func=None):
     else:
         for c in range(img.shape[2]):
             img[...,c] = scipy.ndimage.shift(img[...,c], pos_f)
+    # Drop one pixel on all edges to avoid artifacts from the subpixel shift.
+    # FIXME We should only drop the edges opposite the shift direction.
+    img = img[1:-1,1:-1]
+    target_slice = target_slice[1:-1,1:-1]
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     img = skimage.util.dtype.convert(img, target.dtype)
     if func is None:
-        target_slice[1:-1,1:-1] = img[1:-1,1:-1]
+        target_slice[:] = img
     elif isinstance(func, np.ufunc):
         func(target_slice, img, out=target_slice)
     else:
@@ -860,7 +868,7 @@ def plot_edge_quality(aligner, img=None):
     nrows, ncols = 1, 2
     if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] < 4 / 3:
         nrows, ncols = ncols, nrows
-    plt.figure()
+    fig = plt.figure()
     ax = plt.subplot(nrows, ncols,1)
     draw_mosaic_image(ax, aligner, img)
     error = np.array([aligner._cache[tuple(sorted(e))][1]
@@ -893,9 +901,9 @@ def plot_edge_quality(aligner, img=None):
 
 
 def plot_layer_shifts(aligner, img=None):
-    plt.figure()
+    fig = plt.figure()
     ax = plt.gca()
-    draw_mosaic_shape(ax, aligner, img)
+    draw_mosaic_image(ax, aligner, img)
     h, w = aligner.metadata.size
     # Bounding boxes denoting new tile positions.
     for xy in np.fliplr(aligner.positions):
