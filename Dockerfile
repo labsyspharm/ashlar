@@ -10,7 +10,9 @@ RUN pip install -q -U pip
 RUN pip install -q numpy
 RUN pip install -q scipy
 RUN pip install -q cython
-RUN pip install ashlar
+
+COPY / /app/ashlar/
+RUN pip install /app/ashlar
 
 ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64
 ENV OMP_NUM_THREADS 1
