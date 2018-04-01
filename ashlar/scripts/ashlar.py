@@ -40,6 +40,10 @@ def main_inner(argv):
         '--output-channels', nargs='*', type=int, metavar='CHANNELS',
         help=('output only channels listed in CHANNELS; numbering starts at 0')
     )
+    parser.add_argument(
+        '-m', '--maximum-shift', type=float, default=15, metavar='SHIFT',
+        help='maximum allowed per-tile corrective shift in microns'
+    )
     arg_f_default = 'cycle_{cycle}_channel_{channel}.tif'
     parser.add_argument(
         '-f', '--filename-format', dest='filename_format',
@@ -87,6 +91,7 @@ def main_inner(argv):
     aargs = {}
     aargs['channel'] = args.align_channel
     aargs['verbose'] = not args.quiet
+    aargs['max_shift'] = args.maximum_shift
     reader = reg.BioformatsReader(filepaths[0])
     aligner = reg.EdgeAligner(reader, **aargs)
     aligner.run()

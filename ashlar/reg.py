@@ -177,7 +177,10 @@ class BioformatsMetadata(Metadata):
             method = getattr(self._metadata, 'getPixelsPhysicalSize%s' % dim)
             v = method(0).value().doubleValue()
             values.append(v)
-        return np.array(values, dtype=float)
+        if values[0] != values[1]:
+            raise Exception("Can't handle non-square pixels (%f, %f)"
+                            % tuple(values))
+        return values[0]
 
     @property
     def pixel_dtype(self):
@@ -269,11 +272,13 @@ def neighbors_graph(aligner):
 
 class EdgeAligner(object):
 
-    def __init__(self, reader, channel=0, verbose=False):
+    def __init__(self, reader, channel=0, max_shift=15, verbose=False):
         self.reader = reader
         self.channel = channel
         self.verbose = verbose
-        self.max_shift = 0.05
+        # Unit is micrometers.
+        self.max_shift = max_shift
+        self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
         self._cache = {}
 
     neighbors_graph = neighbors_graph
@@ -360,7 +365,7 @@ class EdgeAligner(object):
             # image size in any given direction. Here we calculate the tile
             # overlap image size that will support observing the maximum allowed
             # shift.
-            max_its_size = self.max_shift * 2 * self.metadata.size
+            max_its_size = self.max_shift_pixels * 2
             results = []
             # Perform registration with increasingly larger minimum overlap
             # sizes, starting from the "native" overlap and repeatedly doubling
@@ -370,13 +375,15 @@ class EdgeAligner(object):
             # detect a shift greater than half of the overlap size.
             native_its = self.intersection(t1, t2, None)
             min_size = native_its.shape
-            while any(min_size <= 2 * max_its_size):
+            while True:
                 shift, error = self._register(t1, t2, min_size)
                 # Constrain shift.
-                if any(np.abs(shift) > self.max_shift * self.metadata.size):
+                if any(np.abs(shift) > self.max_shift_pixels):
                     shift[:] = 0
                     error = np.inf
                 results.append([shift, error])
+                if all(min_size > max_its_size):
+                    break
                 min_size *= 2
             # Take result with lowest error.
             shift, error = min(results, key=lambda x: x[1])
@@ -398,8 +405,8 @@ class EdgeAligner(object):
         # Account for padding, flipping the sign depending on the direction
         # between the tiles.
         p1, p2 = self.metadata.positions[[t1, t2]]
-        sx = 1 if p1[1] > p2[1] else -1
-        sy = 1 if p1[0] > p2[0] else -1
+        sx = 1 if p1[1] >= p2[1] else -1
+        sy = 1 if p1[0] >= p2[0] else -1
         shift += its.padding * [sy, sx]
         return shift, error
 
@@ -468,14 +475,17 @@ class EdgeAligner(object):
 
 class LayerAligner(object):
 
-    def __init__(self, reader, reference_aligner, channel=None, verbose=False):
+    def __init__(self, reader, reference_aligner, channel=None, max_shift=15,
+                 verbose=False):
         self.reader = reader
         self.reference_aligner = reference_aligner
         if channel is None:
             channel = reference_aligner.channel
         self.channel = channel
+        # Unit is micrometers.
+        self.max_shift = max_shift
+        self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
         self.verbose = verbose
-        self.max_shift = 0.05
         self.tile_positions = self.metadata.positions - reference_aligner.origin
         reference_positions = (reference_aligner.metadata.positions
                                - reference_aligner.origin)
@@ -522,7 +532,7 @@ class LayerAligner(object):
         # Discard any tile registration that's too far from the linear model,
         # replacing it with the relevant model prediction.
         distance = np.linalg.norm(self.positions - predictions - offset, axis=1)
-        max_dist = self.max_shift * max(self.metadata.size)
+        max_dist = self.max_shift_pixels
         extremes = distance > max_dist
         # Recalculate the mean shift, also ignoring the extreme values.
         discard |= extremes
@@ -880,7 +890,7 @@ def plot_edge_shifts(aligner, img=None, bounds=True):
 def plot_edge_quality(aligner, img=None):
     centers = aligner.reader.metadata.centers - aligner.reader.metadata.origin
     nrows, ncols = 1, 2
-    if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] < 4 / 3:
+    if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] > 4 / 3:
         nrows, ncols = ncols, nrows
     fig = plt.figure()
     ax = plt.subplot(nrows, ncols,1)
