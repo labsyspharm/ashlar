@@ -4,6 +4,7 @@ try:
     import pathlib
 except ImportError:
     import pathlib2 as pathlib
+import pkg_resources
 from .. import reg
 
 
@@ -23,7 +24,7 @@ def main_inner(argv):
         description='Stitch and align one or more multi-series images'
     )
     parser.add_argument(
-        'filepaths', metavar='FILE', nargs='+',
+        'filepaths', metavar='FILE', nargs='*',
         help='an image file to be processed (one file per cycle)'
     )
     parser.add_argument(
@@ -64,7 +65,15 @@ def main_inner(argv):
         '-q', '--quiet', dest='quiet', default=False, action='store_true',
         help='suppress progress display'
     )
+    parser.add_argument(
+        '--version', dest='version', default=False, action='store_true',
+        help='print version'
+    )
     args = parser.parse_args(argv[1:])
+
+    if args.version:
+        print('ashlar {}'.format(pkg_resources.require('ashlar')[0].version))
+        return 0
 
     if len(args.filepaths) == 0:
         parser.print_usage()

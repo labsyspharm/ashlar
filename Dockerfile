@@ -4,6 +4,7 @@ RUN apt-get update \
     && apt-get install -y \
         build-essential \
         ffmpeg \
+        git \
         libfftw3-dev \
         libfftw3-double3 \
         libfftw3-long3 \
