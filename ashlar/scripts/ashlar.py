@@ -4,7 +4,7 @@ try:
     import pathlib
 except ImportError:
     import pathlib2 as pathlib
-import pkg_resources
+from .. import __version__ as VERSION
 from .. import reg
 
 
@@ -72,7 +72,7 @@ def main_inner(argv):
     args = parser.parse_args(argv[1:])
 
     if args.version:
-        print('ashlar {}'.format(pkg_resources.require('ashlar')[0].version))
+        print('ashlar {}'.format(VERSION))
         return 0
 
     if len(args.filepaths) == 0:
