@@ -38,7 +38,7 @@ def main_inner(argv):
               ' at 0')
     )
     parser.add_argument(
-        '--output-channels', nargs='*', type=int, metavar='CHANNELS',
+        '--output-channels', nargs='*', type=int, metavar='CHANNEL',
         help=('output only channels listed in CHANNELS; numbering starts at 0')
     )
     parser.add_argument(
@@ -54,12 +54,14 @@ def main_inner(argv):
               ' numbers; default is {default}'.format(default=arg_f_default))
     )
     parser.add_argument(
-        '--ffp', metavar='FILE',
-        help='read flat field profile image from FILE'
+        '--ffp', metavar='FILE', nargs='*',
+        help=('read flat field profile image from FILES; if specified must'
+              ' be one common file for all cycles or one file for each cycle')
     )
     parser.add_argument(
-        '--dfp', metavar='FILE',
-        help='read dark field profile image from FILE'
+        '--dfp', metavar='FILE', nargs='*',
+        help=('read dark field profile image from FILES; if specified must'
+              ' be one common file for all cycles or one file for each cycle')
     )
     parser.add_argument(
         '-q', '--quiet', dest='quiet', default=False, action='store_true',
@@ -90,6 +92,24 @@ def main_inner(argv):
         print("Output directory '{}' does not exist".format(output_path))
         return 1
 
+    ffp_paths = args.ffp
+    if ffp_paths:
+        if len(ffp_paths) not in (0, 1, len(filepaths)):
+            print("Wrong number of flat-field profiles. Must be 1, or {}"
+                  " (number of input files)".format(len(filepaths)))
+            return 1
+        if len(ffp_paths) == 1:
+            ffp_paths = ffp_paths * len(filepaths)
+
+    dfp_paths = args.dfp
+    if dfp_paths:
+        if len(dfp_paths) not in (0, 1, len(filepaths)):
+            print("Wrong number of dark-field profiles. Must be 1, or {}"
+                  " (number of input files)".format(len(filepaths)))
+            return 1
+        if len(dfp_paths) == 1:
+            dfp_paths = dfp_paths * len(filepaths)
+
     aligners = []
     mosaics = []
 
@@ -109,10 +129,10 @@ def main_inner(argv):
     margs = {}
     if args.output_channels:
         margs['channels'] = args.output_channels
-    if args.ffp:
-        margs['ffp_path'] = args.ffp
-    if args.dfp:
-        margs['dfp_path'] = args.dfp
+    if ffp_paths:
+        margs['ffp_path'] = ffp_paths[0]
+    if dfp_paths:
+        margs['dfp_path'] = dfp_paths[0]
     if args.quiet is False:
         margs['verbose'] = True
     m_format = str(output_path / args.filename_format)
@@ -129,6 +149,10 @@ def main_inner(argv):
         reader = reg.BioformatsReader(filepath)
         aligner = reg.LayerAligner(reader, aligners[0], **aargs)
         aligner.run()
+        if ffp_paths:
+            margs['ffp_path'] = ffp_paths[cycle]
+        if dfp_paths:
+            margs['dfp_path'] = dfp_paths[cycle]
         mosaic = reg.Mosaic(aligner, mshape, format_cycle(m_format, cycle),
                             **margs)
         mosaic.run()
