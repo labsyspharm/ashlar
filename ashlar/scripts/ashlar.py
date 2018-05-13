@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sys
 import argparse
 try:
@@ -9,16 +10,6 @@ from .. import reg
 
 
 def main(argv=sys.argv):
-    try:
-        return(main_inner(argv))
-    finally:
-        # FIXME This whole main wrapper is unneeded with the new jnius
-        # implementation, but I'm leaving this block intact for now to avoid
-        # potential rebase problems.
-        pass
-
-
-def main_inner(argv):
 
     parser = argparse.ArgumentParser(
         description='Stitch and align one or more multi-series images'
@@ -62,6 +53,10 @@ def main_inner(argv):
         '--dfp', metavar='FILE', nargs='*',
         help=('read dark field profile image from FILES; if specified must'
               ' be one common file for all cycles or one file for each cycle')
+    )
+    parser.add_argument(
+        '--plates', default=False, action='store_true',
+        help='enable plate mode for HTS data'
     )
     parser.add_argument(
         '-q', '--quiet', dest='quiet', default=False, action='store_true',
@@ -110,54 +105,97 @@ def main_inner(argv):
         if len(dfp_paths) == 1:
             dfp_paths = dfp_paths * len(filepaths)
 
-    aligners = []
-    mosaics = []
+    aligner_args = {}
+    aligner_args['channel'] = args.align_channel
+    aligner_args['verbose'] = not args.quiet
+    aligner_args['max_shift'] = args.maximum_shift
 
-    if not args.quiet:
+    mosaic_args = {}
+    if args.output_channels:
+        mosaic_args['channels'] = args.output_channels
+    if args.quiet is False:
+        mosaic_args['verbose'] = True
+
+    if args.plates:
+        return process_plates(
+            filepaths, output_path, args.filename_format, ffp_paths, dfp_paths,
+            aligner_args,  mosaic_args, args.quiet
+        )
+    else:
+        mosaic_path_format = str(output_path / args.filename_format)
+        return process_single(
+            filepaths, mosaic_path_format, ffp_paths, dfp_paths,
+            aligner_args, mosaic_args, args.quiet
+        )
+
+
+def process_single(
+    filepaths, mosaic_path_format, ffp_paths, dfp_paths,
+    aligner_args, mosaic_args, quiet, plate=None, well=None
+):
+
+    if not quiet:
         print('Cycle 0:')
         print('    reading %s' % filepaths[0])
-
-    aargs = {}
-    aargs['channel'] = args.align_channel
-    aargs['verbose'] = not args.quiet
-    aargs['max_shift'] = args.maximum_shift
-    reader = reg.BioformatsReader(filepaths[0])
-    aligner = reg.EdgeAligner(reader, **aargs)
-    aligner.run()
-    mshape = aligner.mosaic_shape
-
-    margs = {}
-    if args.output_channels:
-        margs['channels'] = args.output_channels
+    reader = reg.BioformatsReader(filepaths[0], plate=plate, well=well)
+    edge_aligner = reg.EdgeAligner(reader, **aligner_args)
+    edge_aligner.run()
+    mshape = edge_aligner.mosaic_shape
+    mosaic_args_final = mosaic_args.copy()
     if ffp_paths:
-        margs['ffp_path'] = ffp_paths[0]
+        mosaic_args_final['ffp_path'] = ffp_paths[0]
     if dfp_paths:
-        margs['dfp_path'] = dfp_paths[0]
-    if args.quiet is False:
-        margs['verbose'] = True
-    m_format = str(output_path / args.filename_format)
-    mosaic = reg.Mosaic(aligner, mshape, format_cycle(m_format, 0), **margs)
+        mosaic_args_final['dfp_path'] = dfp_paths[0]
+    mosaic = reg.Mosaic(
+        edge_aligner, mshape, format_cycle(mosaic_path_format, 0),
+        **mosaic_args_final
+    )
     mosaic.run()
 
-    aligners.append(aligner)
-    mosaics.append(mosaic)
-
     for cycle, filepath in enumerate(filepaths[1:], 1):
-        if not args.quiet:
+        if not quiet:
             print('Cycle %d:' % cycle)
             print('    reading %s' % filepath)
-        reader = reg.BioformatsReader(filepath)
-        aligner = reg.LayerAligner(reader, aligners[0], **aargs)
-        aligner.run()
+        reader = reg.BioformatsReader(filepath, plate=plate, well=well)
+        layer_aligner = reg.LayerAligner(reader, edge_aligner, **aligner_args)
+        layer_aligner.run()
+        mosaic_args_final = mosaic_args.copy()
         if ffp_paths:
-            margs['ffp_path'] = ffp_paths[cycle]
+            mosaic_args_final['ffp_path'] = ffp_paths[cycle]
         if dfp_paths:
-            margs['dfp_path'] = dfp_paths[cycle]
-        mosaic = reg.Mosaic(aligner, mshape, format_cycle(m_format, cycle),
-                            **margs)
+            mosaic_args_final['dfp_path'] = dfp_paths[cycle]
+        mosaic = reg.Mosaic(
+            layer_aligner, mshape, format_cycle(mosaic_path_format, cycle),
+            **mosaic_args_final
+        )
         mosaic.run()
-        aligners.append(aligner)
-        mosaics.append(mosaic)
+
+    return 0
+
+
+def process_plates(
+    filepaths, output_path, filename_format, ffp_paths, dfp_paths,
+    aligner_args, mosaic_args, quiet
+):
+
+    metadata = reg.BioformatsMetadata(filepaths[0])
+    if metadata.num_plates == 0:
+        print("Dataset does not contain plate information.")
+        return 1
+
+    for p, plate_name in enumerate(metadata.plate_names):
+        print("Plate {} ({})\n==========\n".format(p, plate_name))
+        for w, well_name in enumerate(metadata.well_names[p]):
+            print("Well {}\n-----".format(well_name))
+            well_path = output_path / plate_name / well_name
+            well_path.mkdir(parents=True, exist_ok=True)
+            mosaic_path_format = str(well_path / filename_format)
+            process_single(
+                filepaths, mosaic_path_format, ffp_paths, dfp_paths,
+                aligner_args, mosaic_args, quiet, plate=p, well=w
+            )
+            print()
+        print()
 
     return 0
 

@@ -58,7 +58,7 @@ DebugTools.setRootLevel("ERROR")
 class Metadata(object):
 
     @property
-    def num_images(self):
+    def _num_images(self):
         raise NotImplementedError
 
     @property
@@ -88,10 +88,14 @@ class Metadata(object):
         return shape
 
     @property
+    def num_images(self):
+        return self._num_images
+
+    @property
     def positions(self):
         if not hasattr(self, '_positions'):
             self._positions = np.vstack([
-                self.tile_position(i) for i in range(self.num_images)
+                self.tile_position(i) for i in range(self._num_images)
             ])
         return self._positions
 
@@ -99,7 +103,7 @@ class Metadata(object):
     def size(self):
         if not hasattr(self, '_size'):
             s0 = self.tile_size(0)
-            image_ids = range(1, self.num_images)
+            image_ids = range(1, self._num_images)
             if any(any(self.tile_size(i) != s0) for i in image_ids):
                 raise ValueError("Image series must all have the same dimensions")
             self._size = s0
@@ -114,13 +118,78 @@ class Metadata(object):
         return self.positions.min(axis=0)
 
 
+class PlateMetadata(Metadata):
+
+    def __init__(self):
+        super(PlateMetadata, self).__init__()
+        self.set_active_plate_well(None, None)
+
+    @property
+    def num_plates(self):
+        raise NotImplementedError
+
+    @property
+    def num_wells(self):
+        raise NotImplementedError
+
+    @property
+    def plate_well_series(self):
+        raise NotImplementedError
+
+    def plate_name(self, i):
+        raise NotImplementedError
+
+    def well_name(self, plate, i):
+        raise NotImplementedError
+
+    def set_active_plate_well(self, plate, well):
+        if (plate is None) ^ (well is None):
+            raise ValueError("plate and well must be both set or both None")
+        self.active_plate = plate
+        self.active_well = well
+
+    @property
+    def active_series(self):
+        if self.active_plate is None:
+            return range(self._num_images)
+        else:
+            return self.plate_well_series[self.active_plate][self.active_well]
+
+    @property
+    def plate_names(self):
+        if not hasattr(self, '_plate_names'):
+            self._plate_names = [
+                self.plate_name(i) for i in range(self.num_plates)
+            ]
+        return self._plate_names
+
+    @property
+    def well_names(self):
+        if not hasattr(self, '_well_names'):
+            self._well_names = [
+                [self.well_name(p, i) for i in range(num_plate_wells)]
+                for p, num_plate_wells in enumerate(self.num_wells)
+            ]
+        return self._well_names
+
+    @Metadata.num_images.getter
+    def num_images(self):
+        return len(self.active_series)
+
+    @Metadata.positions.getter
+    def positions(self):
+        return Metadata.positions.fget(self)[self.active_series]
+
+    # FIXME Metadata.grid_dimensions should be overriden here or removed.
+
+
 class Reader(object):
 
     def read(self, series, c):
         raise NotImplementedError
 
 
-class BioformatsMetadata(Metadata):
+class BioformatsMetadata(PlateMetadata):
 
     _pixel_dtypes = {
         'uint8': np.uint8,
@@ -128,6 +197,7 @@ class BioformatsMetadata(Metadata):
     }
 
     def __init__(self, path):
+        super(BioformatsMetadata, self).__init__()
         self.path = path
         self._init_metadata()
 
@@ -159,7 +229,7 @@ class BioformatsMetadata(Metadata):
         self.format_name = reader.getFormat()
 
     @property
-    def num_images(self):
+    def _num_images(self):
         count = self._metadata.imageCount
         # Skip final overview slide in Metamorph Slide Scan data if present.
         if (self.format_name == 'Metamorph STK'
@@ -170,6 +240,29 @@ class BioformatsMetadata(Metadata):
     @property
     def num_channels(self):
         return self._metadata.getChannelCount(0)
+
+    @property
+    def num_plates(self):
+        return self._metadata.getPlateCount()
+
+    @property
+    def num_wells(self):
+        return [self._metadata.getWellCount(i) for i in range(self.num_plates)]
+
+    @property
+    def plate_well_series(self):
+        # FIXME Store slice objects to save resources where possible.
+        series = [
+            [
+                np.array([
+                    self._metadata.getWellSampleIndex(p, w, s).value
+                    for s in range(self._metadata.getWellSampleCount(p, w))
+                ], dtype=int)
+                for w in range(num_wells)
+            ]
+            for p, num_wells in enumerate(self.num_wells)
+        ]
+        return series
 
     @property
     def pixel_size(self):
@@ -186,6 +279,47 @@ class BioformatsMetadata(Metadata):
     @property
     def pixel_dtype(self):
         return self._pixel_dtypes[self._metadata.getPixelsType(0).value]
+
+    def plate_name(self, i):
+        return self._metadata.getPlateName(i)
+
+    @property
+    def well_naming(self):
+        if not hasattr(self, '_well_naming'):
+            _well_naming = []
+            for p in range(self.num_plates):
+                row_nc = self._metadata.getPlateRowNamingConvention(p)
+                column_nc = self._metadata.getPlateColumnNamingConvention(p)
+                if row_nc is not None:
+                    row_nc = row_nc.value
+                else:
+                    row_nc = 'letter'
+                if column_nc is not None:
+                    column_nc = column_nc.value
+                else:
+                    column_nc = 'number'
+                if row_nc not in ('letter', 'number') or column_nc != 'number':
+                    raise RuntimeError(
+                        "Can't handle well naming convention row={} column={}"
+                        .format(row_nc, column_nc)
+                    )
+                _well_naming.append([row_nc, column_nc])
+            self._well_naming = _well_naming
+        return self._well_naming
+
+    def well_name(self, plate, i):
+        row = self._metadata.getWellRow(plate, i).value
+        column = self._metadata.getWellColumn(plate, i).value
+        row_nc, column_nc = self.well_naming[plate]
+        # FIXME Support formatting with 384/1536-well plates.
+        assert row_nc in ('letter', 'number')
+        assert column_nc == 'number'
+        if row_nc == 'number':
+            row_fmt = '{:02}'.format(row + 1)
+        else:
+            row_fmt = chr(ord('A') + row)
+        column_fmt = '{:02}'.format(column + 1)
+        return row_fmt + column_fmt
 
     def tile_position(self, i):
         values = []
@@ -213,9 +347,10 @@ class BioformatsMetadata(Metadata):
 
 class BioformatsReader(Reader):
 
-    def __init__(self, path):
+    def __init__(self, path, plate=None, well=None):
         self.path = path
         self.metadata = BioformatsMetadata(self.path)
+        self.metadata.set_active_plate_well(plate, well)
         self._init_ir()
 
     def __getstate__(self):
@@ -234,7 +369,7 @@ class BioformatsReader(Reader):
         self._reader.setId(path_jstring)
 
     def read(self, series, c):
-        self._reader.setSeries(series)
+        self._reader.setSeries(self.metadata.active_series[series])
         index = self._reader.getIndex(0, c, 0)
         byte_array = self._reader.openBytes(index)
         dtype = self.metadata.pixel_dtype
@@ -328,8 +463,12 @@ class EdgeAligner(object):
                     source, dest = dest, source
                 shift = self.register_pair(source, dest)[0]
                 shifts[dest] = shifts[source] + shift
-        self.shifts = np.array([s for _, s in sorted(shifts.items())])
-        self.positions = self.metadata.positions + self.shifts
+        if shifts:
+            self.shifts = np.array([s for _, s in sorted(shifts.items())])
+            self.positions = self.metadata.positions + self.shifts
+        else:
+            # TODO: fill in shifts and positions with 0x2 arrays
+            raise NotImplementedError("No images")
 
     def fit_model(self):
         components = sorted(
