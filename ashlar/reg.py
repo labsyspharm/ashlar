@@ -46,7 +46,7 @@ IFormatReader = jnius.autoclass('loci.formats.IFormatReader')
 MetadataStore = jnius.autoclass('loci.formats.meta.MetadataStore')
 ServiceFactory = jnius.autoclass('loci.common.services.ServiceFactory')
 OMEXMLService = jnius.autoclass('loci.formats.services.OMEXMLService')
-ImageReader = jnius.autoclass('loci.formats.ImageReader')
+ChannelSeparator = jnius.autoclass('loci.formats.ChannelSeparator')
 
 DebugTools.setRootLevel("ERROR")
 
@@ -123,6 +123,7 @@ class Reader(object):
 class BioformatsMetadata(Metadata):
 
     _pixel_dtypes = {
+        'uint8': np.uint8,
         'uint16': np.uint16,
     }
 
@@ -144,7 +145,7 @@ class BioformatsMetadata(Metadata):
         factory = ServiceFactory()
         service = jnius.cast(OMEXMLService, factory.getInstance(OMEXMLService))
         metadata = service.createOMEXMLMetadata()
-        reader = ImageReader()
+        reader = ChannelSeparator()
         reader.setMetadataStore(metadata)
         # FIXME Workaround for pyjnius #300 until there is a new release.
         # Passing a python string directly here corrupts the value under Python
@@ -227,8 +228,7 @@ class BioformatsReader(Reader):
         self._init_ir()
 
     def _init_ir(self):
-        ImageReader = jnius.autoclass('loci.formats.ImageReader')
-        self._reader = ImageReader()
+        self._reader = ChannelSeparator()
         # FIXME Workaround for pyjnius #300 (see above for details).
         path_jstring = JString(self.path)
         self._reader.setId(path_jstring)
@@ -631,7 +631,7 @@ class Mosaic(object):
         self.shape = tuple(shape)
         self.filename_format = filename_format
         self.channels = self._sanitize_channels(channels)
-        self.dtype = np.uint16
+        self.dtype = aligner.metadata.pixel_dtype
         self._load_correction_profiles(dfp_path, ffp_path)
         self.verbose = verbose
         self.filenames = []
@@ -650,6 +650,7 @@ class Mosaic(object):
             c = max(self.channels) + 1
             self.dfp = skimage.io.imread(dfp_path) if dfp_path else np.zeros(c)
             self.ffp = skimage.io.imread(ffp_path) if ffp_path else np.ones(c)
+            # FIXME This assumes integer dtypes. Do we need to support floats?
             self.dfp /= np.iinfo(self.dtype).max
             self.do_correction = True
         else:
