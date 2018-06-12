@@ -47,6 +47,7 @@ MetadataStore = jnius.autoclass('loci.formats.meta.MetadataStore')
 ServiceFactory = jnius.autoclass('loci.common.services.ServiceFactory')
 OMEXMLService = jnius.autoclass('loci.formats.services.OMEXMLService')
 ChannelSeparator = jnius.autoclass('loci.formats.ChannelSeparator')
+UNITS = jnius.autoclass('ome.units.UNITS')
 
 DebugTools.setRootLevel("ERROR")
 
@@ -269,7 +270,7 @@ class BioformatsMetadata(PlateMetadata):
         values = []
         for dim in ('Y', 'X'):
             method = getattr(self._metadata, 'getPixelsPhysicalSize%s' % dim)
-            v = method(0).value().doubleValue()
+            v = method(0).value(UNITS.MICROMETER).doubleValue()
             values.append(v)
         if values[0] != values[1]:
             raise Exception("Can't handle non-square pixels (%f, %f)"
@@ -326,8 +327,18 @@ class BioformatsMetadata(PlateMetadata):
         for dim in ('Y', 'X'):
             method = getattr(self._metadata, 'getPlanePosition%s' % dim)
             # FIXME verify all planes have the same X,Y position.
-            v = method(i, 0).value().doubleValue()
-            values.append(v)
+            v_units = method(i, 0)
+            v = v_units.value(UNITS.MICROMETER)
+            if v is None:
+                # Conversion failed, which usually happens when the unit is
+                # "reference frame". Proceed as if it's actually microns but
+                # emit a warning.
+                warnings.warn(
+                    "Stage coordinates' measurement unit is undefined;"
+                    " assuming micrometers."
+                )
+                v = v_units.value()
+            values.append(v.doubleValue())
         position_microns = np.array(values, dtype=float)
         if self.format_name != 'Metamorph STK':
             # Invert Y so that stage position coordinates and image pixel
