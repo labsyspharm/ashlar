@@ -3,15 +3,45 @@
 ## Usage
 
 ```
-ashlar [-h] [-q] [--ffp FFP_FILE] FILE [FILE ...]
+ashlar [-h] [-o DIR] [-c [CHANNEL]]
+       [--output-channels [CHANNEL [CHANNEL ...]]] [-m SHIFT]
+       [-f FORMAT] [--ffp [FILE [FILE ...]]] [--dfp [FILE [FILE ...]]]
+       [--plates] [-q] [--version]
+       [FILE [FILE ...]]
+
+Stitch and align one or more multi-series images
 
 positional arguments:
-  FILE            an image file to be processed
+  FILE                  an image file to be processed (one file per cycle)
 
 optional arguments:
-  -h, --help      show this help message and exit
-  -q, --quiet     suppress progress display
-  --ffp FFP_FILE  path to flat field profile image
+  -h, --help            show this help message and exit
+  -o DIR, --output DIR  write output image files to DIR; default is the
+                        current directory
+  -c [CHANNEL], --align-channel [CHANNEL]
+                        align images using channel number CHANNEL; numbering
+                        starts at 0
+  --output-channels [CHANNEL [CHANNEL ...]]
+                        output only channels listed in CHANNELS; numbering
+                        starts at 0
+  -m SHIFT, --maximum-shift SHIFT
+                        maximum allowed per-tile corrective shift in microns
+  -f FORMAT, --filename-format FORMAT
+                        use FORMAT to generate output filenames, with {cycle}
+                        and {channel} as required placeholders for the cycle
+                        and channel numbers; default is
+                        cycle_{cycle}_channel_{channel}.tif
+  --ffp [FILE [FILE ...]]
+                        read flat field profile image from FILES; if specified
+                        must be one common file for all cycles or one file for
+                        each cycle
+  --dfp [FILE [FILE ...]]
+                        read dark field profile image from FILES; if specified
+                        must be one common file for all cycles or one file for
+                        each cycle
+  --plates              enable plate mode for HTS data
+  -q, --quiet           suppress progress display
+  --version             print version
 ```
 
 ## Installation
@@ -43,4 +73,5 @@ pip install -q -U ashlar
 ### Windows
 
 The pyfftw dependency is not currently supported on Windows. We are currently
-investigating a workaround.
+investigating a workaround. There is an experimental Docker image on DockerHub
+at `sorgerlab/ashlar` which should be suitable for many use cases.
