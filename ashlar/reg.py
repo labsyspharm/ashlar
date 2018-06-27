@@ -49,7 +49,7 @@ OMEXMLService = jnius.autoclass('loci.formats.services.OMEXMLService')
 ChannelSeparator = jnius.autoclass('loci.formats.ChannelSeparator')
 UNITS = jnius.autoclass('ome.units.UNITS')
 
-DebugTools.setRootLevel("ERROR")
+DebugTools.enableLogging("ERROR")
 
 
 # TODO:
@@ -216,18 +216,18 @@ class BioformatsMetadata(PlateMetadata):
         factory = ServiceFactory()
         service = jnius.cast(OMEXMLService, factory.getInstance(OMEXMLService))
         metadata = service.createOMEXMLMetadata()
-        reader = ChannelSeparator()
-        reader.setMetadataStore(metadata)
+        self._reader = ChannelSeparator()
+        self._reader.setMetadataStore(metadata)
         # FIXME Workaround for pyjnius #300 until there is a new release.
         # Passing a python string directly here corrupts the value under Python
         # 3, but explicitly converting it into a Java string works.
         path_jstring = JString(self.path)
-        reader.setId(path_jstring)
+        self._reader.setId(path_jstring)
 
         xml_content = metadata.dumpXML()
         self._metadata = metadata
         self._omexml_root = xml.etree.ElementTree.fromstring(xml_content)
-        self.format_name = reader.getFormat()
+        self.format_name = self._reader.getFormat()
 
     @property
     def _num_images(self):
@@ -362,7 +362,6 @@ class BioformatsReader(Reader):
         self.path = path
         self.metadata = BioformatsMetadata(self.path)
         self.metadata.set_active_plate_well(plate, well)
-        self._init_ir()
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -373,16 +372,10 @@ class BioformatsReader(Reader):
         self.__dict__.update(state)
         self._init_ir()
 
-    def _init_ir(self):
-        self._reader = ChannelSeparator()
-        # FIXME Workaround for pyjnius #300 (see above for details).
-        path_jstring = JString(self.path)
-        self._reader.setId(path_jstring)
-
     def read(self, series, c):
-        self._reader.setSeries(self.metadata.active_series[series])
-        index = self._reader.getIndex(0, c, 0)
-        byte_array = self._reader.openBytes(index)
+        self.metadata._reader.setSeries(self.metadata.active_series[series])
+        index = self.metadata._reader.getIndex(0, c, 0)
+        byte_array = self.metadata._reader.openBytes(index)
         dtype = self.metadata.pixel_dtype
         shape = self.metadata.tile_size(series)
         img = np.frombuffer(byte_array.tostring(), dtype=dtype).reshape(shape)
