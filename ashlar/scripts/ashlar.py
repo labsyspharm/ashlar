@@ -187,13 +187,16 @@ def process_plates(
         print("Plate {} ({})\n==========\n".format(p, plate_name))
         for w, well_name in enumerate(metadata.well_names[p]):
             print("Well {}\n-----".format(well_name))
-            well_path = output_path / plate_name / well_name
-            well_path.mkdir(parents=True, exist_ok=True)
-            mosaic_path_format = str(well_path / filename_format)
-            process_single(
-                filepaths, mosaic_path_format, ffp_paths, dfp_paths,
-                aligner_args, mosaic_args, quiet, plate=p, well=w
-            )
+            if len(metadata.plate_well_series[p][w]) > 0:
+                well_path = output_path / plate_name / well_name
+                well_path.mkdir(parents=True, exist_ok=True)
+                mosaic_path_format = str(well_path / filename_format)
+                process_single(
+                    filepaths, mosaic_path_format, ffp_paths, dfp_paths,
+                    aligner_args, mosaic_args, quiet, plate=p, well=w
+                )
+            else:
+                print("Skipping -- No images found.")
             print()
         print()
 
