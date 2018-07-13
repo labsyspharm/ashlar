@@ -31,7 +31,9 @@ def main(argv=sys.argv):
     for i in range(total):
         sys.stdout.write("\rLoading %d/%d" % (i + 1, total))
         sys.stdout.flush()
-        reg.paste(mosaic, reader.read(c=channel, series=i), positions[i])
+        reg.paste(
+            mosaic, reader.read(c=channel, series=i), positions[i], np.maximum
+        )
     print()
 
     ax = plt.gca()
