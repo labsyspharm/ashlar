@@ -49,7 +49,8 @@ OMEXMLService = jnius.autoclass('loci.formats.services.OMEXMLService')
 ChannelSeparator = jnius.autoclass('loci.formats.ChannelSeparator')
 UNITS = jnius.autoclass('ome.units.UNITS')
 
-DebugTools.enableLogging("ERROR")
+# Another workaround for pyjnius #300 (see below).
+DebugTools.enableLogging(JString("ERROR"))
 
 
 # TODO:
