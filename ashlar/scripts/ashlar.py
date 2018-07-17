@@ -45,6 +45,14 @@ def main(argv=sys.argv):
               ' numbers; default is {default}'.format(default=arg_f_default))
     )
     parser.add_argument(
+        '--pyramid', default=False, action='store_true',
+        help='write output as a single pyramidal TIFF'
+    )
+    parser.add_argument(
+        '--tile-size', type=int, default=1024,
+        help='set output TIFF tile width and height in pixels'
+    )
+    parser.add_argument(
         '--ffp', metavar='FILE', nargs='*',
         help=('read flat field profile image from FILES; if specified must'
               ' be one common file for all cycles or one file for each cycle')
@@ -111,28 +119,46 @@ def main(argv=sys.argv):
     aligner_args['max_shift'] = args.maximum_shift
 
     mosaic_args = {}
+    mosaic_args['tile_size'] = args.tile_size
     if args.output_channels:
         mosaic_args['channels'] = args.output_channels
     if args.quiet is False:
         mosaic_args['verbose'] = True
 
-    if args.plates:
-        return process_plates(
-            filepaths, output_path, args.filename_format, ffp_paths, dfp_paths,
-            aligner_args,  mosaic_args, args.quiet
-        )
-    else:
-        mosaic_path_format = str(output_path / args.filename_format)
-        return process_single(
-            filepaths, mosaic_path_format, ffp_paths, dfp_paths,
-            aligner_args, mosaic_args, args.quiet
-        )
+    try:
+        if args.plates:
+            return process_plates(
+                filepaths, output_path, args.filename_format, ffp_paths,
+                dfp_paths, aligner_args, mosaic_args, args.pyramid, args.quiet
+            )
+        else:
+            mosaic_path_format = str(output_path / args.filename_format)
+            return process_single(
+                filepaths, mosaic_path_format, ffp_paths, dfp_paths,
+                aligner_args, mosaic_args, args.pyramid, args.quiet
+            )
+    except ProcessingError as e:
+        print(e.message)
+        return 1
 
 
 def process_single(
     filepaths, mosaic_path_format, ffp_paths, dfp_paths,
-    aligner_args, mosaic_args, quiet, plate=None, well=None
+    aligner_args, mosaic_args, pyramid, quiet, plate=None, well=None
 ):
+
+    output_path_0 = format_cycle(mosaic_path_format, 0)
+    if pyramid:
+        if output_path_0 != mosaic_path_format:
+            raise ProcessingError(
+                "For pyramid output, please use -f to specify an output"
+                " filename without {cycle} or {channel} placeholders"
+            )
+
+    mosaic_args = mosaic_args.copy()
+    if pyramid:
+        mosaic_args['combined'] = True
+    num_channels = 0
 
     if not quiet:
         print('Cycle 0:')
@@ -142,15 +168,16 @@ def process_single(
     edge_aligner.run()
     mshape = edge_aligner.mosaic_shape
     mosaic_args_final = mosaic_args.copy()
+    mosaic_args_final['first'] = True
     if ffp_paths:
         mosaic_args_final['ffp_path'] = ffp_paths[0]
     if dfp_paths:
         mosaic_args_final['dfp_path'] = dfp_paths[0]
     mosaic = reg.Mosaic(
-        edge_aligner, mshape, format_cycle(mosaic_path_format, 0),
-        **mosaic_args_final
+        edge_aligner, mshape, output_path_0, **mosaic_args_final
     )
     mosaic.run()
+    num_channels += len(mosaic.channels)
 
     for cycle, filepath in enumerate(filepaths[1:], 1):
         if not quiet:
@@ -169,17 +196,26 @@ def process_single(
             **mosaic_args_final
         )
         mosaic.run()
+        num_channels += len(mosaic.channels)
+
+    if pyramid:
+        print("Building pyramid")
+        reg.build_pyramid(
+            output_path_0, num_channels, mshape, reader.metadata.pixel_dtype,
+            mosaic_args['tile_size'], not quiet
+        )
 
     return 0
 
 
 def process_plates(
     filepaths, output_path, filename_format, ffp_paths, dfp_paths,
-    aligner_args, mosaic_args, quiet
+    aligner_args, mosaic_args, pyramid, quiet
 ):
 
     metadata = reg.BioformatsMetadata(filepaths[0])
     if metadata.num_plates == 0:
+        # FIXME raise ProcessingError here instead?
         print("Dataset does not contain plate information.")
         return 1
 
@@ -193,7 +229,7 @@ def process_plates(
                 mosaic_path_format = str(well_path / filename_format)
                 process_single(
                     filepaths, mosaic_path_format, ffp_paths, dfp_paths,
-                    aligner_args, mosaic_args, quiet, plate=p, well=w
+                    aligner_args, mosaic_args, pyramid, quiet, plate=p, well=w
                 )
             else:
                 print("Skipping -- No images found.")
@@ -205,6 +241,10 @@ def process_plates(
 
 def format_cycle(f, cycle):
     return f.format(cycle=cycle, channel='{channel}')
+
+
+class ProcessingError(RuntimeError):
+    pass
 
 
 if __name__ == '__main__':

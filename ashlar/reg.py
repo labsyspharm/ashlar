@@ -1,7 +1,11 @@
 from __future__ import division, print_function
 import sys
 import warnings
+import re
 import xml.etree.ElementTree
+import io
+import uuid
+import struct
 try:
     import pathlib
 except ImportError:
@@ -15,6 +19,7 @@ import skimage.filters
 import skimage.restoration.uft
 import skimage.io
 import skimage.exposure
+import skimage.transform
 import sklearn.linear_model
 import pyfftw
 import networkx as nx
@@ -25,6 +30,7 @@ try:
     import modest_image
 except ImportError:
     modest_image = None
+from . import __version__ as _version
 
 # Patch np.fft to use pyfftw so skimage utilities can benefit.
 np.fft = pyfftw.interfaces.numpy_fft
@@ -197,6 +203,8 @@ class BioformatsMetadata(PlateMetadata):
         'uint8': np.uint8,
         'uint16': np.uint16,
     }
+
+    _ome_dtypes = {v: k for k, v in _pixel_dtypes.items()}
 
     def __init__(self, path):
         super(BioformatsMetadata, self).__init__()
@@ -769,16 +777,21 @@ class Intersection(object):
 
 class Mosaic(object):
 
-    def __init__(self, aligner, shape, filename_format, channels=None,
-                 ffp_path=None, dfp_path=None, verbose=False):
+    def __init__(
+            self, aligner, shape, filename_format, channels=None,
+            ffp_path=None, dfp_path=None, combined=False, tile_size=None,
+            first=False, verbose=False
+    ):
         self.aligner = aligner
         self.shape = tuple(shape)
         self.filename_format = filename_format
         self.channels = self._sanitize_channels(channels)
+        self.combined = combined
+        self.tile_size = tile_size
+        self.first = first
         self.dtype = aligner.metadata.pixel_dtype
         self._load_correction_profiles(dfp_path, ffp_path)
         self.verbose = verbose
-        self.filenames = []
 
     def _sanitize_channels(self, channels):
         all_channels = range(self.aligner.metadata.num_channels)
@@ -810,7 +823,7 @@ class Mosaic(object):
             num_colors = max(node_colors.values()) + 1
             if num_colors > 3:
                 raise ValueError("neighbor graph requires more than 3 colors")
-        for channel in self.channels:
+        for ci, channel in enumerate(self.channels):
             if self.verbose:
                 print('    Channel %d:' % channel)
             if not debug:
@@ -844,15 +857,35 @@ class Mosaic(object):
                 print()
             if mode == 'write':
                 filename = self.filename_format.format(channel=channel)
-                self.filenames.append(filename)
+                kwargs = {}
+                if self.combined:
+                    kwargs['bigtiff'] = True
+                    # FIXME Propagate this from input files (esp. RGB).
+                    kwargs['photometric'] = 'minisblack'
+                    resolution = np.round(10000 / self.aligner.reader.metadata.pixel_size)
+                    kwargs['resolution'] = (resolution, resolution, 'cm')
+                    kwargs['metadata'] = None
+                    if self.first and ci == 0:
+                        # Set description to a short placeholder that will fit
+                        # within the IFD. We'll check for this string later.
+                        kwargs['description'] = '!!xml!!'
+                        kwargs['software'] = (
+                            'Ashlar v{} (Glencoe/Faas pyramid output)'
+                            .format(_version)
+                        )
+                    else:
+                        # Overwite if first channel of first cycle.
+                        kwargs['append'] = True
+                if self.tile_size:
+                    kwargs['tile'] = (self.tile_size, self.tile_size)
                 if self.verbose:
-                    print("        writing %s" % filename)
+                    print("        writing to %s" % filename)
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
                         'ignore', r'.* is a low contrast image', UserWarning,
                         '^skimage\.io'
                     )
-                    skimage.io.imsave(filename, mosaic_image)
+                    skimage.io.imsave(filename, mosaic_image, **kwargs)
             elif mode == 'return':
                 all_images.append(mosaic_image)
         if mode == 'return':
@@ -865,6 +898,111 @@ class Mosaic(object):
             img /= self.ffp[..., channel]
             img.clip(0, 1, out=img)
         return img
+
+
+def build_pyramid(path, num_channels, shape, dtype, tile_size, verbose=False):
+    max_level = 0
+    shapes = [shape]
+    while any(s > tile_size for s in shape):
+        prev_level = max_level
+        max_level += 1
+        if verbose:
+            print("    Level %d:" % max_level)
+        for i in range(num_channels):
+            if verbose:
+                sys.stdout.write('\r        processing channel %d/%d'
+                                 % (i + 1, num_channels))
+                sys.stdout.flush()
+            img = skimage.io.imread(path, series=prev_level, key=i)
+            img = skimage.transform.pyramid_reduce(img, multichannel=False)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    'ignore', 'Possible precision loss', UserWarning,
+                    '^skimage\.util\.dtype'
+                )
+                warnings.filterwarnings(
+                    'ignore', '.* is a low contrast image', UserWarning,
+                    '^skimage\.io'
+                )
+                img = skimage.util.dtype.convert(img, dtype)
+                skimage.io.imsave(
+                    path, img, bigtiff=True, metadata=None, append=True,
+                    tile=(tile_size, tile_size), photometric='minisblack'
+                )
+        shapes.append(img.shape)
+        if verbose:
+            print()
+        shape = img.shape
+    # Now that we have the number and dimensions of all levels, we can generate
+    # the corresponding OME-XML and patch it into the Image Description tag of
+    # the first IFD.
+    filename = pathlib.Path(path).name
+    img_uuid = uuid.uuid4().urn
+    ome_dtype = BioformatsMetadata._ome_dtypes[dtype]
+    ifd = 0
+    xml = io.StringIO()
+    xml.write(u'<?xml version="1.0" encoding="UTF-8"?>')
+    xml.write(
+        (u'<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"'
+         ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
+         ' UUID="{uuid}"'
+         ' xsi:schemaLocation="http://www.openmicroscopy.org/Schemas/OME/2016-06'
+         ' http://www.openmicroscopy.org/Schemas/OME/2016-06/ome.xsd">')
+        .format(uuid=img_uuid)
+    )
+    for level in range(max_level + 1):
+        shape = shapes[level]
+        xml.write(u'<Image ID="Image:{}">'.format(level))
+        xml.write(
+            (u'<Pixels BigEndian="false" DimensionOrder="XYZCT"'
+             ' ID="Pixels:{level}" SizeC="{num_channels}" SizeT="1"'
+             ' SizeX="{sizex}" SizeY="{sizey}" SizeZ="1" Type="{ome_dtype}">')
+            .format(
+                level=level, num_channels=num_channels,
+                sizex=shape[1], sizey=shape[0], ome_dtype=ome_dtype
+            )
+        )
+        for channel in range(num_channels):
+            xml.write(
+                (u'<Channel ID="Channel:{level}:{channel}"'
+                 + (u' Name="Channel {channel}"' if level == 0 else u'')
+                 + u' SamplesPerPixel="1"><LightPath/></Channel>')
+                .format(level=level, channel=channel)
+            )
+        for channel in range(num_channels):
+            xml.write(
+                (u'<TiffData FirstC="{channel}" FirstT="0" FirstZ="0"'
+                 ' IFD="{ifd}" PlaneCount="1">'
+                 '<UUID FileName="{filename}">{uuid}</UUID>'
+                 '</TiffData>')
+                .format(
+                    channel=channel, ifd=ifd, filename=filename, uuid=img_uuid
+                )
+            )
+            ifd += 1
+        if level == 0:
+            for channel in range(num_channels):
+                xml.write(
+                    u'<Plane TheC="{channel}" TheT="0" TheZ="0"/>'
+                    .format(channel=channel)
+                )
+        xml.write(u'</Pixels>')
+        xml.write(u'</Image>')
+    xml.write(u'</OME>')
+    xml_bytes = xml.getvalue().encode('utf-8') + b'\x00'
+    # Append the XML and patch up the Image Description tag in the first IFD.
+    with open(path, 'rb+') as f:
+        f.seek(0, io.SEEK_END)
+        xml_offset = f.tell()
+        f.write(xml_bytes)
+        f.seek(0)
+        ifd_block = f.read(500)
+        match = re.search(rb'!!xml!!\x00', ifd_block)
+        if match is None:
+            raise RuntimeError("Did not find placeholder string in IFD")
+        f.seek(match.start() - 8)
+        f.write(struct.pack('<Q', len(xml_bytes)))
+        f.write(struct.pack('<Q', xml_offset))
 
 
 def fft2(img):

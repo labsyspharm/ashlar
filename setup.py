@@ -20,7 +20,7 @@ requires = [
     'networkx>=2.0',
     'pyfftw>=0.10.4',
     'scipy>=0.19.1',
-    'scikit-image>=0.13.0',
+    'scikit-image>=0.14.0',
     'scikit-learn>=0.19.1'
 ]
 

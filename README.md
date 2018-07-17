@@ -5,8 +5,9 @@
 ```
 ashlar [-h] [-o DIR] [-c [CHANNEL]]
        [--output-channels [CHANNEL [CHANNEL ...]]] [-m SHIFT]
-       [-f FORMAT] [--ffp [FILE [FILE ...]]] [--dfp [FILE [FILE ...]]]
-       [--plates] [-q] [--version]
+       [-f FORMAT] [--pyramid] [--tile-size TILE_SIZE]
+       [--ffp [FILE [FILE ...]]] [--dfp [FILE [FILE ...]]] [--plates]
+       [-q] [--version]
        [FILE [FILE ...]]
 
 Stitch and align one or more multi-series images
@@ -31,6 +32,7 @@ optional arguments:
                         and {channel} as required placeholders for the cycle
                         and channel numbers; default is
                         cycle_{cycle}_channel_{channel}.tif
+  --pyramid             write output as a single pyramidal TIFF
   --ffp [FILE [FILE ...]]
                         read flat field profile image from FILES; if specified
                         must be one common file for all cycles or one file for
