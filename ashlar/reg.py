@@ -997,7 +997,7 @@ def build_pyramid(path, num_channels, shape, dtype, tile_size, verbose=False):
         f.write(xml_bytes)
         f.seek(0)
         ifd_block = f.read(500)
-        match = re.search(rb'!!xml!!\x00', ifd_block)
+        match = re.search(b'!!xml!!\x00', ifd_block)
         if match is None:
             raise RuntimeError("Did not find placeholder string in IFD")
         f.seek(match.start() - 8)
