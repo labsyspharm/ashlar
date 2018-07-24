@@ -638,9 +638,13 @@ class LayerAligner(object):
         self.max_shift = max_shift
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
         self.verbose = verbose
+        # FIXME Still a bit muddled here on the use of metadata positions vs.
+        # corrected positions from the reference aligner. We probably want to
+        # use metadata positions to find the cycle-to-cycle tile
+        # correspondences, but the corrected positions for computing our
+        # corrected positions.
         self.tile_positions = self.metadata.positions - reference_aligner.origin
-        reference_positions = (reference_aligner.metadata.positions
-                               - reference_aligner.origin)
+        reference_positions = reference_aligner.positions
         dist = scipy.spatial.distance.cdist(reference_positions,
                                             self.tile_positions)
         self.reference_idx = np.argmin(dist, 0)
@@ -667,7 +671,7 @@ class LayerAligner(object):
             print()
 
     def calculate_positions(self):
-        self.positions = self.reference_aligner.positions + self.shifts
+        self.positions = self.tile_positions + self.shifts
         self.constrain_positions()
         self.centers = self.positions + self.metadata.size / 2
 
@@ -700,8 +704,8 @@ class LayerAligner(object):
         shift, error, _ = skimage.feature.register_translation(
             ref_img_f, img_f, 10, 'fourier'
         )
-        # Add reported difference in stage positions.
-        shift += its.offsets[0]
+        # We don't use padding and thus can skip the math to account for it.
+        assert (its.padding == 0).all(), "Unexpected non-zero padding"
         return shift, error
 
     def intersection(self, t):
@@ -746,7 +750,7 @@ class LayerAligner(object):
         plt.imshow(corr)
         origin = np.array(corr.shape) // 2
         plt.plot(origin[1], origin[0], 'r+')
-        shift += origin - its.offsets[0]
+        shift += origin
         plt.plot(shift[1], shift[0], 'rx')
         plt.tight_layout(0, 0, 0)
 
