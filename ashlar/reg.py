@@ -411,7 +411,7 @@ def neighbors_graph(aligner):
         pdist = scipy.spatial.distance.pdist(aligner.metadata.positions,
                                              metric='cityblock')
         sp = scipy.spatial.distance.squareform(pdist)
-        max_distance = aligner.metadata.size.max()
+        max_distance = aligner.metadata.size.max() + 1
         edges = zip(*np.nonzero((sp > 0) & (sp < max_distance)))
         graph = nx.from_edgelist(edges)
         aligner._neighbors_graph = graph
@@ -432,10 +432,26 @@ class EdgeAligner(object):
     neighbors_graph = neighbors_graph
 
     def run(self):
+        self.check_overlaps()
         self.register_all()
         self.build_spanning_tree()
         self.calculate_positions()
         self.fit_model()
+
+    def check_overlaps(self):
+        # This might be better addressed by removing the +1 from the
+        # neighbors_graph max_distance calculation and ensuring the graph is
+        # fully connected.
+        pos = self.metadata.positions
+        overlaps = np.array([
+            self.metadata.size - abs(pos[t1] - pos[t2])
+            for t1, t2 in self.neighbors_graph.edges
+        ])
+        failures = np.any(overlaps < 1, axis=1)
+        if all(failures):
+            warnings.warn("No tiles overlap, attempting alignment anyway.")
+        elif any(failures):
+            warnings.warn("Some neighboring tiles have zero overlap.")
 
     def register_all(self):
         n = self.neighbors_graph.size()
@@ -764,11 +780,9 @@ class Intersection(object):
 
     def _calculate(self, corners1, corners2, min_size):
         max_shape = (corners2 - corners1).max(axis=0)
-        min_size = min_size.clip(0, max_shape)
+        min_size = min_size.clip(1, max_shape)
         position = corners1.max(axis=0)
         initial_shape = np.ceil(corners2.min(axis=0) - position).astype(int)
-        if any(initial_shape <= 0):
-            raise ValueError("Tiles do not intersect")
         clipped_shape = np.maximum(initial_shape, min_size)
         self.shape = np.ceil(clipped_shape).astype(int)
         self.padding = self.shape - initial_shape
@@ -1114,10 +1128,6 @@ def paste(target, img, pos, func=None):
     else:
         for c in range(img.shape[2]):
             img[...,c] = scipy.ndimage.shift(img[...,c], pos_f)
-    # Drop one pixel on all edges to avoid artifacts from the subpixel shift.
-    # FIXME We should only drop the edges opposite the shift direction.
-    img = img[1:-1,1:-1]
-    target_slice = target_slice[1:-1,1:-1]
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     img = skimage.util.dtype.convert(img, target.dtype)
