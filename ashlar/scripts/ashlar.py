@@ -48,9 +48,13 @@ def main(argv=sys.argv):
         '--pyramid', default=False, action='store_true',
         help='write output as a single pyramidal TIFF'
     )
+    # Implement default-value logic ourselves so we can detect when the user
+    # has explicitly set a value.
+    tile_size_default = 1024
     parser.add_argument(
-        '--tile-size', type=int, default=1024,
-        help='set output TIFF tile width and height in pixels'
+        '--tile-size', type=int, default=None, metavar='PIXELS',
+        help=('set tile width and height to PIXELS (pyramid output only);'
+              ' default is {default}'.format(default=tile_size_default))
     )
     parser.add_argument(
         '--ffp', metavar='FILE', nargs='*',
@@ -95,6 +99,13 @@ def main(argv=sys.argv):
         print("Output directory '{}' does not exist".format(output_path))
         return 1
 
+    if args.tile_size and not args.pyramid:
+        print("--tile-size can only be used with --pyramid")
+        return 1
+    if args.tile_size is None:
+        # Implement default value logic as mentioned in argparser setup above.
+        args.tile_size = tile_size_default
+
     ffp_paths = args.ffp
     if ffp_paths:
         if len(ffp_paths) not in (0, 1, len(filepaths)):
@@ -119,9 +130,10 @@ def main(argv=sys.argv):
     aligner_args['max_shift'] = args.maximum_shift
 
     mosaic_args = {}
-    mosaic_args['tile_size'] = args.tile_size
     if args.output_channels:
         mosaic_args['channels'] = args.output_channels
+    if args.pyramid:
+        mosaic_args['tile_size'] = args.tile_size
     if args.quiet is False:
         mosaic_args['verbose'] = True
 
