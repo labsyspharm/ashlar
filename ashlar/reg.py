@@ -420,19 +420,24 @@ def neighbors_graph(aligner):
 
 class EdgeAligner(object):
 
-    def __init__(self, reader, channel=0, max_shift=15, verbose=False):
+    def __init__(
+        self, reader, channel=0, max_shift=15, false_positive_ratio=0.01,
+        verbose=False
+    ):
         self.reader = reader
         self.channel = channel
         self.verbose = verbose
         # Unit is micrometers.
         self.max_shift = max_shift
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
+        self.false_positive_ratio = false_positive_ratio
         self._cache = {}
 
     neighbors_graph = neighbors_graph
 
     def run(self):
         self.check_overlaps()
+        self.compute_threshold()
         self.register_all()
         self.build_spanning_tree()
         self.calculate_positions()
@@ -453,6 +458,59 @@ class EdgeAligner(object):
         elif any(failures):
             warnings.warn("Some neighboring tiles have zero overlap.")
 
+    def compute_threshold(self):
+        # Compute error threshold for rejecting aligments. We generate a
+        # distribution of error scores for many known non-overlapping image
+        # regions and take a certain percentile as the maximum allowable error.
+        # The percentile becomes our accepted false-positive ratio.
+        edges = self.neighbors_graph.edges()
+        min_size = np.ones(2) * self.max_shift_pixels
+        widths = np.array([
+            self.intersection(t1, t2, min_size).shape.min()
+            for t1, t2 in edges
+        ])
+        w = widths.max()
+        max_offset = self.metadata.size[0] - w
+        n = 1000
+        pairs = np.empty((n, 2), dtype=int)
+        offsets = np.empty((n, 2), dtype=int)
+        # Generate n random image pairs and strip offsets for alignment. Even
+        # with a small number of tiles, we can easily get 1000 non-repeating
+        # strips due to also varying the offset.
+        i = 0
+        for i in range(n):
+            # Ensure pair is two different tiles and tiles are not neighbors.
+            # This is more conservative than necessary -- we could admit
+            # neighbors as long as the chosen offsets don't correspond to the
+            # actual overlap region.
+            while True:
+                t1, t2 = np.random.randint(self.metadata.num_images, size=2)
+                if t1 != t2 and (t1, t2) not in edges:
+                    break
+            pairs[i] = t1, t2
+            offsets[i] = np.random.randint(max_offset, size=2)
+            i += 1
+        errors = np.empty(n)
+        for i, ((t1, t2), (offset1, offset2)) in enumerate(zip(pairs, offsets)):
+            if self.verbose and (i % 10 == 9 or i == n - 1):
+                sys.stdout.write(
+                    '\r    quantifying alignment error %d/%d' % (i + 1, n)
+                )
+                sys.stdout.flush()
+            img1 = self.reader.read(t1, self.channel)[offset1:offset1+w, :]
+            img2 = self.reader.read(t2, self.channel)[offset2:offset2+w, :]
+            # FIXME Refactor the following bit out of here and _register.
+            img1_f = fft2(whiten(img1))
+            img2_f = fft2(whiten(img2))
+            _, error, _ = skimage.feature.register_translation(
+                img1_f, img2_f, space='fourier'
+            )
+            errors[i] = -np.log(np.sqrt(1 - error ** 2))
+        if self.verbose:
+            print()
+        self.errors_negative_sampled = errors
+        self.max_error = np.percentile(errors, self.false_positive_ratio * 100)
+
     def register_all(self):
         n = self.neighbors_graph.size()
         for i, (t1, t2) in enumerate(self.neighbors_graph.edges(), 1):
@@ -462,6 +520,11 @@ class EdgeAligner(object):
             self.register_pair(t1, t2)
         if self.verbose:
             print()
+        self.all_errors = np.array([x[1] for x in self._cache.values()])
+        # Set error values above the threshold to infinity.
+        for k, v in self._cache.items():
+            if v[1] > self.max_error:
+                self._cache[k] = (v[0], np.inf)
 
     def build_spanning_tree(self):
         # Note that this may be disconnected, so it's technically a forest.
@@ -545,10 +608,6 @@ class EdgeAligner(object):
             min_size = native_its.shape
             while True:
                 shift, error = self._register(t1, t2, min_size)
-                # Constrain shift.
-                if any(np.abs(shift) > self.max_shift_pixels):
-                    shift[:] = 0
-                    error = np.inf
                 results.append([shift, error])
                 if all(min_size > max_its_size):
                     break
@@ -570,6 +629,14 @@ class EdgeAligner(object):
         shift, error, _ = skimage.feature.register_translation(
             img1_f, img2_f, 10, 'fourier'
         )
+        # Recover the intensity-normalized correlation magnitude by inverting
+        # the transformation applied by register_translation.
+        correlation = np.sqrt(1 - error ** 2)
+        # Log-transform and negate the correlation to produce a suitable
+        # distance metric for the Dijkstra path calculation, as well as
+        # something that produces sensible distributions for the threshold
+        # computation.
+        error = -np.log(correlation)
         # Account for padding, flipping the sign depending on the direction
         # between the tiles.
         p1, p2 = self.metadata.positions[[t1, t2]]
