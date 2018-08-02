@@ -1117,10 +1117,6 @@ def paste(target, img, pos, func=None):
     if xi < 0:
         img = img[:, -xi:]
         xi = 0
-    # This is a bit wrong on the edges in the subpixel shift direction. The
-    # fractional pixels that would be shifted off the edges of the image are
-    # actually discarded. However since the images being tiled in this
-    # application have far more overlap than a single pixel, it's irrelevant.
     target_slice = target[yi:yi+img.shape[0], xi:xi+img.shape[1]]
     img = crop_like(img, target_slice)
     if img.ndim == 2:
@@ -1128,6 +1124,15 @@ def paste(target, img, pos, func=None):
     else:
         for c in range(img.shape[2]):
             img[...,c] = scipy.ndimage.shift(img[...,c], pos_f)
+    # For any axis where there is a non-zero subpixel shift, crop out the last
+    # row or column of pixels on the "losing" side. These pixels will be darker
+    # than normal and will introduce artifacts in most blending modes.
+    y1 = None if pos_f[0] <= 0 else 1
+    y2 = None if pos_f[0] >= 0 else -1
+    x1 = None if pos_f[0] <= 0 else 1
+    x2 = None if pos_f[0] >= 0 else -1
+    img = img[y1:y2, x1:x2]
+    target_slice = target_slice[y1:y2, x1:x2]
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     img = skimage.util.dtype.convert(img, target.dtype)
