@@ -1196,8 +1196,8 @@ def paste(target, img, pos, func=None):
     # than normal and will introduce artifacts in most blending modes.
     y1 = None if pos_f[0] <= 0 else 1
     y2 = None if pos_f[0] >= 0 else -1
-    x1 = None if pos_f[0] <= 0 else 1
-    x2 = None if pos_f[0] >= 0 else -1
+    x1 = None if pos_f[1] <= 0 else 1
+    x2 = None if pos_f[1] >= 0 else -1
     img = img[y1:y2, x1:x2]
     target_slice = target_slice[y1:y2, x1:x2]
     if np.issubdtype(img.dtype, np.floating):
