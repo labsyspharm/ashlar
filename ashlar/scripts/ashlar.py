@@ -214,7 +214,7 @@ def process_single(
         print("Building pyramid")
         reg.build_pyramid(
             output_path_0, num_channels, mshape, reader.metadata.pixel_dtype,
-            mosaic_args['tile_size'], not quiet
+            reader.metadata.pixel_size, mosaic_args['tile_size'], not quiet
         )
 
     return 0

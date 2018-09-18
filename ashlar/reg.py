@@ -985,7 +985,9 @@ class Mosaic(object):
         return img
 
 
-def build_pyramid(path, num_channels, shape, dtype, tile_size, verbose=False):
+def build_pyramid(
+        path, num_channels, shape, dtype, pixel_size, tile_size, verbose=False
+):
     max_level = 0
     shapes = [shape]
     while any(s > tile_size for s in shape):
@@ -1037,13 +1039,21 @@ def build_pyramid(path, num_channels, shape, dtype, tile_size, verbose=False):
     )
     for level in range(max_level + 1):
         shape = shapes[level]
+        if level == 0:
+            psize_xml = (
+                u'PhysicalSizeX="{0}" PhysicalSizeXUnit="\u00b5m"'
+                u' PhysicalSizeY="{0}" PhysicalSizeYUnit="\u00b5m"'
+                .format(pixel_size)
+            )
+        else:
+            psize_xml = u''
         xml.write(u'<Image ID="Image:{}">'.format(level))
         xml.write(
             (u'<Pixels BigEndian="false" DimensionOrder="XYZCT"'
-             ' ID="Pixels:{level}" SizeC="{num_channels}" SizeT="1"'
+             ' ID="Pixels:{level}" {psize_xml} SizeC="{num_channels}" SizeT="1"'
              ' SizeX="{sizex}" SizeY="{sizey}" SizeZ="1" Type="{ome_dtype}">')
             .format(
-                level=level, num_channels=num_channels,
+                level=level, psize_xml=psize_xml, num_channels=num_channels,
                 sizex=shape[1], sizey=shape[0], ome_dtype=ome_dtype
             )
         )
