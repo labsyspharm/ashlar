@@ -5,7 +5,7 @@
 ```
 ashlar [-h] [-o DIR] [-c [CHANNEL]]
        [--output-channels [CHANNEL [CHANNEL ...]]] [-m SHIFT]
-       [-f FORMAT] [--pyramid] [--tile-size TILE_SIZE]
+       [-f FORMAT] [--pyramid] [--tile-size PIXELS]
        [--ffp [FILE [FILE ...]]] [--dfp [FILE [FILE ...]]] [--plates]
        [-q] [--version]
        [FILE [FILE ...]]
@@ -33,6 +33,8 @@ optional arguments:
                         and channel numbers; default is
                         cycle_{cycle}_channel_{channel}.tif
   --pyramid             write output as a single pyramidal TIFF
+  --tile-size PIXELS    set tile width and height to PIXELS (pyramid output
+                        only); default is 1024
   --ffp [FILE [FILE ...]]
                         read flat field profile image from FILES; if specified
                         must be one common file for all cycles or one file for
