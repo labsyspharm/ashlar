@@ -47,8 +47,8 @@ AUTHOR_EMAIL = 'jeremy_muhlich@hms.harvard.edu'
 LICENSE = 'MIT License'
 HOMEPAGE = 'https://github.com/sorgerlab/ashlar'
 
-LOCI_TOOLS_URL = 'http://downloads.openmicroscopy.org/bio-formats/5.7.1/artifacts/loci_tools.jar'
-LOCI_TOOLS_SHA1 = 'a6accb9fa05e872e392bab59c15c421707a4e8f8'
+LOCI_TOOLS_URL = 'http://downloads.openmicroscopy.org/bio-formats/5.9.2/artifacts/loci_tools.jar'
+LOCI_TOOLS_SHA1 = 'fbe2635b5580a5abd312979f5f3a70c953d4e613'
 
 def download_bioformats():
     print("Ensuring latest bioformats is present:")
