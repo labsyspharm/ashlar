@@ -523,7 +523,7 @@ class EdgeAligner(object):
         self.all_errors = np.array([x[1] for x in self._cache.values()])
         # Set error values above the threshold to infinity.
         for k, v in self._cache.items():
-            if v[1] > self.max_error:
+            if v[1] > self.max_error or any(np.abs(v[0]) > self.max_shift_pixels):
                 self._cache[k] = (v[0], np.inf)
 
     def build_spanning_tree(self):
