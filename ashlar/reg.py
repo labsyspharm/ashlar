@@ -710,7 +710,7 @@ class EdgeAligner(object):
 
 class LayerAligner(object):
 
-    def __init__(self, reader, reference_aligner, channel=None, max_shift=15,
+    def __init__(self, reader, reference_aligner, channel=None, max_shift=27,
                  verbose=False):
         self.reader = reader
         self.reference_aligner = reference_aligner
@@ -755,8 +755,9 @@ class LayerAligner(object):
 
     def calculate_positions(self):
         self.positions = (
-            self.reference_aligner.positions[self.reference_idx] + self.shifts
-        )
+            self.reference_aligner.positions - 
+            self.reference_aligner.metadata.positions
+        )[self.reference_idx] + self.tile_positions + self.shifts
         self.constrain_positions()
         self.centers = self.positions + self.metadata.size / 2
 
