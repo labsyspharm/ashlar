@@ -261,6 +261,8 @@ class BioformatsMetadata(PlateMetadata):
 
     @property
     def plate_well_series(self):
+        if hasattr(self, '_plate_well_series'):
+            return self._plate_well_series
         # FIXME Store slice objects to save resources where possible.
         series = [
             [
