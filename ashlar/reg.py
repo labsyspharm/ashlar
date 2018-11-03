@@ -2,6 +2,7 @@ from __future__ import division, print_function
 import sys
 import warnings
 import re
+import itertools
 import xml.etree.ElementTree
 import io
 import uuid
@@ -466,7 +467,7 @@ class EdgeAligner(object):
         # regions and take a certain percentile as the maximum allowable error.
         # The percentile becomes our accepted false-positive ratio.
         edges = self.neighbors_graph.edges()
-        min_size = np.ones(2) * self.max_shift_pixels
+        min_size = np.repeat(self.max_shift_pixels * 2, 2)
         widths = np.array([
             self.intersection(t1, t2, min_size).shape.min()
             for t1, t2 in edges
@@ -501,13 +502,7 @@ class EdgeAligner(object):
                 sys.stdout.flush()
             img1 = self.reader.read(t1, self.channel)[offset1:offset1+w, :]
             img2 = self.reader.read(t2, self.channel)[offset2:offset2+w, :]
-            # FIXME Refactor the following bit out of here and _register.
-            img1_f = fft2(whiten(img1))
-            img2_f = fft2(whiten(img2))
-            _, error, _ = skimage.feature.register_translation(
-                img1_f, img2_f, space='fourier'
-            )
-            errors[i] = -np.log(np.sqrt(1 - error ** 2))
+            _, errors[i] = register(img1, img2)
         if self.verbose:
             print()
         self.errors_negative_sampled = errors
@@ -598,24 +593,8 @@ class EdgeAligner(object):
             # image size in any given direction. Here we calculate the tile
             # overlap image size that will support observing the maximum allowed
             # shift.
-            max_its_size = self.max_shift_pixels * 2
-            results = []
-            # Perform registration with increasingly larger minimum overlap
-            # sizes, starting from the "native" overlap and repeatedly doubling
-            # it until we reach or exceed the maximum required overlap
-            # calculated above. We then choose the result with the lowest
-            # error. This is necessary because the phase correlation can't
-            # detect a shift greater than half of the overlap size.
-            native_its = self.intersection(t1, t2, None)
-            min_size = native_its.shape
-            while True:
-                shift, error = self._register(t1, t2, min_size)
-                results.append([shift, error])
-                if all(min_size > max_its_size):
-                    break
-                min_size *= 2
-            # Take result with lowest error.
-            shift, error = min(results, key=lambda x: x[1])
+            max_its_size = np.repeat(self.max_shift_pixels * 2, 2)
+            shift, error = self._register(t1, t2, max_its_size)
             self._cache[key] = (shift, error)
         if t1 > t2:
             shift = -shift
@@ -623,29 +602,17 @@ class EdgeAligner(object):
         return shift.copy(), error
 
     def _register(self, t1, t2, min_size):
-        # Perform the actual pixel-based alignment, given a minimum size for the
-        # overlap region.
         its, img1, img2 = self.overlap(t1, t2, min_size)
-        img1_f = fft2(whiten(img1))
-        img2_f = fft2(whiten(img2))
-        shift, error, _ = skimage.feature.register_translation(
-            img1_f, img2_f, 10, 'fourier'
-        )
-        # Recover the intensity-normalized correlation magnitude by inverting
-        # the transformation applied by register_translation.
-        correlation = np.sqrt(1 - error ** 2)
-        # Log-transform and negate the correlation to produce a suitable
-        # distance metric for the Dijkstra path calculation, as well as
-        # something that produces sensible distributions for the threshold
-        # computation.
-        error = -np.log(correlation)
         # Account for padding, flipping the sign depending on the direction
         # between the tiles.
         p1, p2 = self.metadata.positions[[t1, t2]]
         sx = 1 if p1[1] >= p2[1] else -1
         sy = 1 if p1[0] >= p2[0] else -1
-        shift += its.padding * [sy, sx]
+        padding = its.padding * [sy, sx]
+        shift, error = register(img1, img2)
+        shift += padding
         return shift, error
+
 
     def intersection(self, t1, t2, min_size):
         corners1 = self.metadata.positions[[t1, t2]]
@@ -784,11 +751,7 @@ class LayerAligner(object):
     def register(self, t):
         """Return relative shift between images and the alignment error."""
         its, ref_img, img = self.overlap(t)
-        ref_img_f = fft2(whiten(ref_img))
-        img_f = fft2(whiten(img))
-        shift, error, _ = skimage.feature.register_translation(
-            ref_img_f, img_f, 10, 'fourier'
-        )
+        shift, error = register(ref_img, img)
         # We don't use padding and thus can skip the math to account for it.
         assert (its.padding == 0).all(), "Unexpected non-zero padding"
         return shift, error
@@ -1128,6 +1091,38 @@ def whiten(img):
     #img = skimage.filters.sobel(img)
     #img = np.log(img)
     #img = img - scipy.ndimage.filters.gaussian_filter(img, 2) + 0.5
+
+
+def register(img1, img2):
+    img1w = whiten(img1)
+    img2w = whiten(img2)
+    img1_f = fft2(img1w)
+    img2_f = fft2(img2w)
+    img1w = img1w.real
+    img2w = img2w.real
+    shift, _, _ = skimage.feature.register_translation(
+        img1_f, img2_f, 10, 'fourier'
+    )
+    # At this point we may have a shift in the wrong quadrant since the FFT
+    # assumes the signal is periodic. We test all four possibilities and return
+    # the shift that gives the highest direct correlation (sum of products).
+    shape = np.array(img1.shape)
+    shift_pos = (shift + shape) % shape
+    shift_neg = shift_pos - shape
+    shifts = list(itertools.product(*zip(shift_pos, shift_neg)))
+    correlations = [
+        np.sum(img1w * scipy.ndimage.shift(img2w, s))
+        for s in shifts
+    ]
+    idx = np.argmax(correlations)
+    shift = shifts[idx]
+    correlation = correlations[idx]
+    total_amplitude = np.linalg.norm(img1w) * np.linalg.norm(img2w)
+    if correlation > 0 and total_amplitude > 0:
+        error = -np.log(correlation / total_amplitude)
+    else:
+        error = np.inf
+    return shift, error
 
 
 def crop(img, offset, shape):
