@@ -197,10 +197,6 @@ def process_single(
             print('    reading %s' % filepath)
         reader = reg.BioformatsReader(filepath, plate=plate, well=well)
         reader.metadata.positions
-        reader.metadata._positions += [0, 1198]
-        if 'VIMENTIN' in filepath:
-            print('account for cycle8')
-            reader.metadata._positions += [0, -868]
         layer_aligner = reg.LayerAligner(reader, edge_aligner, **aligner_args)
         layer_aligner.run()
         mosaic_args_final = mosaic_args.copy()
