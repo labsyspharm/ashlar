@@ -785,6 +785,8 @@ class LayerAligner(object):
     def register(self, t):
         """Return relative shift between images and the alignment error."""
         its, ref_img, img = self.overlap(t)
+        if np.any(np.array(its.shape) == 0): 
+            return (0, 0), np.inf 
         ref_img_f = fft2(whiten(ref_img))
         img_f = fft2(whiten(img))
         shift, error, _ = skimage.feature.register_translation(
@@ -1215,6 +1217,8 @@ def paste(target, img, pos, func=None):
     x2 = None if pos_f[1] >= 0 else -1
     img = img[y1:y2, x1:x2]
     target_slice = target_slice[y1:y2, x1:x2]
+    if np.any(np.array(target_slice.shape) == 0): 
+        return 
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     img = skimage.util.dtype.convert(img, target.dtype)
