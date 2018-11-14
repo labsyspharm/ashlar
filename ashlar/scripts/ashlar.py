@@ -192,13 +192,19 @@ def process_single(
     mosaic.run()
     num_channels += len(mosaic.channels)
 
+    reader.thumbnail_img = thumbnail.thumbnail(
+        reader, channel=aligner_args['channel']
+    )
+    ref_reader = reader
+
     for cycle, filepath in enumerate(filepaths[1:], 1):
         if not quiet:
             print('Cycle %d:' % cycle)
             print('    reading %s' % filepath)
         reader = reg.BioformatsReader(filepath, plate=plate, well=well)
         cycle_offset = thumbnail.calculate_cycle_offset(
-            reg.BioformatsReader(filepaths[0], plate=plate, well=well), reader
+            ref_reader, reader,
+            channel=aligner_args['channel'], save=(False, True)
         )
         reader.metadata.positions
         reader.metadata._positions += cycle_offset
