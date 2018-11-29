@@ -1256,13 +1256,21 @@ def plot_edge_shifts(aligner, img=None, bounds=True):
     fig.set_facecolor('black')
 
 
-def plot_edge_quality(aligner, img=None):
-    centers = aligner.reader.metadata.centers - aligner.reader.metadata.origin
-    nrows, ncols = 1, 2
-    if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] > 4 / 3:
-        nrows, ncols = ncols, nrows
+def plot_edge_quality(aligner, img=None, show_tree=True, pos='metadata'):
+    if pos == 'metadata':
+        centers = aligner.metadata.centers - aligner.metadata.origin
+    elif pos == 'aligner':
+        centers = aligner.centers
+    else:
+        raise ValueError("pos must be either 'metadata' or 'aligner'")
+    if show_tree:
+        nrows, ncols = 1, 2
+        if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] > 4 / 3:
+            nrows, ncols = ncols, nrows
+    else:
+        nrows, ncols = 1, 1
     fig = plt.figure()
-    ax = plt.subplot(nrows, ncols,1)
+    ax = plt.subplot(nrows, ncols, 1)
     draw_mosaic_image(ax, aligner, img)
     error = np.array([aligner._cache[tuple(sorted(e))][1]
                       for e in aligner.neighbors_graph.edges()])
@@ -1282,14 +1290,15 @@ def plot_edge_quality(aligner, img=None):
         pos=np.fliplr(centers), edge_color=error, edge_vmin=-1, edge_vmax=1,
         edge_cmap=plt.get_cmap('PRGn'), width=2, node_size=100, font_size=6
     )
-    ax = plt.subplot(nrows, ncols, 2)
-    draw_mosaic_image(ax, aligner, img)
-    # Spanning tree with nodes at original tile positions.
-    nx.draw(
-        aligner.spanning_tree, ax=ax, with_labels=True,
-        pos=np.fliplr(centers), edge_color='royalblue',
-        width=2, node_size=100, font_size=6
-    )
+    if show_tree:
+        ax = plt.subplot(nrows, ncols, 2)
+        draw_mosaic_image(ax, aligner, img)
+        # Spanning tree with nodes at original tile positions.
+        nx.draw(
+            aligner.spanning_tree, ax=ax, with_labels=True,
+            pos=np.fliplr(centers), edge_color='royalblue',
+            width=2, node_size=100, font_size=6
+        )
     fig.set_facecolor('black')
 
 
