@@ -214,7 +214,7 @@ class BioformatsMetadata(PlateMetadata):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state['_metadata']
+        del state['_reader'], state['_metadata'], state['_omexml_root']
         return state
 
     def __setstate__(self, state):
@@ -374,15 +374,6 @@ class BioformatsReader(Reader):
         self.path = path
         self.metadata = BioformatsMetadata(self.path)
         self.metadata.set_active_plate_well(plate, well)
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        del state['ir']
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        self._init_ir()
 
     def read(self, series, c):
         self.metadata._reader.setSeries(self.metadata.active_series[series])
