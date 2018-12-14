@@ -848,8 +848,12 @@ class Mosaic(object):
     def _load_correction_profiles(self, dfp_path, ffp_path):
         if dfp_path or ffp_path:
             c = max(self.channels) + 1
-            self.dfp = skimage.io.imread(dfp_path) if dfp_path else np.zeros(c)
-            self.ffp = skimage.io.imread(ffp_path) if ffp_path else np.ones(c)
+            self.dfp = np.atleast_3d(
+                skimage.io.imread(dfp_path) if dfp_path else np.zeros(c)
+            )
+            self.ffp = np.atleast_3d(
+                skimage.io.imread(ffp_path) if ffp_path else np.ones(c)
+            )
             # FIXME This assumes integer dtypes. Do we need to support floats?
             self.dfp /= np.iinfo(self.dtype).max
             self.do_correction = True
