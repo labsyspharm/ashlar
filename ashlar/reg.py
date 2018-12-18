@@ -1260,13 +1260,20 @@ def plot_edge_shifts(aligner, img=None, bounds=True):
     fig.set_facecolor('black')
 
 
-def plot_edge_quality(aligner, img=None, show_tree=True, pos='metadata'):
+def plot_edge_quality(
+    aligner, img=None, show_tree=True, pos='metadata', use_mi=True,
+    nx_kwargs=None
+):
     if pos == 'metadata':
         centers = aligner.metadata.centers - aligner.metadata.origin
     elif pos == 'aligner':
         centers = aligner.centers
     else:
         raise ValueError("pos must be either 'metadata' or 'aligner'")
+    if nx_kwargs is None:
+        nx_kwargs = {}
+    final_nx_kwargs = dict(width=2, node_size=100, font_size=6)
+    final_nx_kwargs.update(nx_kwargs)
     if show_tree:
         nrows, ncols = 1, 2
         if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] > 4 / 3:
@@ -1275,7 +1282,7 @@ def plot_edge_quality(aligner, img=None, show_tree=True, pos='metadata'):
         nrows, ncols = 1, 1
     fig = plt.figure()
     ax = plt.subplot(nrows, ncols, 1)
-    draw_mosaic_image(ax, aligner, img)
+    draw_mosaic_image(ax, aligner, img, use_mi)
     error = np.array([aligner._cache[tuple(sorted(e))][1]
                       for e in aligner.neighbors_graph.edges()])
     # Manually center and scale data to 0-1, except infinity which is set to -1.
@@ -1292,16 +1299,16 @@ def plot_edge_quality(aligner, img=None, show_tree=True, pos='metadata'):
     nx.draw(
         aligner.neighbors_graph, ax=ax, with_labels=True,
         pos=np.fliplr(centers), edge_color=error, edge_vmin=-1, edge_vmax=1,
-        edge_cmap=plt.get_cmap('PRGn'), width=2, node_size=100, font_size=6
+        edge_cmap=plt.get_cmap('PRGn'), **final_nx_kwargs
     )
     if show_tree:
         ax = plt.subplot(nrows, ncols, 2)
-        draw_mosaic_image(ax, aligner, img)
+        draw_mosaic_image(ax, aligner, img, use_mi)
         # Spanning tree with nodes at original tile positions.
         nx.draw(
             aligner.spanning_tree, ax=ax, with_labels=True,
             pos=np.fliplr(centers), edge_color='royalblue',
-            width=2, node_size=100, font_size=6
+            **final_nx_kwargs
         )
     fig.set_facecolor('black')
 
@@ -1324,8 +1331,8 @@ def plot_layer_shifts(aligner, img=None):
     fig.set_facecolor('black')
 
 
-def draw_mosaic_image(ax, aligner, img):
-    if img is not None:
+def draw_mosaic_image(ax, aligner, img, use_mi=True):
+    if use_mi and img is not None:
         if sys.version_info[0] != 2:
             warnings.warn('ModestImage module (required for image display)'
                           ' is only compatible with Python 2')
@@ -1334,7 +1341,10 @@ def draw_mosaic_image(ax, aligner, img):
             warnings.warn('Please install ModestImage for image display')
             img = None
     if img is not None:
-        modest_image.imshow(ax, img)
+        if use_mi:
+            modest_image.imshow(ax, img)
+        else:
+            ax.imshow(img)
     else:
         h, w = aligner.mosaic_shape
         # Draw a single-pixel image in the lowest color in the colormap,
