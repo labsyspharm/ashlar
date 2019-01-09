@@ -857,7 +857,7 @@ class Intersection(object):
         max_shape = (corners2 - corners1).max(axis=0)
         min_size = min_size.clip(1, max_shape)
         position = corners1.max(axis=0)
-        initial_shape = np.ceil(corners2.min(axis=0) - position).astype(int)
+        initial_shape = np.floor(corners2.min(axis=0) - position).astype(int)
         clipped_shape = np.maximum(initial_shape, min_size)
         self.shape = np.ceil(clipped_shape).astype(int)
         self.padding = self.shape - initial_shape
