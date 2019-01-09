@@ -764,7 +764,8 @@ class LayerAligner(object):
     def constrain_positions(self):
         # Computed shifts of exactly 0,0 seem to result from failed
         # registration. We need to throw those out for this purpose.
-        discard = (self.shifts == 0).all(axis=1)
+        cycle_offset = getattr(self, 'cycle_offset', np.array([0.0, 0.0]))
+        discard = (self.shifts == cycle_offset).all(axis=1)
         # Take the median of registered shifts to determine the offset
         # (translation) from the reference image to this one.
         offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))

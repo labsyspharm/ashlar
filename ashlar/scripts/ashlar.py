@@ -209,6 +209,7 @@ def process_single(
         reader.metadata.positions
         reader.metadata._positions += cycle_offset
         layer_aligner = reg.LayerAligner(reader, edge_aligner, **aligner_args)
+        layer_aligner.cycle_offset = -1.0 * cycle_offset
         layer_aligner.run()
         mosaic_args_final = mosaic_args.copy()
         if ffp_paths:
