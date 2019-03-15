@@ -1,5 +1,6 @@
 from __future__ import print_function
 import sys
+import re
 import argparse
 try:
     import pathlib
@@ -7,6 +8,8 @@ except ImportError:
     import pathlib2 as pathlib
 from .. import __version__ as VERSION
 from .. import reg
+from ..reg import BioformatsReader
+from ..filepattern import FilePatternReader
 
 
 def main(argv=sys.argv):
@@ -175,7 +178,7 @@ def process_single(
     if not quiet:
         print('Cycle 0:')
         print('    reading %s' % filepaths[0])
-    reader = reg.BioformatsReader(filepaths[0], plate=plate, well=well)
+    reader = build_reader(filepaths[0], plate_well=(plate, well))
     edge_aligner = reg.EdgeAligner(reader, **aligner_args)
     edge_aligner.run()
     mshape = edge_aligner.mosaic_shape
@@ -195,7 +198,7 @@ def process_single(
         if not quiet:
             print('Cycle %d:' % cycle)
             print('    reading %s' % filepath)
-        reader = reg.BioformatsReader(filepath, plate=plate, well=well)
+        reader = build_reader(filepath, plate_well=(plate, well))
         layer_aligner = reg.LayerAligner(reader, edge_aligner, **aligner_args)
         layer_aligner.run()
         mosaic_args_final = mosaic_args.copy()
@@ -253,6 +256,52 @@ def process_plates(
 
 def format_cycle(f, cycle):
     return f.format(cycle=cycle, channel='{channel}')
+
+
+readers = {
+    'filepattern': FilePatternReader,
+    'bioformats': BioformatsReader,
+}
+
+# This is a short-term hack to provide a way to specify alternate reader
+# classes and pass specific args to them.
+def build_reader(path, plate_well=None):
+    # Default to BioformatsReader if name not specified.
+    reader_class = BioformatsReader
+    kwargs = {}
+    match = re.match(
+        r'(?P<reader>\w+)\|(?P<path>.*?)(\|(?P<kwargs>.*))?$', path
+    )
+    if match:
+        path = match.group('path')
+        reader_name = match.group('reader')
+        reader_class = readers.get(reader_name)
+        if reader_class is None:
+            raise ProcessingError("Unknown reader: {name}".format(reader_name))
+        kwargs.update(parse_kwargs_string(match.group('kwargs')))
+    if plate_well is not None:
+        if reader_class is not BioformatsReader:
+            raise ProcessingError(
+                "Plate/well processing is only supported by the bioformats"
+                " image reader."
+            )
+        kwargs.update(plate=plate_well[0], well=plate_well[1])
+    reader = reader_class(path, **kwargs)
+    return reader
+
+
+def parse_kwargs_string(string):
+    kwargs = {}
+    if string is not None:
+        for piece in string.split('|'):
+            name, value = piece.split('=')
+            # Optimistically parse as float.
+            try:
+                value = float(value)
+            except ValueError:
+                pass
+            kwargs[name] = value
+    return kwargs
 
 
 class ProcessingError(RuntimeError):
