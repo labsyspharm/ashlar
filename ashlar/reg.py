@@ -416,7 +416,7 @@ class EdgeAligner(object):
 
     def __init__(
         self, reader, channel=0, max_shift=15, false_positive_ratio=0.01,
-        verbose=False
+        filter_sigma=0.0, verbose=False
     ):
         self.reader = reader
         self.channel = channel
@@ -425,6 +425,7 @@ class EdgeAligner(object):
         self.max_shift = max_shift
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
         self.false_positive_ratio = false_positive_ratio
+        self.filter_sigma = filter_sigma
         self._cache = {}
 
     neighbors_graph = neighbors_graph
@@ -493,7 +494,7 @@ class EdgeAligner(object):
                 sys.stdout.flush()
             img1 = self.reader.read(t1, self.channel)[offset1:offset1+w, :]
             img2 = self.reader.read(t2, self.channel)[offset2:offset2+w, :]
-            _, errors[i] = register(img1, img2)
+            _, errors[i] = register(img1, img2, self.filter_sigma)
         if self.verbose:
             print()
         self.errors_negative_sampled = errors
@@ -600,7 +601,7 @@ class EdgeAligner(object):
         sx = 1 if p1[1] >= p2[1] else -1
         sy = 1 if p1[0] >= p2[0] else -1
         padding = its.padding * [sy, sx]
-        shift, error = register(img1, img2)
+        shift, error = register(img1, img2, self.filter_sigma)
         shift += padding
         return shift, error
 
@@ -638,8 +639,8 @@ class EdgeAligner(object):
     def debug(self, t1, t2, min_size=None):
         shift, _ = self._register(t1, t2, min_size)
         its, o1, o2 = self.overlap(t1, t2, min_size)
-        w1 = whiten(o1)
-        w2 = whiten(o2)
+        w1 = whiten(o1, self.filter_sigma)
+        w2 = whiten(o2, self.filter_sigma)
         corr = np.fft.fftshift(np.abs(np.fft.ifft2(
             np.fft.fft2(w1) * np.fft.fft2(w2).conj()
         )))
@@ -671,7 +672,7 @@ class EdgeAligner(object):
 class LayerAligner(object):
 
     def __init__(self, reader, reference_aligner, channel=None, max_shift=15,
-                 verbose=False):
+                 filter_sigma=0.0, verbose=False):
         self.reader = reader
         self.reference_aligner = reference_aligner
         if channel is None:
@@ -680,6 +681,7 @@ class LayerAligner(object):
         # Unit is micrometers.
         self.max_shift = max_shift
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
+        self.filter_sigma = filter_sigma
         self.verbose = verbose
         # FIXME Still a bit muddled here on the use of metadata positions vs.
         # corrected positions from the reference aligner. We probably want to
@@ -742,7 +744,7 @@ class LayerAligner(object):
     def register(self, t):
         """Return relative shift between images and the alignment error."""
         its, ref_img, img = self.overlap(t)
-        shift, error = register(ref_img, img)
+        shift, error = register(ref_img, img, self.filter_sigma)
         # We don't use padding and thus can skip the math to account for it.
         assert (its.padding == 0).all(), "Unexpected non-zero padding"
         return shift, error
@@ -773,8 +775,8 @@ class LayerAligner(object):
     def debug(self, t):
         shift, _ = self.register(t)
         its, o1, o2 = self.overlap(t)
-        w1 = whiten(o1)
-        w2 = whiten(o2)
+        w1 = whiten(o1, self.filter_sigma)
+        w2 = whiten(o2, self.filter_sigma)
         corr = np.fft.fftshift(np.abs(np.fft.ifft2(
             np.fft.fft2(w1) * np.fft.fft2(w2).conj()
         )))
@@ -1071,13 +1073,16 @@ def fft2(img):
 # Pre-calculate the Laplacian operator kernel. We'll always be using 2D images.
 _laplace_kernel = skimage.restoration.uft.laplacian(2, (3, 3))[1]
 
-def whiten(img):
+def whiten(img, sigma):
     # Copied from skimage.filters.edges, with explicit aligned output from
     # convolve. Also the mask option was dropped.
     img = skimage.img_as_float(img)
     output = pyfftw.empty_aligned(img.shape, 'complex64')
     output.imag[:] = 0
-    scipy.ndimage.convolve(img, _laplace_kernel, output.real)
+    if sigma == 0:
+        scipy.ndimage.convolve(img, _laplace_kernel, output.real)
+    else:
+        scipy.ndimage.gaussian_laplace(img, sigma, output=output.real)
     return output
 
     # Other possible whitening functions:
@@ -1088,9 +1093,9 @@ def whiten(img):
     #img = img - scipy.ndimage.filters.gaussian_filter(img, 2) + 0.5
 
 
-def register(img1, img2):
-    img1w = whiten(img1)
-    img2w = whiten(img2)
+def register(img1, img2, sigma):
+    img1w = whiten(img1, sigma)
+    img2w = whiten(img2, sigma)
     img1_f = fft2(img1w)
     img2_f = fft2(img2w)
     img1w = img1w.real

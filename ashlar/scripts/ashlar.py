@@ -39,6 +39,11 @@ def main(argv=sys.argv):
         '-m', '--maximum-shift', type=float, default=15, metavar='SHIFT',
         help='maximum allowed per-tile corrective shift in microns'
     )
+    parser.add_argument(
+        '--filter-sigma', type=float, default=0.0, metavar='SIGMA',
+        help=('width in pixels of Gaussian filter to apply to images before'
+              ' alignment; default is 0 which disables filtering')
+    )
     arg_f_default = 'cycle_{cycle}_channel_{channel}.tif'
     parser.add_argument(
         '-f', '--filename-format', dest='filename_format',
@@ -131,6 +136,7 @@ def main(argv=sys.argv):
     aligner_args['channel'] = args.align_channel
     aligner_args['verbose'] = not args.quiet
     aligner_args['max_shift'] = args.maximum_shift
+    aligner_args['filter_sigma'] = args.filter_sigma
 
     mosaic_args = {}
     if args.output_channels:
