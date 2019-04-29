@@ -5,9 +5,9 @@
 ```
 ashlar [-h] [-o DIR] [-c [CHANNEL]]
        [--output-channels [CHANNEL [CHANNEL ...]]] [-m SHIFT]
-       [-f FORMAT] [--pyramid] [--tile-size PIXELS]
-       [--ffp [FILE [FILE ...]]] [--dfp [FILE [FILE ...]]] [--plates]
-       [-q] [--version]
+       [--filter-sigma SIGMA] [-f FORMAT] [--pyramid]
+       [--tile-size PIXELS] [--ffp [FILE [FILE ...]]]
+       [--dfp [FILE [FILE ...]]] [--plates] [-q] [--version]
        [FILE [FILE ...]]
 
 Stitch and align one or more multi-series images
@@ -27,6 +27,9 @@ optional arguments:
                         starts at 0
   -m SHIFT, --maximum-shift SHIFT
                         maximum allowed per-tile corrective shift in microns
+  --filter-sigma SIGMA  width in pixels of Gaussian filter to apply to images
+                        before alignment; default is 0 which disables
+                        filtering
   -f FORMAT, --filename-format FORMAT
                         use FORMAT to generate output filenames, with {cycle}
                         and {channel} as required placeholders for the cycle
