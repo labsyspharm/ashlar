@@ -1,5 +1,8 @@
 import re
-import pathlib2 as pathlib
+try:
+    import pathlib
+except ImportError:
+    import pathlib2 as pathlib
 import numpy as np
 import skimage.io
 from . import reg

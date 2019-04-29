@@ -10,6 +10,7 @@ from .. import __version__ as VERSION
 from .. import reg
 from ..reg import BioformatsReader
 from ..filepattern import FilePatternReader
+from ..zen import ZenReader
 
 
 def main(argv=sys.argv):
@@ -165,7 +166,7 @@ def main(argv=sys.argv):
 
 def process_single(
     filepaths, mosaic_path_format, ffp_paths, dfp_paths,
-    aligner_args, mosaic_args, pyramid, quiet, plate=None, well=None
+    aligner_args, mosaic_args, pyramid, quiet, plate_well=None
 ):
 
     output_path_0 = format_cycle(mosaic_path_format, 0)
@@ -184,7 +185,7 @@ def process_single(
     if not quiet:
         print('Cycle 0:')
         print('    reading %s' % filepaths[0])
-    reader = build_reader(filepaths[0], plate_well=(plate, well))
+    reader = build_reader(filepaths[0], plate_well=plate_well)
     edge_aligner = reg.EdgeAligner(reader, **aligner_args)
     edge_aligner.run()
     mshape = edge_aligner.mosaic_shape
@@ -204,7 +205,7 @@ def process_single(
         if not quiet:
             print('Cycle %d:' % cycle)
             print('    reading %s' % filepath)
-        reader = build_reader(filepath, plate_well=(plate, well))
+        reader = build_reader(filepath, plate_well=plate_well)
         layer_aligner = reg.LayerAligner(reader, edge_aligner, **aligner_args)
         layer_aligner.run()
         mosaic_args_final = mosaic_args.copy()
@@ -250,7 +251,7 @@ def process_plates(
                 mosaic_path_format = str(well_path / filename_format)
                 process_single(
                     filepaths, mosaic_path_format, ffp_paths, dfp_paths,
-                    aligner_args, mosaic_args, pyramid, quiet, plate=p, well=w
+                    aligner_args, mosaic_args, pyramid, quiet, plate_well=(p, w)
                 )
             else:
                 print("Skipping -- No images found.")
@@ -267,6 +268,7 @@ def format_cycle(f, cycle):
 readers = {
     'filepattern': FilePatternReader,
     'bioformats': BioformatsReader,
+    'zen': ZenReader,
 }
 
 # This is a short-term hack to provide a way to specify alternate reader
