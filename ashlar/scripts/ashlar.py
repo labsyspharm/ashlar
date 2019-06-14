@@ -281,7 +281,7 @@ def build_reader(path, plate_well=None):
         reader_name = match.group('reader')
         reader_class = readers.get(reader_name)
         if reader_class is None:
-            raise ProcessingError("Unknown reader: {name}".format(reader_name))
+            raise ProcessingError("Unknown reader: {}".format(reader_name))
         kwargs.update(parse_kwargs_string(match.group('kwargs')))
     if plate_well is not None:
         if reader_class is not BioformatsReader:
