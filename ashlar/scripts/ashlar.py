@@ -98,10 +98,6 @@ def main(argv=sys.argv):
         return 1
 
     filepaths = args.filepaths
-    if len(filepaths) == 1:
-        path = pathlib.Path(filepaths[0])
-        if path.is_dir():
-            filepaths = sorted(str(p) for p in path.glob('*rcpnl'))
 
     output_path = pathlib.Path(args.output)
     if not output_path.exists():
