@@ -10,6 +10,7 @@ from .. import __version__ as VERSION
 from .. import reg
 from ..reg import BioformatsReader
 from ..filepattern import FilePatternReader
+from ..fileseries import FileSeriesReader
 from ..zen import ZenReader
 
 
@@ -263,6 +264,7 @@ def format_cycle(f, cycle):
 
 readers = {
     'filepattern': FilePatternReader,
+    'fileseries': FileSeriesReader,
     'bioformats': BioformatsReader,
     'zen': ZenReader,
 }
