@@ -848,22 +848,27 @@ class Mosaic(object):
         return channels
 
     def _load_correction_profiles(self, dfp_path, ffp_path):
-        if dfp_path or ffp_path:
-            c = max(self.channels) + 1
+        if not dfp_path and not ffp_path:
+            self.do_correction = False
+        else:
+            self.do_correction = True
+            c = self.aligner.metadata.num_channels
             self.dfp = np.atleast_3d(
                 skimage.io.imread(dfp_path) if dfp_path else np.zeros((1, 1, c))
             )
             self.ffp = np.atleast_3d(
                 skimage.io.imread(ffp_path) if ffp_path else np.zeros((1, 1, c))
             )
-            if c is not 1:
+            # FIXME This assumes integer dtypes. Do we need to support floats?
+            if np.issubdtype(self.dfp.dtype, np.integer):
+                self.dfp /= np.iinfo(self.dtype).max
+            try:
                 self.dfp = np.moveaxis(self.dfp, self.dfp.shape.index(c), -1)
                 self.ffp = np.moveaxis(self.ffp, self.ffp.shape.index(c), -1)
-            # FIXME This assumes integer dtypes. Do we need to support floats?
-            self.dfp /= np.iinfo(self.dtype).max
-            self.do_correction = True
-        else:
-            self.do_correction = False
+            except ValueError:
+                print('    Dimension of illumination profiles does not match target image')
+                print('    Illumination correction is skipped for this cycle')
+                self.do_correction = False
 
     def run(self, mode='write', debug=False):
         if mode not in ('write', 'return'):
