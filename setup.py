@@ -15,7 +15,7 @@ requires = [
     'numpy>=1.13.0',
     'future>=0.16.0',
     'cython>=0.27.3',
-    'pyjnius==1.1.1',
+    'pyjnius==1.2.0',
     'matplotlib>=2.1.0',
     'networkx>=2.0',
     'pyfftw>=0.10.4',
