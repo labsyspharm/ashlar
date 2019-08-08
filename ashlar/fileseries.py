@@ -15,6 +15,23 @@ from . import reg
 # This code is experimental and probably still has a lot of rough edges.
 
 
+def format_to_regex(s):
+    # Translate a restricted subset of the "format" pattern language to
+    # a matching regex with named capture.
+    s = s.replace('.', '\.')
+    regex = re.sub(r'{([^:}]+):?([^}]*)}', f2r_repl, s)
+    return regex
+
+def f2r_repl(m):
+    r = '(?P<' + m.group(1) + '>.'
+    if re.match(r'^\d+$', m.group(2)):
+        r += '{' + m.group(2) + '}'
+    else:
+        r += '*?'
+    r += ')'
+    return r
+
+
 class FileSeriesMetadata(reg.Metadata):
 
     def __init__(self, path, pattern, overlap, width, height):
@@ -32,28 +49,27 @@ class FileSeriesMetadata(reg.Metadata):
         self._enumerate_tiles()
 
     def _enumerate_tiles(self):
-        # Translate a restricted subset of the "format" pattern language to
-        # a matching regex with named capture.
-        regex = re.sub(r'{([^:}]+)(?:[^}]*)}', r'(?P<\1>.*?)',
-                       self.pattern.replace('.', '\.'))
+        regex = format_to_regex(self.pattern)
         series = set()
         channels = set()
         n = 0
+        self.filename_components = {}
         for p in self.path.iterdir():
             match = re.match(regex, p.name)
             if match:
                 gd = match.groupdict()
-                series.add(int(gd['series']))
-                channels.add(gd.get('channel'))
+                s = int(gd['series'])
+                c = gd.get('channel')
+                series.add(s)
+                channels.add(c)
+                self.filename_components[s, c] = gd
                 n += 1
-        if n != len(series) * len(channels):
+        if len(self.filename_components) != len(series) * len(channels):
             raise Exception("Missing images detected")
         self._actual_num_images = len(series)
         self.channel_map = dict(enumerate(sorted(channels)))
         self.series_offset = min(series)
-        path = self.path / self.pattern.format(
-            series=self.series_offset, channel=self.channel_map[0]
-        )
+        path = self.path / self.filename(self.series_offset, 0)
         img = skimage.io.imread(str(path))
         self._tile_size = np.array(img.shape[:2])
         self._dtype = img.dtype
@@ -92,6 +108,12 @@ class FileSeriesMetadata(reg.Metadata):
         col = i % self.width
         return row, col
 
+    def filename(self, series, c):
+        series = series + self.series_offset
+        c = self.channel_map[c]
+        components = self.filename_components[series, c]
+        return self.pattern.format(**components)
+
 
 class FileSeriesReader(reg.Reader):
 
@@ -104,14 +126,8 @@ class FileSeriesReader(reg.Reader):
         )
 
     def read(self, series, c):
-        path = str(self.path / self.filename(series, c))
+        path = str(self.path / self.metadata.filename(series, c))
         kwargs = {}
         if self.metadata.multi_channel_tiles:
             kwargs['key'] = c
         return skimage.io.imread(path, **kwargs)
-
-    def filename(self, series, c):
-        series = series + self.metadata.series_offset
-        c = self.metadata.channel_map[c]
-        return self.pattern.format(series=series, channel=c)
-
