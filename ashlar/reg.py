@@ -1184,6 +1184,10 @@ def fourier_shift(img, shift):
 
 def paste(target, img, pos, func=None):
     """Composite img into target."""
+    pos = np.array(pos)
+    # Bail out if destination region is out of bounds.
+    if np.any(pos >= target.shape) or np.any(pos + img.shape < 0):
+        return
     pos_f, pos_i = np.modf(pos)
     yi, xi = pos_i.astype('i8')
     # Clip img to the edges of the mosaic.
