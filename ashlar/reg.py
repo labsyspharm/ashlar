@@ -857,11 +857,10 @@ class Mosaic(object):
                 skimage.io.imread(dfp_path) if dfp_path else np.zeros((1, 1, c))
             )
             self.ffp = np.atleast_3d(
-                skimage.io.imread(ffp_path) if ffp_path else np.zeros((1, 1, c))
+                skimage.io.imread(ffp_path) if ffp_path else np.ones((1, 1, c))
             )
             # FIXME This assumes integer dtypes. Do we need to support floats?
-            if np.issubdtype(self.dfp.dtype, np.integer):
-                self.dfp /= np.iinfo(self.dtype).max
+            self.dfp /= np.iinfo(self.dtype).max
             try:
                 self.dfp = np.moveaxis(self.dfp, self.dfp.shape.index(c), -1)
                 self.ffp = np.moveaxis(self.ffp, self.ffp.shape.index(c), -1)
