@@ -929,12 +929,9 @@ class Mosaic(object):
                     kwargs['tile'] = (self.tile_size, self.tile_size)
                 if self.verbose:
                     print("        writing to %s" % filename)
-                with warnings.catch_warnings():
-                    warnings.filterwarnings(
-                        'ignore', r'.* is a low contrast image', UserWarning,
-                        '^skimage\.io'
-                    )
-                    skimage.io.imsave(filename, mosaic_image, **kwargs)
+                skimage.io.imsave(
+                    filename, mosaic_image, check_contrast=False, **kwargs
+                )
             elif mode == 'return':
                 all_images.append(mosaic_image)
         if mode == 'return':
@@ -966,20 +963,12 @@ def build_pyramid(
                 sys.stdout.flush()
             img = skimage.io.imread(path, series=prev_level, key=i)
             img = skimage.transform.pyramid_reduce(img, multichannel=False)
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    'ignore', 'Possible precision loss', UserWarning,
-                    '^skimage\.util\.dtype'
-                )
-                warnings.filterwarnings(
-                    'ignore', '.* is a low contrast image', UserWarning,
-                    '^skimage\.io'
-                )
-                img = skimage.util.dtype.convert(img, dtype)
-                skimage.io.imsave(
-                    path, img, bigtiff=True, metadata=None, append=True,
-                    tile=(tile_size, tile_size), photometric='minisblack'
-                )
+            img = convert(img, dtype)
+            skimage.io.imsave(
+                path, img, bigtiff=True, metadata=None, append=True,
+                tile=(tile_size, tile_size), photometric='minisblack',
+                check_contrast=False
+            )
         shapes.append(img.shape)
         if verbose:
             print()
@@ -1149,7 +1138,7 @@ def crop(img, offset, shape):
 def fourier_shift(img, shift):
     # Ensure properly aligned complex64 data (fft requires complex to avoid
     # reallocation and copying).
-    img = skimage.util.dtype.convert(img, dtype=np.float32)
+    img = convert(img, np.float32)
     img = pyfftw.byte_align(img, dtype=np.complex64)
     # Compute per-axis frequency values according to the Fourier shift theorem.
     # (Read "w" here as "omega".) We pre-multiply as many scalar values as
@@ -1215,7 +1204,7 @@ def paste(target, img, pos, func=None):
     target_slice = target_slice[y1:y2, x1:x2]
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
-    img = skimage.util.dtype.convert(img, target.dtype)
+    img = convert(img, target.dtype)
     if func is None:
         target_slice[:] = img
     elif isinstance(func, np.ufunc):
@@ -1241,6 +1230,22 @@ def crop_like(img, target):
     if (img.shape[1] > target.shape[1]):
         img = img[:, :target.shape[1]]
     return img
+
+
+def convert(image, dtype, **kwargs):
+    """
+    Convert an image to the requested data-type.
+
+    This is just a wrapper around skimage's convert function to suppress the
+    precision loss warning.
+
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'ignore', 'Possible precision loss', UserWarning,
+            '^skimage\.util\.dtype'
+        )
+        return skimage.util.dtype.convert(image, dtype, **kwargs)
 
 
 def plot_edge_shifts(aligner, img=None, bounds=True):
