@@ -201,8 +201,8 @@ class Reader(object):
 class BioformatsMetadata(PlateMetadata):
 
     _pixel_dtypes = {
-        'uint8': np.uint8,
-        'uint16': np.uint16,
+        'uint8': np.dtype(np.uint8),
+        'uint16': np.dtype(np.uint16),
     }
 
     _ome_dtypes = {v: k for k, v in _pixel_dtypes.items()}
