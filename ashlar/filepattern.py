@@ -17,7 +17,7 @@ from . import reg
 
 class FilePatternMetadata(reg.Metadata):
 
-    def __init__(self, path, pattern, overlap):
+    def __init__(self, path, pattern, overlap, pixel_size):
         # The pattern argument uses the Python Format String syntax with
         # required "row" and "col" and optionally "channel" fields. A width
         # specification with leading zeros must be used for any fields that are
@@ -27,6 +27,7 @@ class FilePatternMetadata(reg.Metadata):
         self.path = pathlib.Path(path)
         self.pattern = pattern
         self.overlap = overlap
+        self._pixel_size = pixel_size
         self._enumerate_tiles()
 
     def _enumerate_tiles(self):
@@ -77,7 +78,7 @@ class FilePatternMetadata(reg.Metadata):
 
     @property
     def pixel_size(self):
-        return 1.0
+        return self._pixel_size
 
     @property
     def pixel_dtype(self):
@@ -98,12 +99,14 @@ class FilePatternMetadata(reg.Metadata):
 
 class FilePatternReader(reg.Reader):
 
-    def __init__(self, path, pattern, overlap):
+    def __init__(self, path, pattern, overlap, pixel_size=1.0):
         # See FilePatternMetadata for an explanation of the pattern syntax.
         self.path = pathlib.Path(path)
         self.pattern = pattern
         self.overlap = overlap
-        self.metadata = FilePatternMetadata(self.path, self.pattern, overlap)
+        self.metadata = FilePatternMetadata(
+            self.path, self.pattern, overlap, pixel_size
+        )
 
     def read(self, series, c):
         path = str(self.path / self.filename(series, c))

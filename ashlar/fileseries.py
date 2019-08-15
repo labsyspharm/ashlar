@@ -34,7 +34,7 @@ def f2r_repl(m):
 
 class FileSeriesMetadata(reg.Metadata):
 
-    def __init__(self, path, pattern, overlap, width, height):
+    def __init__(self, path, pattern, overlap, width, height, pixel_size):
         # The pattern argument uses the Python Format String syntax with
         # required "series" and optionally "channel" fields. A width
         # specification with leading zeros must be used for any fields that are
@@ -46,6 +46,7 @@ class FileSeriesMetadata(reg.Metadata):
         self.overlap = overlap
         self.width = width
         self.height = height
+        self._pixel_size = pixel_size
         self._enumerate_tiles()
 
     def _enumerate_tiles(self):
@@ -90,7 +91,7 @@ class FileSeriesMetadata(reg.Metadata):
 
     @property
     def pixel_size(self):
-        return 1.0
+        return self._pixel_size
 
     @property
     def pixel_dtype(self):
@@ -117,12 +118,12 @@ class FileSeriesMetadata(reg.Metadata):
 
 class FileSeriesReader(reg.Reader):
 
-    def __init__(self, path, pattern, overlap, width, height):
+    def __init__(self, path, pattern, overlap, width, height, pixel_size=1.0):
         # See FileSeriesMetadata for an explanation of the pattern syntax.
         self.path = pathlib.Path(path)
         self.pattern = pattern
         self.metadata = FileSeriesMetadata(
-            self.path, self.pattern, overlap, width, height
+            self.path, self.pattern, overlap, width, height, pixel_size
         )
 
     def read(self, series, c):
