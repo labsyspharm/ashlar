@@ -929,9 +929,7 @@ class Mosaic(object):
                     kwargs['tile'] = (self.tile_size, self.tile_size)
                 if self.verbose:
                     print("        writing to %s" % filename)
-                skimage.io.imsave(
-                    filename, mosaic_image, check_contrast=False, **kwargs
-                )
+                imsave(filename, mosaic_image, **kwargs)
             elif mode == 'return':
                 all_images.append(mosaic_image)
         if mode == 'return':
@@ -964,10 +962,9 @@ def build_pyramid(
             img = skimage.io.imread(path, series=prev_level, key=i)
             img = skimage.transform.pyramid_reduce(img, multichannel=False)
             img = convert(img, dtype)
-            skimage.io.imsave(
+            imsave(
                 path, img, bigtiff=True, metadata=None, append=True,
-                tile=(tile_size, tile_size), photometric='minisblack',
-                check_contrast=False
+                tile=(tile_size, tile_size), photometric='minisblack'
             )
         shapes.append(img.shape)
         if verbose:
@@ -1246,6 +1243,24 @@ def convert(image, dtype, **kwargs):
             '^skimage\.util\.dtype'
         )
         return skimage.util.dtype.convert(image, dtype, **kwargs)
+
+
+def imsave(fname, arr, **kwargs):
+    """Save an image to file.
+
+    This is a wrapper around skimage.io.imsave to handle the lack of the
+    check_contrast argument on v0.14, which is the last version to support
+    Python 2.7.
+
+    """
+    if skimage.__version__.startswith('0.14.'):
+        warnings.warn(
+            "Please upgrade to Python 3 and scikit-image v0.15+ to make image"
+            " saving much less resource-intensive."
+        )
+    else:
+        kwargs['check_contrast'] = False
+    return skimage.io.imsave(fname, arr, **kwargs)
 
 
 def plot_edge_shifts(aligner, img=None, bounds=True):
