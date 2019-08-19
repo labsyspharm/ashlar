@@ -851,23 +851,25 @@ class Mosaic(object):
         if not dfp_path and not ffp_path:
             self.do_correction = False
         else:
-            self.do_correction = True
             c = self.aligner.metadata.num_channels
+            default_shape = (1, 1, c) if c in (1, 3, 4) else (c, 1, 1)
             self.dfp = np.atleast_3d(
-                skimage.io.imread(dfp_path) if dfp_path else np.zeros((1, 1, c))
+                skimage.io.imread(dfp_path) if dfp_path else np.zeros(default_shape)
             )
             self.ffp = np.atleast_3d(
-                skimage.io.imread(ffp_path) if ffp_path else np.ones((1, 1, c))
+                skimage.io.imread(ffp_path) if ffp_path else np.ones(default_shape)
             )
+            if (self.dfp.ndim, self.ffp.ndim) != (3, 3):
+                raise ValueError('Dimension of illumination profiles does not match target image')
+            if c in (1, 3, 4):
+                self.dfp = np.moveaxis(self.dfp, -1, 0)
+                self.ffp = np.moveaxis(self.ffp, -1, 0)
+            correct_shapes = [(c, 1, 1), (c,) + tuple(self.aligner.metadata.size)]
+            if self.dfp.shape not in correct_shapes or self.ffp.shape not in correct_shapes:
+                raise ValueError('Image size of illumination profiles does not match target image')
             # FIXME This assumes integer dtypes. Do we need to support floats?
             self.dfp /= np.iinfo(self.dtype).max
-            try:
-                self.dfp = np.moveaxis(self.dfp, self.dfp.shape.index(c), -1)
-                self.ffp = np.moveaxis(self.ffp, self.ffp.shape.index(c), -1)
-            except ValueError:
-                print('    Dimension of illumination profiles does not match target image')
-                print('    Illumination correction is skipped for this cycle')
-                self.do_correction = False
+            self.do_correction = True
 
     def run(self, mode='write', debug=False):
         if mode not in ('write', 'return'):
@@ -950,8 +952,8 @@ class Mosaic(object):
     def correct_illumination(self, img, channel):
         if self.do_correction:
             img = skimage.img_as_float(img, force_copy=True)
-            img -= self.dfp[..., channel]
-            img /= self.ffp[..., channel]
+            img -= self.dfp[channel, ...]
+            img /= self.ffp[channel, ...]
             img.clip(0, 1, out=img)
         return img
 
