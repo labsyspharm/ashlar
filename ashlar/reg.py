@@ -847,7 +847,7 @@ class Mosaic(object):
             raise ValueError("invalid channels: %s" % invalid_channels)
         return channels
 
-    def _load_single_profile(self, path, num_channels, img_size):
+    def _load_single_profile(self, path, num_channels, img_size, profile_type):
         """Load, normalize, and validate illumination profile.
         
         Parameters
@@ -857,36 +857,54 @@ class Mosaic(object):
         num_channels : int
             Expected number of channels in the profile image.
         img_size : tuple
-            shape of a 2D image in (row, column).
+            Shape of a 2D image in (row, column).
+        profile_type : str
+            Type of profile, only accepts 'dark' and 'flat'. 
     
         Returns
         ----------
         ndarray
             Image as numpy array in the (channel, row, column) arrangement. 
-            If ``path`` is ``None``, return a default array of zeros in (channel, 1, 1) shape.
+            If ``path`` is ``None``, return an array in (channel, 1, 1) shape.
+            The values in the array are 0 and 1 for dark- and flat-field profile, respectively.
         """
+        assert profile_type in ('dark', 'flat'), "profile_type must be either 'dark' or 'flat'."
         if path is None:
-            return np.zeros((num_channels, 1, 1))
-        profile = np.atleast_3d(skimage.io.imread(path))
-        if profile.ndim != 3:
-            raise ValueError('Dimension of illumination profiles does not match target image')
+            profile_shape = (num_channels, 1, 1)
+            return np.zeros(profile_shape) \
+                if profile_type is 'dark' \
+                else np.ones(profile_shape)
+
+        expected_ndim = 2 if num_channels is 1 else 3
+        profile = skimage.io.imread(path)
+        if profile.ndim != expected_ndim:
+            raise ValueError(
+                'Expect dimensionality is {} for {}-field profile but {} has {} dimensions.'.format(
+                    expected_ndim, profile_type, path, profile.ndim
+                )
+            )
+
+        profile = np.atleast_3d(profile)
         if num_channels in (1, 3, 4):
             profile = np.moveaxis(profile, 2, 0)
         if profile.shape != (num_channels,) + img_size:
-            raise ValueError('Image size of illumination profiles does not match target image')
+            raise ValueError(
+                '{}-field profile shape {} does not match target image shape {}.'.format(
+                    profile_type.capitalize(), profile.shape, img_size
+                )
+            )
+            
         return profile
 
-    def _load_correction_profiles(self, dfp_path, ffp_path):
+    def _load_correction_profiles(self, dfp_path, ffp_path, profile_tpye):
         if dfp_path is None and ffp_path is None:
             self.do_correction = False
         else:
             num_channels = self.aligner.metadata.num_channels
             img_size = tuple(self.aligner.metadata.size)
-            self.dfp = self._load_single_profile(dfp_path, num_channels, img_size)
-            self.ffp = self._load_single_profile(ffp_path, num_channels, img_size)
-            # Pixel values in the default profile is zero, adding 1 here for ffp
-            if ffp_path is None:
-                self.ffp += 1
+            self.dfp = self._load_single_profile(dfp_path, num_channels, img_size, 'dark')
+            self.ffp = self._load_single_profile(ffp_path, num_channels, img_size, 'flat')
+            
             # FIXME This assumes integer dtypes. Do we need to support floats?
             self.dfp /= np.iinfo(self.dtype).max
             self.do_correction = True
