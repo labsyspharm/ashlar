@@ -163,7 +163,7 @@ def main(argv=sys.argv):
                 aligner_args, mosaic_args, args.pyramid, args.quiet
             )
     except ProcessingError as e:
-        print(e.message)
+        print(e)
         return 1
 
 
