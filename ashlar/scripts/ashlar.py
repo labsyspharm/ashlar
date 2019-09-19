@@ -8,7 +8,7 @@ except ImportError:
     import pathlib2 as pathlib
 from .. import __version__ as VERSION
 from .. import reg
-from ..reg import BioformatsReader
+from ..reg import PlateReader, BioformatsReader
 from ..filepattern import FilePatternReader
 from ..fileseries import FileSeriesReader
 from ..zen import ZenReader
@@ -238,7 +238,8 @@ def process_plates(
     aligner_args, mosaic_args, pyramid, quiet
 ):
 
-    metadata = reg.BioformatsMetadata(filepaths[0])
+    temp_reader = build_reader(filepaths[0])
+    metadata = temp_reader.metadata
     if metadata.num_plates == 0:
         # FIXME raise ProcessingError here instead?
         print("Dataset does not contain plate information.")
@@ -292,10 +293,10 @@ def build_reader(path, plate_well=None):
             raise ProcessingError("Unknown reader: {}".format(reader_name))
         kwargs.update(parse_kwargs_string(match.group('kwargs')))
     if plate_well is not None:
-        if reader_class is not BioformatsReader:
+        if not issubclass(reader_class, PlateReader):
             raise ProcessingError(
-                "Plate/well processing is only supported by the bioformats"
-                " image reader."
+                "The %s reader does not support plate/well processing"
+                % reader_class.__name__
             )
         kwargs.update(plate=plate_well[0], well=plate_well[1])
     reader = reader_class(path, **kwargs)

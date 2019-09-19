@@ -1,4 +1,5 @@
 import re
+import itertools
 try:
     import pathlib
 except ImportError:
@@ -10,7 +11,7 @@ from . import reg
 
 # Classes for reading datasets consisting of TIFF files with a naming pattern.
 # The pattern must include an integer series number, and optionally a channel
-# name or number.
+# name or number, and well name.
 #
 # This code is experimental and probably still has a lot of rough edges.
 
@@ -32,7 +33,7 @@ def f2r_repl(m):
     return r
 
 
-class FileSeriesMetadata(reg.Metadata):
+class FileSeriesMetadata(reg.PlateMetadata):
 
     def __init__(self, path, pattern, overlap, width, height, pixel_size):
         # The pattern argument uses the Python Format String syntax with
@@ -41,6 +42,7 @@ class FileSeriesMetadata(reg.Metadata):
         # zero-padded. The pattern is used both to parse the filenames upon
         # initialization as well as to synthesize filenames when reading images.
         # Example pattern: 'img_s{series}_w{channel}.tif'
+        super(FileSeriesMetadata, self).__init__()
         self.path = pathlib.Path(path)
         self.pattern = pattern
         self.overlap = overlap
@@ -51,6 +53,7 @@ class FileSeriesMetadata(reg.Metadata):
 
     def _enumerate_tiles(self):
         regex = format_to_regex(self.pattern)
+        wells = set()
         series = set()
         channels = set()
         n = 0
@@ -59,18 +62,24 @@ class FileSeriesMetadata(reg.Metadata):
             match = re.match(regex, p.name)
             if match:
                 gd = match.groupdict()
+                w = gd.get('well')
                 s = int(gd['series'])
                 c = gd.get('channel')
+                wells.add(w)
                 series.add(s)
                 channels.add(c)
-                self.filename_components[s, c] = gd
+                self.filename_components[w, s, c] = gd
                 n += 1
-        if len(self.filename_components) != len(series) * len(channels):
+        if len(self.filename_components) != len(wells) * len(series) * len(channels):
             raise Exception("Missing images detected")
-        self._actual_num_images = len(series)
+        # Build sorted list of (well, series) tuples for all wells.
+        self.all_series = sorted(set(
+            k[:2] for k in self.filename_components.keys()
+        ))
+        self.well_map = dict(enumerate(sorted(wells)))
+        self._actual_num_images = len(series) * len(wells)
         self.channel_map = dict(enumerate(sorted(channels)))
-        self.series_offset = min(series)
-        path = self.path / self.filename(self.series_offset, 0)
+        path = self.path / self.filename(0, 0)
         img = skimage.io.imread(str(path))
         self._tile_size = np.array(img.shape[:2])
         self._dtype = img.dtype
@@ -88,6 +97,29 @@ class FileSeriesMetadata(reg.Metadata):
     @property
     def num_channels(self):
         return self._num_channels
+
+    # This only supports a single plate at the moment.
+    @property
+    def num_plates(self):
+        return 1
+
+    @property
+    def num_wells(self):
+        return [len(self.well_map)]
+
+    @property
+    def plate_well_series(self):
+        return [
+            list([a[0] for a in v] for k, v in itertools.groupby(enumerate(self.all_series), key=lambda x: x[1][0]))
+        ]
+
+    def plate_name(self, i):
+        assert i == 0, "Plate index out of range"
+        return "Plate_1"
+
+    def well_name(self, plate, i):
+        assert plate == 0, "Plate index out of range"
+        return self.well_map[i]
 
     @property
     def pixel_size(self):
@@ -110,23 +142,29 @@ class FileSeriesMetadata(reg.Metadata):
         return row, col
 
     def filename(self, series, c):
-        series = series + self.series_offset
+        well, series = self.all_series[self.active_series[series]]
         c = self.channel_map[c]
-        components = self.filename_components[series, c]
+        components = self.filename_components[well, series, c]
         return self.pattern.format(**components)
 
 
-class FileSeriesReader(reg.Reader):
+class FileSeriesReader(reg.PlateReader):
 
-    def __init__(self, path, pattern, overlap, width, height, pixel_size=1.0):
+    def __init__(
+        self, path, pattern, overlap, width, height, pixel_size=1.0,
+        plate=None, well=None
+    ):
         # See FileSeriesMetadata for an explanation of the pattern syntax.
         self.path = pathlib.Path(path)
         self.pattern = pattern
         self.metadata = FileSeriesMetadata(
             self.path, self.pattern, overlap, width, height, pixel_size
         )
+        self.metadata.set_active_plate_well(plate, well)
 
     def read(self, series, c):
+        # TODO: Address tension between non-plate and plate-aware modes
+        # here and in Metadata class.
         path = str(self.path / self.metadata.filename(series, c))
         kwargs = {}
         if self.metadata.multi_channel_tiles:

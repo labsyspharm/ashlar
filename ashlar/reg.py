@@ -198,6 +198,13 @@ class Reader(object):
         raise NotImplementedError
 
 
+class PlateReader(Reader):
+    # No API here, just a way to signal that a subclass's metadata class
+    # inherits from PlateMetadata. This is probably a sign that the
+    # architectural split between Metadata and Reader should be reconsidered.
+    pass
+
+
 class BioformatsMetadata(PlateMetadata):
 
     _pixel_dtypes = {
@@ -368,7 +375,7 @@ class BioformatsMetadata(PlateMetadata):
         return np.array(values, dtype=int)
 
 
-class BioformatsReader(Reader):
+class BioformatsReader(PlateReader):
 
     def __init__(self, path, plate=None, well=None):
         self.path = path
