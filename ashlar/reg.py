@@ -871,9 +871,11 @@ class Mosaic(object):
         assert profile_type in ('dark', 'flat'), "profile_type must be either 'dark' or 'flat'."
         if path is None:
             profile_shape = (num_channels, 1, 1)
-            return np.zeros(profile_shape) \
-                if profile_type is 'dark' \
-                else np.ones(profile_shape)
+            return (
+                np.zeros(profile_shape) 
+                    if profile_type is 'dark' 
+                    else np.ones(profile_shape)
+            )
 
         expected_ndim = 2 if num_channels is 1 else 3
         profile = skimage.io.imread(path)
@@ -885,6 +887,9 @@ class Mosaic(object):
             )
 
         profile = np.atleast_3d(profile)
+        # skimage.io.imread convert images with 3 and 4 channels into (Y, X, C) shape, 
+        # but as (C, Y, X) for images with other channel numbers. We normalize 
+        # image-shape to (C, Y, X) discarding number of channels in the image.
         if num_channels in (1, 3, 4):
             profile = np.moveaxis(profile, 2, 0)
         if profile.shape != (num_channels,) + img_size:
