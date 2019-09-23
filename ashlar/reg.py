@@ -889,7 +889,7 @@ class Mosaic(object):
         profile = np.atleast_3d(profile)
         # skimage.io.imread convert images with 3 and 4 channels into (Y, X, C) shape, 
         # but as (C, Y, X) for images with other channel numbers. We normalize 
-        # image-shape to (C, Y, X) discarding number of channels in the image.
+        # image-shape to (C, Y, X) regardless of the number of channels in the image.
         if num_channels in (1, 3, 4):
             profile = np.moveaxis(profile, 2, 0)
         if profile.shape != (num_channels,) + img_size:
