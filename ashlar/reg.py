@@ -908,7 +908,7 @@ class Mosaic(object):
             
         return profile
 
-    def _load_correction_profiles(self, dfp_path, ffp_path, profile_tpye):
+    def _load_correction_profiles(self, dfp_path, ffp_path):
         if dfp_path is None and ffp_path is None:
             self.do_correction = False
         else:
