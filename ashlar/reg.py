@@ -731,6 +731,8 @@ class LayerAligner(object):
         # Computed shifts of exactly 0,0 seem to result from failed
         # registration. We need to throw those out for this purpose.
         discard = (self.shifts == 0).all(axis=1)
+        # Discard any tile registration that error is infinite
+        discard |= np.isinf(self.errors)
         # Take the median of registered shifts to determine the offset
         # (translation) from the reference image to this one.
         offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
@@ -751,6 +753,8 @@ class LayerAligner(object):
     def register(self, t):
         """Return relative shift between images and the alignment error."""
         its, ref_img, img = self.overlap(t)
+        if np.any(np.array(its.shape) == 0): 
+            return (0, 0), np.inf
         shift, error = register(ref_img, img, self.filter_sigma)
         # We don't use padding and thus can skip the math to account for it.
         assert (its.padding == 0).all(), "Unexpected non-zero padding"
