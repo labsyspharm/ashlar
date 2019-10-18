@@ -1,4 +1,5 @@
 from __future__ import print_function
+import warnings
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,10 +10,10 @@ from .. import reg
 def main(argv=sys.argv):
 
     try:
-        import modest_image
+        from modest_image import imshow
     except ImportError:
-        print("Please install ModestImage (Python 2.7 only) to use this script.")
-        exit()
+        warnings.warn("Please install ModestImage to speed up image rendering")
+        imshow = plt.imshow
 
     filepath = argv[1]
 
@@ -38,7 +39,7 @@ def main(argv=sys.argv):
 
     ax = plt.gca()
 
-    modest_image.imshow(ax, mosaic)
+    imshow(X=mosaic, axes=ax)
 
     h, w = metadata.size
     for xy in np.fliplr(positions):
