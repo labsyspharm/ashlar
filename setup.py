@@ -103,6 +103,7 @@ setup(
     version=VERSION,
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
+    long_description_content_type='text/x-rst',
     cmdclass=versioneer.get_cmdclass(cmdclass),
     packages=find_packages(),
     include_package_data=True,
