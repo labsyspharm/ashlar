@@ -1383,10 +1383,11 @@ def plot_edge_quality(
     # (which is itself purple).
     infs = error == np.inf
     error[infs] = -1
-    error_f = error[~infs]
-    emin = np.min(error_f)
-    emax = np.max(error_f)
-    error[~infs] = (error_f - emin) / (emax - emin)
+    if not infs.all():
+        error_f = error[~infs]
+        emin = np.min(error_f)
+        emax = np.max(error_f)
+        error[~infs] = (error_f - emin) / (emax - emin)
     # Neighbor graph colored by edge alignment quality (brighter = better).
     nx.draw(
         aligner.neighbors_graph, ax=ax, with_labels=True,
