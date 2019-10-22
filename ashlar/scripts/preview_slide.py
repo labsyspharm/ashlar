@@ -1,13 +1,36 @@
-from __future__ import print_function
+from __future__ import print_function, division
 import warnings
 import sys
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.text as mtext
 from .. import reg
 
 
 def main(argv=sys.argv):
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Stitch a multi-tile image using the nominal stage positions and"
+            " display the resulting image."
+        )
+    )
+    parser.add_argument(
+        "input", help="Path to image (BioFormats supported formats only)"
+    )
+    parser.add_argument(
+        "-n", "--numbers", action="store_true", help="Display tile numbers"
+    )
+    parser.add_argument(
+        "-b", "--bounds", action="store_true", help="Display tile bounds"
+    )
+    parser.add_argument(
+        "-c", "--channel", type=int, default=0,
+        help="Channel number to display; default: 0",
+    )
+    args = parser.parse_args()
 
     try:
         from modest_image import imshow
@@ -15,26 +38,19 @@ def main(argv=sys.argv):
         warnings.warn("Please install ModestImage to speed up image rendering")
         imshow = plt.imshow
 
-    filepath = argv[1]
-
-    channel = 0
-    if len(argv) >= 3:
-        channel = int(argv[2])
-
-    reader = reg.BioformatsReader(filepath)
+    reader = reg.BioformatsReader(args.input)
     metadata = reader.metadata
 
     positions = metadata.positions - metadata.origin
-    mshape = ((metadata.positions + metadata.size - metadata.origin).max(axis=0) + 1).astype(int)
+    mshape = ((positions + metadata.size).max(axis=0) + 1).astype(int)
     mosaic = np.zeros(mshape, dtype=np.uint16)
 
     total = reader.metadata.num_images
     for i in range(total):
         sys.stdout.write("\rLoading %d/%d" % (i + 1, total))
         sys.stdout.flush()
-        reg.paste(
-            mosaic, reader.read(c=channel, series=i), positions[i], np.maximum
-        )
+        img = reader.read(c=args.channel, series=i)
+        reg.paste(mosaic, img, positions[i], np.maximum)
     print()
 
     ax = plt.gca()
@@ -42,8 +58,19 @@ def main(argv=sys.argv):
     imshow(X=mosaic, axes=ax)
 
     h, w = metadata.size
-    for xy in np.fliplr(positions):
-        ax.add_patch(mpatches.Rectangle(xy, w, h, color='black', fill=False))
+    for i, (x, y) in enumerate(np.fliplr(positions)):
+        if args.bounds:
+            rect = mpatches.Rectangle((x, y), w, h, color='black', fill=False)
+            ax.add_patch(rect)
+        if args.numbers:
+            xc = x + w / 2
+            yc = y + h / 2
+            circle = mpatches.Circle((xc, yc), w / 5, color='salmon', alpha=0.5)
+            text = mtext.Text(
+                xc, yc, str(i), color='k', size=10, ha='center', va='center'
+            )
+            ax.add_patch(circle)
+            ax.add_artist(text)
 
     plt.show()
 
