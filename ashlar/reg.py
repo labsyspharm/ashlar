@@ -347,17 +347,24 @@ class BioformatsMetadata(PlateMetadata):
             method = getattr(self._metadata, 'getPlanePosition%s' % dim)
             # FIXME verify all planes have the same X,Y position.
             v_units = method(i, 0)
-            v = v_units.value(UNITS.MICROMETER)
-            if v is None:
-                # Conversion failed, which usually happens when the unit is
-                # "reference frame". Proceed as if it's actually microns but
-                # emit a warning.
+            if v_units is None:
                 warnings.warn(
-                    "Stage coordinates' measurement unit is undefined;"
-                    " assuming micrometers."
+                    "Stage coordinates undefined; falling back to (0, 0)."
                 )
-                v = v_units.value()
-            values.append(v.doubleValue())
+                value = 1.0
+            else:
+                v = v_units.value(UNITS.MICROMETER)
+                if v is None:
+                    # Conversion failed, which usually happens when the unit is
+                    # "reference frame". Proceed as if it's actually microns but
+                    # emit a warning.
+                    warnings.warn(
+                        "Stage coordinates' measurement unit is undefined;"
+                        " assuming micrometers."
+                    )
+                    v = v_units.value()
+                value = v.doubleValue()
+            values.append(value)
         position_microns = np.array(values, dtype=float)
         if self.format_name != 'Metamorph STK':
             # Invert Y so that stage position coordinates and image pixel
