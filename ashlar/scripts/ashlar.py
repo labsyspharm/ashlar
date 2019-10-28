@@ -31,6 +31,16 @@ def main(argv=sys.argv):
               ' at 0')
     )
     parser.add_argument(
+        '--flip-x', default=False, action='store_true',
+        help=('flip tile positions left-to-right to account for unusual'
+              ' microscope configurations')
+    )
+    parser.add_argument(
+        '--flip-y', default=False, action='store_true',
+        help=('flip tile positions top-to-bottom to account for unusual'
+              ' microscope configurations')
+    )
+    parser.add_argument(
         '--output-channels', nargs='*', type=int, metavar='CHANNEL',
         help=('output only channels listed in CHANNELS; numbering starts at 0')
     )
@@ -144,14 +154,16 @@ def main(argv=sys.argv):
     try:
         if args.plates:
             return process_plates(
-                filepaths, output_path, args.filename_format, ffp_paths,
-                dfp_paths, aligner_args, mosaic_args, args.pyramid, args.quiet
+                filepaths, output_path, args.filename_format, args.flip_x,
+                args.flip_y, ffp_paths, dfp_paths, aligner_args, mosaic_args,
+                args.pyramid, args.quiet
             )
         else:
             mosaic_path_format = str(output_path / args.filename_format)
             return process_single(
-                filepaths, mosaic_path_format, ffp_paths, dfp_paths,
-                aligner_args, mosaic_args, args.pyramid, args.quiet
+                filepaths, mosaic_path_format, args.flip_x, args.flip_y,
+                ffp_paths, dfp_paths, aligner_args, mosaic_args, args.pyramid,
+                args.quiet
             )
     except ProcessingError as e:
         print(e)
@@ -159,7 +171,7 @@ def main(argv=sys.argv):
 
 
 def process_single(
-    filepaths, mosaic_path_format, ffp_paths, dfp_paths,
+    filepaths, mosaic_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
     aligner_args, mosaic_args, pyramid, quiet, plate_well=None
 ):
 
@@ -180,6 +192,7 @@ def process_single(
         print('Cycle 0:')
         print('    reading %s' % filepaths[0])
     reader = build_reader(filepaths[0], plate_well=plate_well)
+    process_axis_flip(reader, flip_x, flip_y)
     edge_aligner = reg.EdgeAligner(reader, **aligner_args)
     edge_aligner.run()
     mshape = edge_aligner.mosaic_shape
@@ -200,6 +213,7 @@ def process_single(
             print('Cycle %d:' % cycle)
             print('    reading %s' % filepath)
         reader = build_reader(filepath, plate_well=plate_well)
+        process_axis_flip(reader, flip_x, flip_y)
         layer_aligner = reg.LayerAligner(reader, edge_aligner, **aligner_args)
         layer_aligner.run()
         mosaic_args_final = mosaic_args.copy()
@@ -225,8 +239,8 @@ def process_single(
 
 
 def process_plates(
-    filepaths, output_path, filename_format, ffp_paths, dfp_paths,
-    aligner_args, mosaic_args, pyramid, quiet
+    filepaths, output_path, filename_format, flip_x, flip_y, ffp_paths,
+    dfp_paths, aligner_args, mosaic_args, pyramid, quiet
 ):
 
     temp_reader = build_reader(filepaths[0])
@@ -245,8 +259,9 @@ def process_plates(
                 well_path.mkdir(parents=True, exist_ok=True)
                 mosaic_path_format = str(well_path / filename_format)
                 process_single(
-                    filepaths, mosaic_path_format, ffp_paths, dfp_paths,
-                    aligner_args, mosaic_args, pyramid, quiet, plate_well=(p, w)
+                    filepaths, mosaic_path_format, flip_x, flip_y,
+                    ffp_paths, dfp_paths, aligner_args, mosaic_args, pyramid,
+                    quiet, plate_well=(p, w)
                 )
             else:
                 print("Skipping -- No images found.")
@@ -258,6 +273,15 @@ def process_plates(
 
 def format_cycle(f, cycle):
     return f.format(cycle=cycle, channel='{channel}')
+
+
+def process_axis_flip(reader, flip_x, flip_y):
+    metadata = reader.metadata
+    # Trigger lazy initialization.
+    _ = metadata.positions
+    sx = -1 if flip_x else 1
+    sy = -1 if flip_y else 1
+    metadata._positions *= [sy, sx]
 
 
 readers = {

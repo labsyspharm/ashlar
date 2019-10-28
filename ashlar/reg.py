@@ -358,10 +358,9 @@ class BioformatsMetadata(PlateMetadata):
                 value = v.doubleValue()
             values.append(value)
         position_microns = np.array(values, dtype=float)
-        if self.format_name != 'Metamorph STK':
-            # Invert Y so that stage position coordinates and image pixel
-            # coordinates are aligned.
-            position_microns *= [-1, 1]
+        # Invert Y so that stage position coordinates and image pixel
+        # coordinates are aligned (most formats seem to work this way).
+        position_microns *= [-1, 1]
         position_pixels = position_microns / self.pixel_size
         return position_pixels
 
