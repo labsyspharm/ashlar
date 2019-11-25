@@ -1375,7 +1375,7 @@ def plot_edge_quality(
     final_nx_kwargs.update(nx_kwargs)
     if show_tree:
         nrows, ncols = 1, 2
-        if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] > 4 / 3:
+        if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] > 2 * 4 / 3:
             nrows, ncols = ncols, nrows
     else:
         nrows, ncols = 1, 1
