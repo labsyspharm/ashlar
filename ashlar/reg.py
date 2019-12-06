@@ -32,6 +32,7 @@ try:
 except ImportError:
     modest_image = None
 from . import utils
+from . import thumbnail
 from . import __version__ as _version
 
 # Patch np.fft to use pyfftw so skimage utilities can benefit.
@@ -446,12 +447,18 @@ class EdgeAligner(object):
     neighbors_graph = neighbors_graph
 
     def run(self):
+        self.make_thumbnail()
         self.check_overlaps()
         self.compute_threshold()
         self.register_all()
         self.build_spanning_tree()
         self.calculate_positions()
         self.fit_model()
+
+    def make_thumbnail(self):
+        self.reader.thumbnail_img = thumbnail.thumbnail(
+            self.reader, channel=self.channel
+        )
 
     def check_overlaps(self):
         # This might be better addressed by removing the +1 from the
@@ -703,18 +710,26 @@ class LayerAligner(object):
         # use metadata positions to find the cycle-to-cycle tile
         # correspondences, but the corrected positions for computing our
         # corrected positions.
-        self.tile_positions = self.metadata.positions - reference_aligner.origin
-        reference_positions = reference_aligner.positions
-        dist = scipy.spatial.distance.cdist(reference_positions,
-                                            self.tile_positions)
-        self.reference_idx = np.argmin(dist, 0)
-        self.reference_positions = reference_positions[self.reference_idx]
 
     neighbors_graph = neighbors_graph
 
     def run(self):
+        self.coarse_align()
         self.register_all()
         self.calculate_positions()
+
+    def coarse_align(self):
+        self.cycle_offset = thumbnail.calculate_cycle_offset(
+            self.reference_aligner.reader, self.reader,
+            channel=self.channel, save=(False, True)
+        )
+        self.corrected_nominal_positions = self.metadata.positions + self.cycle_offset
+        reference_positions = self.reference_aligner.metadata.positions
+        dist = scipy.spatial.distance.cdist(reference_positions,
+                                            self.corrected_nominal_positions)
+        self.reference_idx = np.argmin(dist, 0)
+        self.reference_positions = reference_positions[self.reference_idx]
+        self.reference_aligner_positions = self.reference_aligner.positions[self.reference_idx]
 
     def register_all(self):
         n = self.metadata.num_images
@@ -731,14 +746,25 @@ class LayerAligner(object):
             print()
 
     def calculate_positions(self):
-        self.positions = self.tile_positions + self.shifts
+        self.positions = self.corrected_nominal_positions + self.shifts
+        self.positions += (
+            self.reference_aligner_positions - 
+            self.reference_positions
+        )
+        self.reference_aligner.shifts[self.reference_idx]
         self.constrain_positions()
         self.centers = self.positions + self.metadata.size / 2
 
     def constrain_positions(self):
-        # Computed shifts of exactly 0,0 seem to result from failed
-        # registration. We need to throw those out for this purpose.
-        discard = (self.shifts == 0).all(axis=1)
+        # Discard camera background registration which will shift target 
+        # positions to reference positions
+        position_diffs = np.absolute(
+            self.positions - self.reference_aligner_positions
+        )
+        # Round the diffs to one decimal place because we upsample 10 
+        # times the image to calculate subpixel shifts
+        position_diffs = np.rint(position_diffs * 10) / 10
+        discard = (position_diffs == 0).all(axis=1)
         # Discard any tile registration that error is infinite
         discard |= np.isinf(self.errors)
         # Take the median of registered shifts to determine the offset
@@ -746,7 +772,7 @@ class LayerAligner(object):
         offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
         # Here we assume the fitted linear model from the reference image is
         # still appropriate, apart from the extra offset we just computed.
-        predictions = self.reference_aligner.lr.predict(self.metadata.positions)
+        predictions = self.reference_aligner.lr.predict(self.corrected_nominal_positions)
         # Discard any tile registration that's too far from the linear model,
         # replacing it with the relevant model prediction.
         distance = np.linalg.norm(self.positions - predictions - offset, axis=1)
@@ -770,7 +796,7 @@ class LayerAligner(object):
 
     def intersection(self, t):
         corners1 = np.vstack([self.reference_positions[t],
-                              self.tile_positions[t]])
+                              self.corrected_nominal_positions[t]])
         corners2 = corners1 + self.reader.metadata.size
         its = Intersection(corners1, corners2)
         its.shape = its.shape // 32 * 32
@@ -828,7 +854,7 @@ class Intersection(object):
         max_shape = (corners2 - corners1).max(axis=0)
         min_size = min_size.clip(1, max_shape)
         position = corners1.max(axis=0)
-        initial_shape = np.ceil(corners2.min(axis=0) - position).astype(int)
+        initial_shape = np.floor(corners2.min(axis=0) - position).astype(int)
         clipped_shape = np.maximum(initial_shape, min_size)
         self.shape = np.ceil(clipped_shape).astype(int)
         self.padding = self.shape - initial_shape
