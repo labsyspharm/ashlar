@@ -747,22 +747,23 @@ class LayerAligner(object):
 
     def calculate_positions(self):
         self.positions = self.corrected_nominal_positions + self.shifts
+        # self.reference_aligner.shifts[reference_idx] does not equal to 
+        # (self.reference_aligner_positions - self.reference_positions)
         self.positions += (
             self.reference_aligner_positions - 
             self.reference_positions
         )
-        self.reference_aligner.shifts[self.reference_idx]
         self.constrain_positions()
         self.centers = self.positions + self.metadata.size / 2
 
     def constrain_positions(self):
         # Discard camera background registration which will shift target 
-        # positions to reference positions
+        # positions to reference aligner positions
         position_diffs = np.absolute(
             self.positions - self.reference_aligner_positions
         )
-        # Round the diffs to one decimal place because we upsample 10 
-        # times the image to calculate subpixel shifts
+        # Round the diffs to one decimal point because the subpixel shifts 
+        # are calculate by 10 times upsampling
         position_diffs = np.rint(position_diffs * 10) / 10
         discard = (position_diffs == 0).all(axis=1)
         # Discard any tile registration that error is infinite
