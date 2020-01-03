@@ -763,7 +763,8 @@ class LayerAligner(object):
 
     def constrain_positions(self):
         # Discard camera background registration which will shift target 
-        # positions to reference aligner positions
+        # positions to reference aligner positions, due to strong self-correlation 
+        # of the sensor dark current pattern which dominates in low-signal images.
         position_diffs = np.absolute(
             self.positions - self.reference_aligner_positions
         )
