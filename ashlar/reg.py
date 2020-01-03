@@ -456,7 +456,7 @@ class EdgeAligner(object):
         self.fit_model()
 
     def make_thumbnail(self):
-        self.reader.thumbnail_img = thumbnail.thumbnail(
+        self.reader.thumbnail = thumbnail.make_thumbnail(
             self.reader, channel=self.channel
         )
 
@@ -714,14 +714,19 @@ class LayerAligner(object):
     neighbors_graph = neighbors_graph
 
     def run(self):
+        self.make_thumbnail()
         self.coarse_align()
         self.register_all()
         self.calculate_positions()
 
+    def make_thumbnail(self):
+        self.reader.thumbnail = thumbnail.make_thumbnail(
+            self.reader, channel=self.channel
+        )
+
     def coarse_align(self):
         self.cycle_offset = thumbnail.calculate_cycle_offset(
-            self.reference_aligner.reader, self.reader,
-            channel=self.channel, save=(False, True)
+            self.reference_aligner.reader, self.reader
         )
         self.corrected_nominal_positions = self.metadata.positions + self.cycle_offset
         reference_positions = self.reference_aligner.metadata.positions
