@@ -1,4 +1,4 @@
-FROM ubuntu
+FROM ubuntu:19.10
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -10,19 +10,19 @@ RUN apt-get update \
         libfftw3-long3 \
         libfftw3-single3 \
         openjdk-8-jdk-headless \
-        python-dev \
-        python-pip \
-        python-tk \
+        python3-dev \
+        python3-pip \
+        python3-tk \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install -q -U \
+RUN pip3 install -q -U \
     cython \
     numpy \
     pip \
     scipy
 
 COPY / /app/ashlar/
-RUN pip install /app/ashlar
+RUN pip3 install /app/ashlar
 
 ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64
 ENV OMP_NUM_THREADS 1

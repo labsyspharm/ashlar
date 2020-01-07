@@ -12,16 +12,15 @@ from setuptools.command.build_py import build_py
 import versioneer
 
 requires = [
-    'numpy>=1.13.0',
-    'future>=0.16.0',
-    'cython>=0.27.3',
+    'numpy>=1.18.1',
+    'cython>=0.29.14',
     'pyjnius==1.2.0',
-    'matplotlib>=2.1.0',
-    'networkx>=2.0',
+    'matplotlib>=3.1.2',
+    'networkx>=2.4',
     'pyfftw>=0.10.4',
-    'scipy>=0.19.1',
-    'scikit-image>=0.14.0',
-    'scikit-learn>=0.19.1'
+    'scipy>=1.3,<1.4', # Until pyfftw updated for scipy 1.4 fft API change
+    'scikit-image>=0.16.2',
+    'scikit-learn>=0.21.1'
 ]
 
 
@@ -108,9 +107,6 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=requires,
-    extras_require={
-        ':python_version <= "3.3"': ['pathlib2'],
-    },
     entry_points={
         'console_scripts': [
             'ashlar=ashlar.scripts.ashlar:main',
@@ -125,7 +121,6 @@ setup(
         'License :: OSI Approved :: %s' % LICENSE,
         'Natural Language :: English',
         'Operating System :: OS Independent',
-        'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 3',
         'Topic :: Scientific/Engineering :: Visualization'
     ],

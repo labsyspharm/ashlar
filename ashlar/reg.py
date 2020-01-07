@@ -548,16 +548,18 @@ class EdgeAligner(object):
         )
         spanning_tree = nx.Graph()
         spanning_tree.add_nodes_from(g)
-        for cc in nx.connected_component_subgraphs(g):
+        for c in nx.connected_components(g):
+            cc = g.subgraph(c)
             center = nx.center(cc)[0]
             paths = nx.single_source_dijkstra_path(cc, center).values()
             for path in paths:
-                spanning_tree.add_path(path)
+                nx.add_path(spanning_tree, path)
         self.spanning_tree = spanning_tree
 
     def calculate_positions(self):
         shifts = {}
-        for cc in nx.connected_component_subgraphs(self.spanning_tree):
+        for c in nx.connected_components(self.spanning_tree):
+            cc = self.spanning_tree.subgraph(c)
             center = nx.center(cc)[0]
             shifts[center] = np.array([0, 0])
             for edge in nx.traversal.bfs_edges(cc, center):
@@ -575,7 +577,7 @@ class EdgeAligner(object):
 
     def fit_model(self):
         components = sorted(
-            nx.connected_component_subgraphs(self.spanning_tree),
+            nx.connected_components(self.spanning_tree),
             key=len, reverse=True
         )
         # Fit LR model on positions of largest connected component.
