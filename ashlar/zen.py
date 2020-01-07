@@ -85,6 +85,7 @@ class ZenReader(reg.Reader):
 
     def __init__(self, path):
         self.metadata = ZenMetadata(path)
+        self.path = pathlib.Path(path)
 
     def read(self, series, c):
         path = self.metadata.image_path(series, c)
