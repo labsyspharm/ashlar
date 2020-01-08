@@ -743,12 +743,11 @@ class LayerAligner(object):
             print()
 
     def calculate_positions(self):
-        self.positions = self.corrected_nominal_positions + self.shifts
-        # self.reference_aligner.shifts[reference_idx] does not equal to 
-        # (self.reference_aligner_positions - self.reference_positions)
-        self.positions += (
-            self.reference_aligner_positions - 
-            self.reference_positions
+        self.positions = (
+            self.corrected_nominal_positions
+            + self.shifts
+            + self.reference_aligner_positions
+            - self.reference_positions
         )
         self.constrain_positions()
         self.centers = self.positions + self.metadata.size / 2
