@@ -66,7 +66,7 @@ class ZenMetadata(reg.Metadata):
 
     @property
     def pixel_dtype(self):
-        return np.uint16
+        return np.dtype(np.uint16)
 
     def tile_size(self, i):
         return self._tile_size
