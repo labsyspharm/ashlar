@@ -9,7 +9,7 @@ RUN apt-get update \
         libfftw3-double3 \
         libfftw3-long3 \
         libfftw3-single3 \
-        openjdk-8-jdk-headless \
+        openjdk-11-jdk-headless \
         python3-dev \
         python3-pip \
         python3-tk \
@@ -18,13 +18,11 @@ RUN apt-get update \
 RUN pip3 install -q -U \
     cython \
     numpy \
-    pip \
-    scipy
+    pip
 
 COPY / /app/ashlar/
 RUN pip3 install /app/ashlar
 
-ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64
 ENV OMP_NUM_THREADS 1
 
 VOLUME /data
