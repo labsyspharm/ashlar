@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.text as mtext
-from .. import reg
+from .. import reg, utils
 
 
 def main(argv=sys.argv):
@@ -50,7 +50,7 @@ def main(argv=sys.argv):
         sys.stdout.write("\rLoading %d/%d" % (i + 1, total))
         sys.stdout.flush()
         img = reader.read(c=args.channel, series=i)
-        reg.paste(mosaic, img, positions[i], np.maximum)
+        utils.paste(mosaic, img, positions[i], np.maximum)
     print()
 
     ax = plt.gca()
