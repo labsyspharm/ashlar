@@ -16,12 +16,6 @@ from ..zen import ZenReader
 
 def main(argv=sys.argv):
 
-    if sys.version_info.major < 3:
-        print("===========================================================")
-        print("** NOTICE: Python 2 support will end on January 1, 2020. **")
-        print("===========================================================")
-        print()
-
     parser = argparse.ArgumentParser(
         description='Stitch and align one or more multi-series images'
     )
