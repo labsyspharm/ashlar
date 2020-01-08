@@ -14,7 +14,7 @@ import versioneer
 requires = [
     'numpy>=1.18.1',
     'cython>=0.29.14',
-    'pyjnius==1.2.0',
+    'pyjnius>=1.2.1',
     'matplotlib>=3.1.2',
     'networkx>=2.4',
     'pyfftw>=0.10.4',
@@ -46,8 +46,8 @@ AUTHOR_EMAIL = 'jeremy_muhlich@hms.harvard.edu'
 LICENSE = 'MIT License'
 HOMEPAGE = 'https://github.com/sorgerlab/ashlar'
 
-LOCI_TOOLS_URL = 'http://downloads.openmicroscopy.org/bio-formats/5.9.2/artifacts/loci_tools.jar'
-LOCI_TOOLS_SHA1 = 'fbe2635b5580a5abd312979f5f3a70c953d4e613'
+LOCI_TOOLS_URL = 'https://downloads.openmicroscopy.org/bio-formats/6.3.1/artifacts/loci_tools.jar'
+LOCI_TOOLS_SHA1 = 'bdf1a37b561fea02fd8d1c747bd34db3fc49667b'
 
 def download_bioformats():
     print("Ensuring latest bioformats is present:")

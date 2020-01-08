@@ -46,17 +46,14 @@ if not jnius_config.vm_running:
 
 import jnius
 
-JString = jnius.autoclass('java.lang.String')
 DebugTools = jnius.autoclass('loci.common.DebugTools')
 IFormatReader = jnius.autoclass('loci.formats.IFormatReader')
-MetadataStore = jnius.autoclass('loci.formats.meta.MetadataStore')
+MetadataRetrieve = jnius.autoclass('ome.xml.meta.MetadataRetrieve')
 ServiceFactory = jnius.autoclass('loci.common.services.ServiceFactory')
 OMEXMLService = jnius.autoclass('loci.formats.services.OMEXMLService')
 ChannelSeparator = jnius.autoclass('loci.formats.ChannelSeparator')
 UNITS = jnius.autoclass('ome.units.UNITS')
-
-# Another workaround for pyjnius #300 (see below).
-DebugTools.enableLogging(JString("ERROR"))
+DebugTools.enableLogging("ERROR")
 
 
 # TODO:
@@ -234,14 +231,10 @@ class BioformatsMetadata(PlateMetadata):
         metadata = service.createOMEXMLMetadata()
         self._reader = ChannelSeparator()
         self._reader.setMetadataStore(metadata)
-        # FIXME Workaround for pyjnius #300 until there is a new release.
-        # Passing a python string directly here corrupts the value under Python
-        # 3, but explicitly converting it into a Java string works.
-        path_jstring = JString(self.path)
-        self._reader.setId(path_jstring)
+        self._reader.setId(self.path)
 
-        xml_content = metadata.dumpXML()
-        self._metadata = metadata
+        xml_content = service.getOMEXML(metadata)
+        self._metadata = jnius.cast(MetadataRetrieve, metadata)
         self._omexml_root = xml.etree.ElementTree.fromstring(xml_content)
         self.format_name = self._reader.getFormat()
 
