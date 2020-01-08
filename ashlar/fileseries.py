@@ -1,9 +1,6 @@
 import re
 import itertools
-try:
-    import pathlib
-except ImportError:
-    import pathlib2 as pathlib
+import pathlib
 import numpy as np
 import skimage.io
 from . import reg

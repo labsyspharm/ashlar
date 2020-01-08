@@ -1,11 +1,5 @@
-try:
-    import pathlib
-except ImportError:
-    import pathlib2 as pathlib
-try:
-    from urllib.parse import unquote as urllib_unquote
-except ImportError:
-    from urllib import unquote as urllib_unquote
+import pathlib
+from urllib.parse import unquote as urllib_unquote
 import xml.etree.ElementTree
 import numpy as np
 import skimage.io

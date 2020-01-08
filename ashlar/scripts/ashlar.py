@@ -2,10 +2,7 @@ from __future__ import print_function
 import sys
 import re
 import argparse
-try:
-    import pathlib
-except ImportError:
-    import pathlib2 as pathlib
+import pathlib
 from .. import __version__ as VERSION
 from .. import reg
 from ..reg import PlateReader, BioformatsReader

@@ -7,10 +7,7 @@ import xml.etree.ElementTree
 import io
 import uuid
 import struct
-try:
-    import pathlib
-except ImportError:
-    import pathlib2 as pathlib
+import pathlib
 import jnius_config
 import numpy as np
 import scipy.ndimage

@@ -1,9 +1,6 @@
 from __future__ import print_function, division
 import sys
-try:
-    import pathlib
-except ImportError:
-    import pathlib2 as pathlib
+import pathlib
 import numpy as np
 from . import utils
 from skimage.transform import rescale
