@@ -2,10 +2,7 @@ from __future__ import print_function
 import sys
 import re
 import argparse
-try:
-    import pathlib
-except ImportError:
-    import pathlib2 as pathlib
+import pathlib
 from .. import __version__ as VERSION
 from .. import reg
 from ..reg import PlateReader, BioformatsReader
@@ -15,12 +12,6 @@ from ..zen import ZenReader
 
 
 def main(argv=sys.argv):
-
-    if sys.version_info.major < 3:
-        print("===========================================================")
-        print("** NOTICE: Python 2 support will end on January 1, 2020. **")
-        print("===========================================================")
-        print()
 
     parser = argparse.ArgumentParser(
         description='Stitch and align one or more multi-series images'
