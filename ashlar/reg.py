@@ -743,25 +743,25 @@ class LayerAligner(object):
             print()
 
     def calculate_positions(self):
-        self.positions = self.corrected_nominal_positions + self.shifts
-        # self.reference_aligner.shifts[reference_idx] does not equal to 
-        # (self.reference_aligner_positions - self.reference_positions)
-        self.positions += (
-            self.reference_aligner_positions - 
-            self.reference_positions
+        self.positions = (
+            self.corrected_nominal_positions
+            + self.shifts
+            + self.reference_aligner_positions
+            - self.reference_positions
         )
         self.constrain_positions()
         self.centers = self.positions + self.metadata.size / 2
 
     def constrain_positions(self):
-        # Discard camera background registration which will shift target 
-        # positions to reference aligner positions, due to strong self-correlation 
-        # of the sensor dark current pattern which dominates in low-signal images.
+        # Discard camera background registration which will shift target
+        # positions to reference aligner positions, due to strong
+        # self-correlation of the sensor dark current pattern which dominates in
+        # low-signal images.
         position_diffs = np.absolute(
             self.positions - self.reference_aligner_positions
         )
-        # Round the diffs to one decimal point because the subpixel shifts 
-        # are calculate by 10 times upsampling
+        # Round the diffs to one decimal point because the subpixel shifts are
+        # calculated by 10x upsampling.
         position_diffs = np.rint(position_diffs * 10) / 10
         discard = (position_diffs == 0).all(axis=1)
         # Discard any tile registration that error is infinite
