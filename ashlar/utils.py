@@ -53,17 +53,17 @@ def register(img1, img2, sigma):
     shift_neg = shift_pos - shape
     shifts = list(itertools.product(*zip(shift_pos, shift_neg)))
     correlations = [
-        np.sum(img1w * scipy.ndimage.shift(img2w, s))
+        np.abs(np.sum(img1w * scipy.ndimage.shift(img2w, s)))
         for s in shifts
     ]
     idx = np.argmax(correlations)
     shift = shifts[idx]
     correlation = correlations[idx]
     total_amplitude = np.linalg.norm(img1w) * np.linalg.norm(img2w)
-    if correlation > 0 and total_amplitude > 0:
-        error = -np.log(correlation / total_amplitude)
-    else:
+    if total_amplitude == 0:
         error = np.inf
+    else:
+        error = -np.log(correlation / total_amplitude)
     return shift, error
 
 
