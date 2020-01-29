@@ -20,7 +20,9 @@ requires = [
     'pyfftw>=0.10.4',
     'scipy>=1.3,<1.4', # Until pyfftw updated for scipy 1.4 fft API change
     'scikit-image>=0.16.2',
-    'scikit-learn>=0.21.1'
+    'scikit-learn>=0.21.1',
+    'blessings>=1.7',
+    'colorama>=0.4.3',
 ]
 
 
