@@ -1,8 +1,10 @@
-from __future__ import print_function
+import warnings
 import sys
 import re
 import argparse
 import pathlib
+import colorama
+import blessings
 from .. import __version__ as VERSION
 from .. import reg
 from ..reg import PlateReader, BioformatsReader
@@ -97,6 +99,9 @@ def main(argv=sys.argv):
     )
     args = parser.parse_args(argv[1:])
 
+    configure_terminal()
+    configure_warning_format()
+
     if args.version:
         print('ashlar {}'.format(VERSION))
         return 0
@@ -109,11 +114,11 @@ def main(argv=sys.argv):
 
     output_path = pathlib.Path(args.output)
     if not output_path.exists():
-        print("Output directory '{}' does not exist".format(output_path))
+        print_error("Output directory '{}' does not exist".format(output_path))
         return 1
 
     if args.tile_size and not args.pyramid:
-        print("--tile-size can only be used with --pyramid")
+        print_error("--tile-size can only be used with --pyramid")
         return 1
     if args.tile_size is None:
         # Implement default value logic as mentioned in argparser setup above.
@@ -122,8 +127,10 @@ def main(argv=sys.argv):
     ffp_paths = args.ffp
     if ffp_paths:
         if len(ffp_paths) not in (0, 1, len(filepaths)):
-            print("Wrong number of flat-field profiles. Must be 1, or {}"
-                  " (number of input files)".format(len(filepaths)))
+            print_error(
+                "Wrong number of flat-field profiles. Must be 1, or {}"
+                " (number of input files)".format(len(filepaths))
+            )
             return 1
         if len(ffp_paths) == 1:
             ffp_paths = ffp_paths * len(filepaths)
@@ -131,8 +138,10 @@ def main(argv=sys.argv):
     dfp_paths = args.dfp
     if dfp_paths:
         if len(dfp_paths) not in (0, 1, len(filepaths)):
-            print("Wrong number of dark-field profiles. Must be 1, or {}"
-                  " (number of input files)".format(len(filepaths)))
+            print_error(
+                "Wrong number of dark-field profiles. Must be 1, or {}"
+                " (number of input files)".format(len(filepaths))
+            )
             return 1
         if len(dfp_paths) == 1:
             dfp_paths = dfp_paths * len(filepaths)
@@ -166,7 +175,7 @@ def main(argv=sys.argv):
                 args.quiet
             )
     except ProcessingError as e:
-        print(e)
+        print_error(str(e))
         return 1
 
 
@@ -330,6 +339,29 @@ def parse_kwargs_string(string):
                 pass
             kwargs[name] = value
     return kwargs
+
+
+def configure_terminal():
+    global terminal
+    colorama.init()
+    terminal = blessings.Terminal()
+
+
+def print_error(message):
+    print(terminal.bright_red("ERROR:"), message)
+
+
+def warning_formatter(message, category, filename, lineno, file=None, line=None):
+    if issubclass(category, reg.DataWarning):
+        return terminal.bright_yellow("WARNING:") + f" {message}\n"
+    else:
+        return _old_formatwarning(message, category, filename, lineno, file, line)
+
+
+def configure_warning_format():
+    global _old_formatwarning
+    _old_formatwarning = warnings.formatwarning
+    warnings.formatwarning = warning_formatter
 
 
 class ProcessingError(RuntimeError):

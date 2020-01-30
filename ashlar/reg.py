@@ -1,4 +1,3 @@
-from __future__ import division, print_function
 import sys
 import warnings
 import re
@@ -283,7 +282,7 @@ class BioformatsMetadata(PlateMetadata):
             method = getattr(self._metadata, 'getPixelsPhysicalSize%s' % dim)
             v_units = method(0)
             if v_units is None:
-                warnings.warn(
+                warn_data(
                     "Pixel size undefined; falling back to 1.0 \u03BCm."
                 )
                 value = 1.0
@@ -353,7 +352,7 @@ class BioformatsMetadata(PlateMetadata):
                 # Simple file formats don't have planes at all.
                 v_units = None
             if v_units is None:
-                warnings.warn(
+                warn_data(
                     "Stage coordinates undefined; falling back to (0, 0)."
                 )
                 values = [0.0, 0.0]
@@ -364,9 +363,9 @@ class BioformatsMetadata(PlateMetadata):
                     # Conversion failed, which usually happens when the unit is
                     # "reference frame". Proceed as if it's actually microns but
                     # emit a warning.
-                    warnings.warn(
+                    warn_data(
                         "Stage coordinates' measurement unit is undefined;"
-                        " assuming micrometers."
+                        " assuming \u03BCm."
                     )
                     v = v_units.value()
                 value = v.doubleValue()
@@ -474,10 +473,10 @@ class EdgeAligner(object):
             for t1, t2 in self.neighbors_graph.edges
         ])
         failures = np.any(overlaps < 1, axis=1) if len(overlaps) else []
-        if all(failures):
-            warnings.warn("No tiles overlap, attempting alignment anyway.")
+        if len(failures) and all(failures):
+            warn_data("No tiles overlap, attempting alignment anyway.")
         elif any(failures):
-            warnings.warn("Some neighboring tiles have zero overlap.")
+            warn_data("Some neighboring tiles have zero overlap.")
 
     def compute_threshold(self):
         # Compute error threshold for rejecting aligments. We generate a
@@ -1168,6 +1167,15 @@ def build_pyramid(
         f.seek(match.start() - 8)
         f.write(struct.pack('<Q', len(xml_bytes)))
         f.write(struct.pack('<Q', xml_offset))
+
+
+class DataWarning(UserWarning):
+    """Warnings about the content of user-provided image data."""
+    pass
+
+
+def warn_data(message):
+    warnings.warn(message, DataWarning)
 
 
 def plot_edge_shifts(aligner, img=None, bounds=True):
