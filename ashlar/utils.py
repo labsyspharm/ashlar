@@ -60,10 +60,10 @@ def register(img1, img2, sigma):
     shift = shifts[idx]
     correlation = correlations[idx]
     total_amplitude = np.linalg.norm(img1w) * np.linalg.norm(img2w)
-    if total_amplitude == 0:
-        error = np.inf
-    else:
+    if correlation > 0 and total_amplitude > 0:
         error = -np.log(correlation / total_amplitude)
+    else:
+        error = np.inf
     return shift, error
 
 
