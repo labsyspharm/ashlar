@@ -53,7 +53,7 @@ def register(img1, img2, sigma):
     shift_neg = shift_pos - shape
     shifts = list(itertools.product(*zip(shift_pos, shift_neg)))
     correlations = [
-        np.sum(img1w * scipy.ndimage.shift(img2w, s))
+        np.abs(np.sum(img1w * scipy.ndimage.shift(img2w, s)))
         for s in shifts
     ]
     idx = np.argmax(correlations)
