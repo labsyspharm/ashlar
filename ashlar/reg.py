@@ -281,8 +281,15 @@ class BioformatsMetadata(PlateMetadata):
         values = []
         for dim in ('Y', 'X'):
             method = getattr(self._metadata, 'getPixelsPhysicalSize%s' % dim)
-            v = method(0).value(UNITS.MICROMETER).doubleValue()
-            values.append(v)
+            v_units = method(0)
+            if v_units is None:
+                warnings.warn(
+                    "Pixel size undefined; falling back to 1.0 \u03BCm."
+                )
+                value = 1.0
+            else:
+                value = v_units.value(UNITS.MICROMETER).doubleValue()
+            values.append(value)
         if values[0] != values[1]:
             raise Exception("Can't handle non-square pixels (%f, %f)"
                             % tuple(values))
@@ -334,16 +341,23 @@ class BioformatsMetadata(PlateMetadata):
         return row_fmt + column_fmt
 
     def tile_position(self, i):
+        planeCount = self._metadata.getPlaneCount(i)
         values = []
         for dim in ('Y', 'X'):
             method = getattr(self._metadata, 'getPlanePosition%s' % dim)
             # FIXME verify all planes have the same X,Y position.
-            v_units = method(i, 0)
+            if planeCount > 0:
+                # Returns None if planePositionX/Y not defined.
+                v_units = method(i, 0)
+            else:
+                # Simple file formats don't have planes at all.
+                v_units = None
             if v_units is None:
                 warnings.warn(
                     "Stage coordinates undefined; falling back to (0, 0)."
                 )
-                value = 1.0
+                values = [0.0, 0.0]
+                break
             else:
                 v = v_units.value(UNITS.MICROMETER)
                 if v is None:
@@ -413,6 +427,7 @@ def neighbors_graph(aligner):
         max_distance = aligner.metadata.size.max() + 1
         edges = zip(*np.nonzero((sp > 0) & (sp < max_distance)))
         graph = nx.from_edgelist(edges)
+        graph.add_nodes_from(range(aligner.metadata.num_images))
         aligner._neighbors_graph = graph
     return aligner._neighbors_graph
 
@@ -458,7 +473,7 @@ class EdgeAligner(object):
             self.metadata.size - abs(pos[t1] - pos[t2])
             for t1, t2 in self.neighbors_graph.edges
         ])
-        failures = np.any(overlaps < 1, axis=1)
+        failures = np.any(overlaps < 1, axis=1) if len(overlaps) else []
         if all(failures):
             warnings.warn("No tiles overlap, attempting alignment anyway.")
         elif any(failures):
@@ -470,6 +485,10 @@ class EdgeAligner(object):
         # regions and take a certain percentile as the maximum allowable error.
         # The percentile becomes our accepted false-positive ratio.
         edges = self.neighbors_graph.edges()
+        if len(edges) == 0:
+            self.errors_negative_sampled = np.empty(0)
+            self.max_error = np.inf
+            return
         min_size = np.repeat(self.max_shift_pixels * 2, 2)
         widths = np.array([
             self.intersection(t1, t2, min_size).shape.min()
@@ -767,7 +786,10 @@ class LayerAligner(object):
         discard |= np.isinf(self.errors)
         # Take the median of registered shifts to determine the offset
         # (translation) from the reference image to this one.
-        offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
+        if discard.all():
+            offset = 0
+        else:
+            offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
         # Here we assume the fitted linear model from the reference image is
         # still appropriate, apart from the extra offset we just computed.
         predictions = self.reference_aligner.lr.predict(self.corrected_nominal_positions)
@@ -778,14 +800,17 @@ class LayerAligner(object):
         extremes = distance > max_dist
         # Recalculate the mean shift, also ignoring the extreme values.
         discard |= extremes
-        self.offset = np.nan_to_num(np.mean(self.shifts[~discard], axis=0))
+        if discard.all():
+            self.offset = 0
+        else:
+            self.offset = np.nan_to_num(np.mean(self.shifts[~discard], axis=0))
         # Fill in discarded shifts from the predictions.
         self.positions[discard] = predictions[discard] + self.offset
 
     def register(self, t):
         """Return relative shift between images and the alignment error."""
         its, ref_img, img = self.overlap(t)
-        if np.any(np.array(its.shape) == 0): 
+        if np.any(np.array(its.shape) == 0):
             return (0, 0), np.inf
         shift, error = utils.register(ref_img, img, self.filter_sigma)
         # We don't use padding and thus can skip the math to account for it.
