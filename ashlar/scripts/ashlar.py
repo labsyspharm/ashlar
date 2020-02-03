@@ -3,8 +3,7 @@ import sys
 import re
 import argparse
 import pathlib
-import colorama
-import blessings
+import blessed
 from .. import __version__ as VERSION
 from .. import reg
 from ..reg import PlateReader, BioformatsReader
@@ -343,8 +342,7 @@ def parse_kwargs_string(string):
 
 def configure_terminal():
     global terminal
-    colorama.init()
-    terminal = blessings.Terminal()
+    terminal = blessed.Terminal()
 
 
 def print_error(message):
