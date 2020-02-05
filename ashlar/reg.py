@@ -617,7 +617,7 @@ class EdgeAligner(object):
             # overlap image size that will support observing the maximum allowed
             # shift.
             max_its_size = np.repeat(self.max_shift_pixels * 2, 2)
-            shift, error = self._register(t1, t2, max_its_size)
+            shift, error = self._register(key[0], key[1], max_its_size)
             self._cache[key] = (shift, error)
         if t1 > t2:
             shift = -shift
