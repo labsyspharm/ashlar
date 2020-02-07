@@ -141,11 +141,13 @@ def paste(target, img, pos, func=None):
         xi = 0
     target_slice = target[yi:yi+img.shape[0], xi:xi+img.shape[1]]
     img = crop_like(img, target_slice)
-    if img.ndim == 2:
-        img = scipy.ndimage.shift(img, pos_f)
-    else:
-        for c in range(img.shape[2]):
-            img[...,c] = scipy.ndimage.shift(img[...,c], pos_f)
+    # Skip expensive sub-pixel shift if fractional position is zero.
+    if pos_f.any():
+        if img.ndim == 2:
+            img = scipy.ndimage.shift(img, pos_f)
+        else:
+            for c in range(img.shape[2]):
+                img[...,c] = scipy.ndimage.shift(img[...,c], pos_f)
     # For any axis where there is a non-zero subpixel shift, crop out the last
     # row or column of pixels on the "losing" side. These pixels will be darker
     # than normal and will introduce artifacts in most blending modes.
