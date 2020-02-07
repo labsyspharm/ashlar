@@ -201,7 +201,10 @@ def process_single(
         print('    reading %s' % filepaths[0])
     reader = build_reader(filepaths[0], plate_well=plate_well)
     process_axis_flip(reader, flip_x, flip_y)
-    edge_aligner = reg.EdgeAligner(reader, **aligner_args)
+    ea_args = aligner_args.copy()
+    if len(filepaths) == 1:
+        ea_args['do_make_thumbnail'] = False
+    edge_aligner = reg.EdgeAligner(reader, **ea_args)
     edge_aligner.run()
     mshape = edge_aligner.mosaic_shape
     mosaic_args_final = mosaic_args.copy()
