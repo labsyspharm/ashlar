@@ -349,11 +349,11 @@ def print_error(message):
     print(terminal.bright_red("ERROR:"), message)
 
 
-def warning_formatter(message, category, filename, lineno, file=None, line=None):
+def warning_formatter(message, category, filename, lineno, line=None):
     if issubclass(category, reg.DataWarning):
         return terminal.bright_yellow("WARNING:") + f" {message}\n"
     else:
-        return _old_formatwarning(message, category, filename, lineno, file, line)
+        return _old_formatwarning(message, category, filename, lineno, line)
 
 
 def configure_warning_format():
