@@ -435,7 +435,7 @@ class EdgeAligner(object):
 
     def __init__(
         self, reader, channel=0, max_shift=15, false_positive_ratio=0.01,
-        filter_sigma=0.0, verbose=False
+        filter_sigma=0.0, do_make_thumbnail=True, verbose=False
     ):
         self.reader = reader
         self.channel = channel
@@ -445,6 +445,7 @@ class EdgeAligner(object):
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
         self.false_positive_ratio = false_positive_ratio
         self.filter_sigma = filter_sigma
+        self.do_make_thumbnail = do_make_thumbnail
         self._cache = {}
 
     neighbors_graph = neighbors_graph
@@ -459,6 +460,8 @@ class EdgeAligner(object):
         self.fit_model()
 
     def make_thumbnail(self):
+        if not self.do_make_thumbnail:
+            return
         self.reader.thumbnail = thumbnail.make_thumbnail(
             self.reader, channel=self.channel
         )
