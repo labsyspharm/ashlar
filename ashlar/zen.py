@@ -83,5 +83,5 @@ class ZenReader(reg.Reader):
 
     def read(self, series, c):
         path = self.metadata.image_path(series, c)
-        img = skimage.io.imread(str(path))
+        img = skimage.io.imread(str(path), key=0)
         return img

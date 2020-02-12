@@ -166,4 +166,8 @@ class FileSeriesReader(reg.PlateReader):
         kwargs = {}
         if self.metadata.multi_channel_tiles:
             kwargs['key'] = c
+        else:
+            # In case of multi-plane images, only take the first plane. The
+            # processing code only handles 2D image arrays!
+            kwargs['key'] = 0
         return skimage.io.imread(path, **kwargs)
