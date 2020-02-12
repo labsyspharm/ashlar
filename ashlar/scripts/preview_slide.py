@@ -3,6 +3,7 @@ import warnings
 import sys
 import argparse
 import numpy as np
+import skimage.util
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.text as mtext
@@ -30,6 +31,9 @@ def main(argv=sys.argv):
         "-c", "--channel", type=int, default=0,
         help="Channel number to display; default: 0",
     )
+    parser.add_argument(
+        "-l", "--log", action="store_true", help="Log-transform pixel intensities"
+    )
     args = parser.parse_args()
 
     try:
@@ -50,7 +54,13 @@ def main(argv=sys.argv):
         sys.stdout.write("\rLoading %d/%d" % (i + 1, total))
         sys.stdout.flush()
         img = reader.read(c=args.channel, series=i)
-        utils.paste(mosaic, img, positions[i], np.maximum)
+        img = skimage.util.img_as_uint(img)
+        if args.log:
+            scale = 65535 / np.log(65535)
+            img = (np.log(np.maximum(img, 1)) * scale).astype(np.uint16)
+        # Round position so paste will skip the expensive subpixel shift.
+        pos = np.round(positions[i])
+        utils.paste(mosaic, img, pos, np.maximum)
     print()
 
     ax = plt.gca()
