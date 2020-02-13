@@ -534,7 +534,7 @@ class EdgeAligner(object):
 
     def register_all(self):
         n = self.neighbors_graph.size()
-        for i, (t1, t2) in enumerate(self.neighbors_graph.edges(), 1):
+        for i, (t1, t2) in enumerate(self.neighbors_graph.edges, 1):
             if self.verbose:
                 sys.stdout.write('\r    aligning edge %d/%d' % (i, n))
                 sys.stdout.flush()
@@ -919,7 +919,7 @@ class Mosaic(object):
 
     def _load_single_profile(self, path, num_channels, img_size, profile_type):
         """Load, normalize, and validate illumination profile.
-        
+
         Parameters
         ----------
         path : str
@@ -929,12 +929,12 @@ class Mosaic(object):
         img_size : tuple
             Shape of a 2D image in (row, column).
         profile_type : str
-            Type of profile, only accepts 'dark' and 'flat'. 
-    
+            Type of profile, only accepts 'dark' and 'flat'.
+
         Returns
         ----------
         ndarray
-            Image as numpy array in the (channel, row, column) arrangement. 
+            Image as numpy array in the (channel, row, column) arrangement.
             If ``path`` is ``None``, return an array in (channel, 1, 1) shape.
             The values in the array are 0 and 1 for dark- and flat-field profile, respectively.
         """
@@ -942,8 +942,8 @@ class Mosaic(object):
         if path is None:
             profile_shape = (num_channels, 1, 1)
             return (
-                np.zeros(profile_shape) 
-                    if profile_type is 'dark' 
+                np.zeros(profile_shape)
+                    if profile_type is 'dark'
                     else np.ones(profile_shape)
             )
 
@@ -957,8 +957,8 @@ class Mosaic(object):
             )
 
         profile = np.atleast_3d(profile)
-        # skimage.io.imread convert images with 3 and 4 channels into (Y, X, C) shape, 
-        # but as (C, Y, X) for images with other channel numbers. We normalize 
+        # skimage.io.imread convert images with 3 and 4 channels into (Y, X, C) shape,
+        # but as (C, Y, X) for images with other channel numbers. We normalize
         # image-shape to (C, Y, X) regardless of the number of channels in the image.
         if num_channels in (1, 3, 4):
             profile = np.moveaxis(profile, 2, 0)
@@ -968,7 +968,7 @@ class Mosaic(object):
                     profile_type.capitalize(), profile.shape, img_size
                 )
             )
-            
+
         return profile
 
     def _load_correction_profiles(self, dfp_path, ffp_path):
@@ -979,7 +979,7 @@ class Mosaic(object):
             img_size = tuple(self.aligner.metadata.size)
             self.dfp = self._load_single_profile(dfp_path, num_channels, img_size, 'dark')
             self.ffp = self._load_single_profile(ffp_path, num_channels, img_size, 'flat')
-            
+
             # FIXME This assumes integer dtypes. Do we need to support floats?
             self.dfp /= np.iinfo(self.dtype).max
             self.do_correction = True
@@ -1193,7 +1193,7 @@ def plot_edge_shifts(aligner, img=None, bounds=True):
                                       lw=0.5)
             ax.add_patch(rect)
     # Compute per-edge relative shifts from tile positions.
-    edges = np.array(aligner.spanning_tree.edges())
+    edges = np.array(list(aligner.spanning_tree.edges))
     dist = aligner.metadata.positions - aligner.positions
     shifts = dist[edges[:, 0]] - dist[edges[:, 1]]
     shift_distances = np.linalg.norm(shifts, axis=1)
@@ -1231,7 +1231,7 @@ def plot_edge_quality(
     ax = plt.subplot(nrows, ncols, 1)
     draw_mosaic_image(ax, aligner, img, use_mi)
     error = np.array([aligner._cache[tuple(sorted(e))][1]
-                      for e in aligner.neighbors_graph.edges()])
+                      for e in aligner.neighbors_graph.edges])
     # Manually center and scale data to 0-1, except infinity which is set to -1.
     # This lets us use the purple-green diverging color map to color the graph
     # edges and cause the "infinity" edges to disappear into the background
