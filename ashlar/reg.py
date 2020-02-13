@@ -486,8 +486,10 @@ class EdgeAligner(object):
         # distribution of error scores for many known non-overlapping image
         # regions and take a certain percentile as the maximum allowable error.
         # The percentile becomes our accepted false-positive ratio.
-        edges = self.neighbors_graph.edges()
-        if len(edges) == 0:
+        edges = self.neighbors_graph.edges
+        num_tiles = self.metadata.num_images
+        # If not enough tiles overlap to matter, skip this whole thing.
+        if len(edges) <= 1:
             self.errors_negative_sampled = np.empty(0)
             self.max_error = np.inf
             return
@@ -498,25 +500,47 @@ class EdgeAligner(object):
         ])
         w = widths.max()
         max_offset = self.metadata.size[0] - w
-        n = 1000
+        # Number of possible pairs minus number of actual neighbor pairs.
+        num_distant_pairs = num_tiles * (num_tiles - 1) // 2 - len(edges)
+        # Reduce permutation count for small datasets -- there are fewer
+        # possible truly distinct strips with fewer tiles. The calculation here
+        # is just a heuristic, not rigorously derived.
+        n = 1000 if num_distant_pairs > 8 else (num_distant_pairs + 1) * 10
         pairs = np.empty((n, 2), dtype=int)
         offsets = np.empty((n, 2), dtype=int)
-        # Generate n random image pairs and strip offsets for alignment. Even
-        # with a small number of tiles, we can easily get 1000 non-repeating
-        # strips due to also varying the offset.
-        i = 0
+        # Generate n random non-overlapping image strips. Strips are always
+        # horizontal, across the entire image width.
+        max_tries = 100
         for i in range(n):
-            # Ensure pair is two different tiles and tiles are not neighbors.
-            # This is more conservative than necessary -- we could admit
-            # neighbors as long as the chosen offsets don't correspond to the
-            # actual overlap region.
-            while True:
+            # Limit tries to avoid infinite loop in pathological cases.
+            for current_try in range(max_tries):
                 t1, t2 = np.random.randint(self.metadata.num_images, size=2)
+                o1, o2 = np.random.randint(max_offset, size=2)
+                # Check for non-overlapping strips and abort the retry loop.
                 if t1 != t2 and (t1, t2) not in edges:
+                    # Different, non-neighboring tiles -- always OK.
                     break
+                elif t1 == t2 and abs(o1 - o2) > w:
+                    # Same tile OK if strips don't overlap within the image.
+                    break
+                elif (t1, t2) in edges:
+                    # Neighbors OK if either strip is entirely outside the
+                    # expected overlap region (based on nominal positions).
+                    its = self.intersection(t1, t2, np.repeat(w, 2))
+                    ioff1, ioff2 = its.offsets[:, 0]
+                    if (
+                        its.shape[0] > its.shape[1]
+                        or o1 < ioff1 - w or o1 > ioff1 + w
+                        or o2 < ioff2 - w or o2 > ioff2 + w
+                    ):
+                        break
+            else:
+                # Retries exhausted. This should be very rare.
+                warn_data(
+                    "Could not find non-overlapping strips in {max_tries} tries"
+                )
             pairs[i] = t1, t2
-            offsets[i] = np.random.randint(max_offset, size=2)
-            i += 1
+            offsets[i] = o1, o2
         errors = np.empty(n)
         for i, ((t1, t2), (offset1, offset2)) in enumerate(zip(pairs, offsets)):
             if self.verbose and (i % 10 == 9 or i == n - 1):
@@ -1242,7 +1266,13 @@ def plot_edge_quality(
         error_f = error[~infs]
         emin = np.min(error_f)
         emax = np.max(error_f)
-        error[~infs] = (error_f - emin) / (emax - emin)
+        if emin == emax:
+            # Always true when there's only one edge. Otherwise it's unlikely
+            # but theoretically possible.
+            erange = 1
+        else:
+            erange = emax - emin
+        error[~infs] = (error_f - emin) / erange
     # Neighbor graph colored by edge alignment quality (brighter = better).
     nx.draw(
         aligner.neighbors_graph, ax=ax, with_labels=True,
