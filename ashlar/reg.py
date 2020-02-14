@@ -618,6 +618,9 @@ class EdgeAligner(object):
         cc0 = list(components[0])
         self.lr = sklearn.linear_model.LinearRegression()
         self.lr.fit(self.metadata.positions[cc0], self.positions[cc0])
+        # Fix up degenerate transform matrix (e.g. when we have only one tile).
+        if (self.lr.coef_ == 0).all():
+            self.lr.coef_ = np.diag(np.ones(2))
         # Adjust position of remaining components so their centroids match
         # the predictions of the model.
         for cc in components[1:]:
