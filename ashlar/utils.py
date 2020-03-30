@@ -2,6 +2,11 @@ import itertools
 import warnings
 import pyfftw
 import skimage
+import skimage.feature
+import skimage.filters
+import skimage.io
+import skimage.restoration
+import skimage.util
 import scipy
 import numpy as np
 
@@ -18,7 +23,7 @@ _laplace_kernel = skimage.restoration.uft.laplacian(2, (3, 3))[1]
 def whiten(img, sigma):
     # Copied from skimage.filters.edges, with explicit aligned output from
     # convolve. Also the mask option was dropped.
-    img = skimage.img_as_float(img)
+    img = skimage.util.img_as_float(img)
     output = pyfftw.empty_aligned(img.shape, 'complex64')
     output.imag[:] = 0
     if sigma == 0:
