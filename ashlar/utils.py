@@ -35,15 +35,15 @@ def whiten(img, sigma):
     #img = img - scipy.ndimage.filters.gaussian_filter(img, 2) + 0.5
 
 
-def register(img1, img2, sigma):
+def register(img1, img2, sigma, upsample=10):
     img1w = whiten(img1, sigma)
     img2w = whiten(img2, sigma)
     img1_f = fft2(img1w)
     img2_f = fft2(img2w)
     img1w = img1w.real
     img2w = img2w.real
-    shift, _, _ = skimage.feature.register_translation(
-        img1_f, img2_f, 10, 'fourier'
+    shift, _error, _phasediff = skimage.feature.register_translation(
+        img1_f, img2_f, upsample, 'fourier'
     )
     # At this point we may have a shift in the wrong quadrant since the FFT
     # assumes the signal is periodic. We test all four possibilities and return
@@ -53,7 +53,7 @@ def register(img1, img2, sigma):
     shift_neg = shift_pos - shape
     shifts = list(itertools.product(*zip(shift_pos, shift_neg)))
     correlations = [
-        np.abs(np.sum(img1w * scipy.ndimage.shift(img2w, s)))
+        np.abs(np.sum(img1w * scipy.ndimage.shift(img2w, s, order=0)))
         for s in shifts
     ]
     idx = np.argmax(correlations)

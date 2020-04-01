@@ -550,7 +550,7 @@ class EdgeAligner(object):
                 sys.stdout.flush()
             img1 = self.reader.read(t1, self.channel)[offset1:offset1+w, :]
             img2 = self.reader.read(t2, self.channel)[offset2:offset2+w, :]
-            _, errors[i] = utils.register(img1, img2, self.filter_sigma)
+            _, errors[i] = utils.register(img1, img2, self.filter_sigma, upsample=1)
         if self.verbose:
             print()
         self.errors_negative_sampled = errors
