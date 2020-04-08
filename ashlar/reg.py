@@ -403,6 +403,28 @@ class BioformatsReader(PlateReader):
         return img
 
 
+class CachingReader(Reader):
+    """Wraps a reader to provide tile image caching."""
+
+    def __init__(self, reader, channel):
+        self.reader = reader
+        self.channel = channel
+        self._cache = {}
+
+    @property
+    def metadata(self):
+        return self.reader.metadata
+
+    def read(self, series, c):
+        if c == self.channel and series in self._cache:
+            img = self._cache[series]
+        else:
+            img = self.reader.read(series, c)
+        if c == self.channel and series not in self._cache:
+            self._cache[series] = img
+        return img
+
+
 # TileStatistics = collections.namedtuple(
 #     'TileStatistics',
 #     'scan tile x_original y_original x y shift_x shift_y error'
@@ -437,8 +459,8 @@ class EdgeAligner(object):
         self, reader, channel=0, max_shift=15, false_positive_ratio=0.01,
         filter_sigma=0.0, do_make_thumbnail=True, verbose=False
     ):
-        self.reader = reader
         self.channel = channel
+        self.reader = CachingReader(reader, self.channel)
         self.verbose = verbose
         # Unit is micrometers.
         self.max_shift = max_shift
