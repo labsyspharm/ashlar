@@ -1,38 +1,21 @@
 import itertools
 import warnings
-import pyfftw
 import skimage
 import scipy
+from scipy.fft import fft2
 import numpy as np
-
-
-def fft2(img):
-    return pyfftw.builders.fft2(img, planner_effort='FFTW_ESTIMATE',
-                                avoid_copy=True, auto_align_input=True,
-                                auto_contiguous=True)()
 
 
 # Pre-calculate the Laplacian operator kernel. We'll always be using 2D images.
 _laplace_kernel = skimage.restoration.uft.laplacian(2, (3, 3))[1]
 
 def whiten(img, sigma):
-    # Copied from skimage.filters.edges, with explicit aligned output from
-    # convolve. Also the mask option was dropped.
-    img = skimage.img_as_float(img)
-    output = pyfftw.empty_aligned(img.shape, 'complex64')
-    output.imag[:] = 0
+    img = skimage.img_as_float32(img)
     if sigma == 0:
-        scipy.ndimage.convolve(img, _laplace_kernel, output.real)
+        output = scipy.ndimage.convolve(img, _laplace_kernel)
     else:
-        scipy.ndimage.gaussian_laplace(img, sigma, output=output.real)
+        output = scipy.ndimage.gaussian_laplace(img, sigma)
     return output
-
-    # Other possible whitening functions:
-    #img = skimage.filters.roberts(img)
-    #img = skimage.filters.scharr(img)
-    #img = skimage.filters.sobel(img)
-    #img = np.log(img)
-    #img = img - scipy.ndimage.filters.gaussian_filter(img, 2) + 0.5
 
 
 def register(img1, img2, sigma, upsample=10):
@@ -40,8 +23,6 @@ def register(img1, img2, sigma, upsample=10):
     img2w = whiten(img2, sigma)
     img1_f = fft2(img1w)
     img2_f = fft2(img2w)
-    img1w = img1w.real
-    img2w = img2w.real
     shift, _error, _phasediff = skimage.feature.register_translation(
         img1_f, img2_f, upsample, 'fourier'
     )

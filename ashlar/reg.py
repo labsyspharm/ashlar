@@ -18,7 +18,6 @@ import skimage.io
 import skimage.exposure
 import skimage.transform
 import sklearn.linear_model
-import pyfftw
 import networkx as nx
 import queue
 import matplotlib.pyplot as plt
@@ -30,9 +29,6 @@ except ImportError:
 from . import utils
 from . import thumbnail
 from . import __version__ as _version
-
-# Patch np.fft to use pyfftw so skimage utilities can benefit.
-np.fft = pyfftw.interfaces.numpy_fft
 
 
 if not jnius_config.vm_running:
