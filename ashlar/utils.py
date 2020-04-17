@@ -50,7 +50,7 @@ def register(img1, img2, sigma, upsample=10):
 
 def crop(img, offset, shape):
     # Note that this only crops to the nearest whole-pixel offset.
-    start = offset.astype(int)
+    start = offset.round().astype(int)
     end = start + shape
     img = img[start[0]:end[0], start[1]:end[1]]
     return img
