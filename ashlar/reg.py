@@ -672,7 +672,7 @@ class EdgeAligner(object):
         # Return copy of shift to prevent corruption of cached values.
         return shift.copy(), error
 
-    def _register(self, t1, t2, min_size):
+    def _register(self, t1, t2, min_size=0):
         its, img1, img2 = self.overlap(t1, t2, min_size)
         # Account for padding, flipping the sign depending on the direction
         # between the tiles.
@@ -684,9 +684,10 @@ class EdgeAligner(object):
         shift += padding
         return shift, error
 
-
-    def intersection(self, t1, t2, min_size):
+    def intersection(self, t1, t2, min_size=0, shift=None):
         corners1 = self.metadata.positions[[t1, t2]]
+        if shift is not None:
+            corners1[1] += shift
         corners2 = corners1 + self.metadata.size
         return Intersection(corners1, corners2, min_size)
 
@@ -694,8 +695,8 @@ class EdgeAligner(object):
         img = self.reader.read(series=tile, c=self.channel)
         return utils.crop(img, offset, shape)
 
-    def overlap(self, t1, t2, min_size):
-        its = self.intersection(t1, t2, min_size)
+    def overlap(self, t1, t2, min_size=0, shift=None):
+        its = self.intersection(t1, t2, min_size, shift)
         img1 = self.crop(t1, its.offsets[0], its.shape)
         img2 = self.crop(t2, its.offsets[1], its.shape)
         return its, img1, img2
@@ -922,9 +923,9 @@ class LayerAligner(object):
 
 class Intersection(object):
 
-    def __init__(self, corners1, corners2, min_size=None):
-        if min_size is None:
-            min_size = np.zeros(2)
+    def __init__(self, corners1, corners2, min_size=0):
+        if np.isscalar(min_size):
+            min_size = np.repeat(min_size, 2)
         self._calculate(corners1, corners2, min_size)
 
     def _calculate(self, corners1, corners2, min_size):
