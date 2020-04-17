@@ -715,7 +715,7 @@ class EdgeAligner(object):
         max_dimensions = upper_corners.max(axis=0)
         return np.ceil(max_dimensions).astype(int)
 
-    def debug(self, t1, t2, min_size=None):
+    def debug(self, t1, t2, min_size=0):
         shift, _ = self._register(t1, t2, min_size)
         its, o1, o2 = self.overlap(t1, t2, min_size)
         w1 = utils.whiten(o1, self.filter_sigma)
@@ -723,6 +723,7 @@ class EdgeAligner(object):
         corr = np.fft.fftshift(np.abs(np.fft.ifft2(
             np.fft.fft2(w1) * np.fft.fft2(w2).conj()
         )))
+        corr /= (np.linalg.norm(w1) * np.linalg.norm(w2))
         stack = np.vstack
         rows, cols = 3, 1
         if corr.shape[0] > corr.shape[1]:
@@ -738,14 +739,20 @@ class EdgeAligner(object):
         ax = plt.subplot(rows, cols, 3)
         ax.set_xticks([])
         ax.set_yticks([])
-        plt.imshow(corr)
+        plt.imshow(corr, vmin=np.exp(-10))
+        cbar = plt.colorbar()
+        cbar.ax.yaxis.set_major_locator(
+            plt.FixedLocator(cbar.mappable.get_clim())
+        )
+        cbar.ax.yaxis.set_major_formatter(
+            plt.FuncFormatter(lambda x, pos: "{:.2f}".format(-np.log(x)))
+        )
         origin = np.array(corr.shape) // 2
         plt.plot(origin[1], origin[0], 'r+')
         # FIXME This is wrong when t1 > t2.
         shift += origin + its.padding
         plt.plot(shift[1], shift[0], 'rx')
-        plt.colorbar()
-        plt.tight_layout(0, 0, 0)
+        plt.tight_layout()
 
 
 class LayerAligner(object):
@@ -1310,6 +1317,33 @@ def plot_edge_quality(
             **final_nx_kwargs
         )
     fig.set_facecolor('black')
+
+
+def plot_edge_scatter(aligner, annotate=True):
+    import seaborn as sns
+    xdata = aligner.all_errors
+    ydata = np.clip(
+        [np.linalg.norm(v[0]) for v in aligner._cache.values()], 0.01, np.inf
+    )
+    pdata = np.clip(aligner.errors_negative_sampled, 0, 10)
+    g = sns.JointGrid(xdata, ydata)
+    g.plot_joint(sns.scatterplot, alpha=0.5)
+    _, xbins = np.histogram(np.hstack([xdata, pdata]), bins=40)
+    sns.distplot(
+        xdata, ax=g.ax_marg_x, kde=False, bins=xbins, norm_hist=True
+    )
+    sns.distplot(
+        pdata, ax=g.ax_marg_x, kde=False, bins=xbins, norm_hist=True,
+        hist_kws=dict(histtype='step')
+    )
+    g.ax_joint.axvline(aligner.max_error, c='k', ls=':')
+    g.ax_joint.axhline(aligner.max_shift_pixels, c='k', ls=':')
+    g.ax_joint.set_yscale('log')
+    g.set_axis_labels('error', 'shift')
+    if annotate:
+        for pair, x, y in zip(aligner.neighbors_graph.edges, xdata, ydata):
+            plt.annotate(str(pair), (x, y), alpha=0.1)
+    plt.tight_layout()
 
 
 def plot_layer_shifts(aligner, img=None):
