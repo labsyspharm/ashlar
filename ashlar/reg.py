@@ -511,9 +511,8 @@ class EdgeAligner(object):
             self.errors_negative_sampled = np.empty(0)
             self.max_error = np.inf
             return
-        min_size = np.repeat(self.max_shift_pixels * 2, 2)
         widths = np.array([
-            self.intersection(t1, t2, min_size).shape.min()
+            self.intersection(t1, t2).shape.min()
             for t1, t2 in edges
         ])
         w = widths.max()
