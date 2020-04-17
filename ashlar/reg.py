@@ -996,11 +996,11 @@ class Mosaic(object):
             profile_shape = (num_channels, 1, 1)
             return (
                 np.zeros(profile_shape)
-                    if profile_type is 'dark'
+                    if profile_type == 'dark'
                     else np.ones(profile_shape)
             )
 
-        expected_ndim = 2 if num_channels is 1 else 3
+        expected_ndim = 2 if num_channels == 1 else 3
         profile = skimage.io.imread(path)
         if profile.ndim != expected_ndim:
             raise ValueError(
