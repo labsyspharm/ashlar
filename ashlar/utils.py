@@ -48,6 +48,18 @@ def register(img1, img2, sigma, upsample=10):
     return shift, error
 
 
+def nccw(img1, img2, sigma):
+    img1w = whiten(img1, sigma)
+    img2w = whiten(img2, sigma)
+    correlation = np.abs(np.sum(img1w * img2w))
+    total_amplitude = np.linalg.norm(img1w) * np.linalg.norm(img2w)
+    if correlation > 0 and total_amplitude > 0:
+        error = -np.log(correlation / total_amplitude)
+    else:
+        error = np.inf
+    return error
+
+
 def crop(img, offset, shape):
     # Note that this only crops to the nearest whole-pixel offset.
     start = offset.round().astype(int)

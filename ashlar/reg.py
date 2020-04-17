@@ -659,12 +659,28 @@ class EdgeAligner(object):
         try:
             shift, error = self._cache[key]
         except KeyError:
-            # Phase correlation can only report a shift of up to half of the
-            # image size in any given direction. Here we calculate the tile
-            # overlap image size that will support observing the maximum allowed
-            # shift.
-            max_its_size = np.repeat(self.max_shift_pixels * 2, 2)
-            shift, error = self._register(key[0], key[1], max_its_size)
+            # We test a series of increasing overlap window sizes to help avoid
+            # missing alignments when the stage position error is large relative
+            # to the tile overlap. Simply using a large overlap in all cases
+            # limits the maximum achievable correlation thus increasing the
+            # error metric, leading to worse overall results. The window size
+            # starts at the nominal size and doubles until it's at least 10% of
+            # the tile size. If the nominal overlap is already 10% or greater,
+            # we only use that one size.
+            smin = self.intersection(key[0], key[1]).shape
+            smax = np.round(self.metadata.size * 0.1)
+            sizes = [smin]
+            while any(sizes[-1] < smax):
+                sizes.append(sizes[-1] * 2)
+            results = [self._register(key[0], key[1], s) for s in sizes]
+            # Use the shift from the window size that gave the lowest error.
+            shift, _ = min(results, key=lambda r: r[1])
+            # Extract the images from the nominal overlap window but with the
+            # shift applied to the second tile's position, and compute the error
+            # metric on these images. This should be even lower than the error
+            # computed above.
+            _, o1, o2 = self.overlap(key[0], key[1], shift=shift)
+            error = utils.nccw(o1, o2, self.filter_sigma)
             self._cache[key] = (shift, error)
         if t1 > t2:
             shift = -shift
