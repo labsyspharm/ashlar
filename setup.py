@@ -1,9 +1,5 @@
-from __future__ import print_function
 import os
-try:
-    from urllib.request import urlopen
-except ImportError:
-    from urllib2 import urlopen
+from urllib.request import urlopen
 import hashlib
 from setuptools import setup, find_packages
 from setuptools.command.develop import develop

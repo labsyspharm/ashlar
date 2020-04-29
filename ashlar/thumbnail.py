@@ -1,12 +1,9 @@
-from __future__ import print_function, division
 import sys
 import pathlib
 import numpy as np
 from . import utils
 from skimage.transform import rescale
 from skimage.feature import register_translation
-from skimage.io import imsave
-import warnings
 
 
 def make_thumbnail(reader, channel=0, scale=0.05):

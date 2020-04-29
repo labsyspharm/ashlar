@@ -1,13 +1,12 @@
 import itertools
 import warnings
-import skimage
 import skimage.feature
-import skimage.filters
 import skimage.io
-import skimage.restoration
+import skimage.restoration.uft
 import skimage.util
-import scipy
-from scipy.fft import fft2
+import skimage.util.dtype
+import scipy.ndimage
+import scipy.fft
 import numpy as np
 
 
@@ -26,8 +25,8 @@ def whiten(img, sigma):
 def register(img1, img2, sigma, upsample=10):
     img1w = whiten(img1, sigma)
     img2w = whiten(img2, sigma)
-    img1_f = fft2(img1w)
-    img2_f = fft2(img2w)
+    img1_f = scipy.fft.fft2(img1w)
+    img2_f = scipy.fft.fft2(img2w)
     shift, _error, _phasediff = skimage.feature.register_translation(
         img1_f, img2_f, upsample, 'fourier'
     )
@@ -89,7 +88,7 @@ def crop(img, offset, shape):
 def fourier_shift(img, shift):
     # Ensure properly aligned complex64 data (fft requires complex to avoid
     # reallocation and copying).
-    img = convert(img, np.float32)
+    img = skimage.util.img_as_float32(img)
     img = pyfftw.byte_align(img, dtype=np.complex64)
     # Compute per-axis frequency values according to the Fourier shift theorem.
     # (Read "w" here as "omega".) We pre-multiply as many scalar values as
@@ -157,7 +156,7 @@ def paste(target, img, pos, func=None):
     target_slice = target_slice[y1:y2, x1:x2]
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
-    img = convert(img, target.dtype)
+    img = skimage.util.dtype.convert(img, target.dtype)
     if func is None:
         target_slice[:] = img
     elif isinstance(func, np.ufunc):
@@ -183,22 +182,6 @@ def crop_like(img, target):
     if (img.shape[1] > target.shape[1]):
         img = img[:, :target.shape[1]]
     return img
-
-
-def convert(image, dtype, **kwargs):
-    """
-    Convert an image to the requested data-type.
-
-    This is just a wrapper around skimage's convert function to suppress the
-    precision loss warning.
-
-    """
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            'ignore', 'Possible precision loss', UserWarning,
-            '^skimage\.util\.dtype'
-        )
-        return skimage.util.dtype.convert(image, dtype, **kwargs)
 
 
 def imsave(fname, arr, **kwargs):
