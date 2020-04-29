@@ -18,7 +18,6 @@ import skimage.io
 import skimage.exposure
 import skimage.transform
 import sklearn.linear_model
-import pyfftw
 import networkx as nx
 import queue
 import matplotlib.pyplot as plt
@@ -30,9 +29,6 @@ except ImportError:
 from . import utils
 from . import thumbnail
 from . import __version__ as _version
-
-# Patch np.fft to use pyfftw so skimage utilities can benefit.
-np.fft = pyfftw.interfaces.numpy_fft
 
 
 if not jnius_config.vm_running:
@@ -403,6 +399,28 @@ class BioformatsReader(PlateReader):
         return img
 
 
+class CachingReader(Reader):
+    """Wraps a reader to provide tile image caching."""
+
+    def __init__(self, reader, channel):
+        self.reader = reader
+        self.channel = channel
+        self._cache = {}
+
+    @property
+    def metadata(self):
+        return self.reader.metadata
+
+    def read(self, series, c):
+        if c == self.channel and series in self._cache:
+            img = self._cache[series]
+        else:
+            img = self.reader.read(series, c)
+        if c == self.channel and series not in self._cache:
+            self._cache[series] = img
+        return img
+
+
 # TileStatistics = collections.namedtuple(
 #     'TileStatistics',
 #     'scan tile x_original y_original x y shift_x shift_y error'
@@ -437,8 +455,8 @@ class EdgeAligner(object):
         self, reader, channel=0, max_shift=15, false_positive_ratio=0.01,
         filter_sigma=0.0, do_make_thumbnail=True, verbose=False
     ):
-        self.reader = reader
         self.channel = channel
+        self.reader = CachingReader(reader, self.channel)
         self.verbose = verbose
         # Unit is micrometers.
         self.max_shift = max_shift
@@ -493,9 +511,8 @@ class EdgeAligner(object):
             self.errors_negative_sampled = np.empty(0)
             self.max_error = np.inf
             return
-        min_size = np.repeat(self.max_shift_pixels * 2, 2)
         widths = np.array([
-            self.intersection(t1, t2, min_size).shape.min()
+            self.intersection(t1, t2).shape.min()
             for t1, t2 in edges
         ])
         w = widths.max()
@@ -550,7 +567,7 @@ class EdgeAligner(object):
                 sys.stdout.flush()
             img1 = self.reader.read(t1, self.channel)[offset1:offset1+w, :]
             img2 = self.reader.read(t2, self.channel)[offset2:offset2+w, :]
-            _, errors[i] = utils.register(img1, img2, self.filter_sigma)
+            _, errors[i] = utils.register(img1, img2, self.filter_sigma, upsample=1)
         if self.verbose:
             print()
         self.errors_negative_sampled = errors
@@ -642,19 +659,35 @@ class EdgeAligner(object):
         try:
             shift, error = self._cache[key]
         except KeyError:
-            # Phase correlation can only report a shift of up to half of the
-            # image size in any given direction. Here we calculate the tile
-            # overlap image size that will support observing the maximum allowed
-            # shift.
-            max_its_size = np.repeat(self.max_shift_pixels * 2, 2)
-            shift, error = self._register(key[0], key[1], max_its_size)
+            # We test a series of increasing overlap window sizes to help avoid
+            # missing alignments when the stage position error is large relative
+            # to the tile overlap. Simply using a large overlap in all cases
+            # limits the maximum achievable correlation thus increasing the
+            # error metric, leading to worse overall results. The window size
+            # starts at the nominal size and doubles until it's at least 10% of
+            # the tile size. If the nominal overlap is already 10% or greater,
+            # we only use that one size.
+            smin = self.intersection(key[0], key[1]).shape
+            smax = np.round(self.metadata.size * 0.1)
+            sizes = [smin]
+            while any(sizes[-1] < smax):
+                sizes.append(sizes[-1] * 2)
+            results = [self._register(key[0], key[1], s) for s in sizes]
+            # Use the shift from the window size that gave the lowest error.
+            shift, _ = min(results, key=lambda r: r[1])
+            # Extract the images from the nominal overlap window but with the
+            # shift applied to the second tile's position, and compute the error
+            # metric on these images. This should be even lower than the error
+            # computed above.
+            _, o1, o2 = self.overlap(key[0], key[1], shift=shift)
+            error = utils.nccw(o1, o2, self.filter_sigma)
             self._cache[key] = (shift, error)
         if t1 > t2:
             shift = -shift
         # Return copy of shift to prevent corruption of cached values.
         return shift.copy(), error
 
-    def _register(self, t1, t2, min_size):
+    def _register(self, t1, t2, min_size=0):
         its, img1, img2 = self.overlap(t1, t2, min_size)
         # Account for padding, flipping the sign depending on the direction
         # between the tiles.
@@ -666,9 +699,10 @@ class EdgeAligner(object):
         shift += padding
         return shift, error
 
-
-    def intersection(self, t1, t2, min_size):
+    def intersection(self, t1, t2, min_size=0, shift=None):
         corners1 = self.metadata.positions[[t1, t2]]
+        if shift is not None:
+            corners1[1] += shift
         corners2 = corners1 + self.metadata.size
         return Intersection(corners1, corners2, min_size)
 
@@ -676,8 +710,8 @@ class EdgeAligner(object):
         img = self.reader.read(series=tile, c=self.channel)
         return utils.crop(img, offset, shape)
 
-    def overlap(self, t1, t2, min_size):
-        its = self.intersection(t1, t2, min_size)
+    def overlap(self, t1, t2, min_size=0, shift=None):
+        its = self.intersection(t1, t2, min_size, shift)
         img1 = self.crop(t1, its.offsets[0], its.shape)
         img2 = self.crop(t2, its.offsets[1], its.shape)
         return its, img1, img2
@@ -697,7 +731,7 @@ class EdgeAligner(object):
         max_dimensions = upper_corners.max(axis=0)
         return np.ceil(max_dimensions).astype(int)
 
-    def debug(self, t1, t2, min_size=None):
+    def debug(self, t1, t2, min_size=0):
         shift, _ = self._register(t1, t2, min_size)
         its, o1, o2 = self.overlap(t1, t2, min_size)
         w1 = utils.whiten(o1, self.filter_sigma)
@@ -705,6 +739,7 @@ class EdgeAligner(object):
         corr = np.fft.fftshift(np.abs(np.fft.ifft2(
             np.fft.fft2(w1) * np.fft.fft2(w2).conj()
         )))
+        corr /= (np.linalg.norm(w1) * np.linalg.norm(w2))
         stack = np.vstack
         rows, cols = 3, 1
         if corr.shape[0] > corr.shape[1]:
@@ -720,14 +755,20 @@ class EdgeAligner(object):
         ax = plt.subplot(rows, cols, 3)
         ax.set_xticks([])
         ax.set_yticks([])
-        plt.imshow(corr)
+        plt.imshow(corr, vmin=np.exp(-10))
+        cbar = plt.colorbar()
+        cbar.ax.yaxis.set_major_locator(
+            plt.FixedLocator(cbar.mappable.get_clim())
+        )
+        cbar.ax.yaxis.set_major_formatter(
+            plt.FuncFormatter(lambda x, pos: "{:.2f}".format(-np.log(x)))
+        )
         origin = np.array(corr.shape) // 2
         plt.plot(origin[1], origin[0], 'r+')
         # FIXME This is wrong when t1 > t2.
         shift += origin + its.padding
         plt.plot(shift[1], shift[0], 'rx')
-        plt.colorbar()
-        plt.tight_layout(0, 0, 0)
+        plt.tight_layout()
 
 
 class LayerAligner(object):
@@ -897,9 +938,9 @@ class LayerAligner(object):
 
 class Intersection(object):
 
-    def __init__(self, corners1, corners2, min_size=None):
-        if min_size is None:
-            min_size = np.zeros(2)
+    def __init__(self, corners1, corners2, min_size=0):
+        if np.isscalar(min_size):
+            min_size = np.repeat(min_size, 2)
         self._calculate(corners1, corners2, min_size)
 
     def _calculate(self, corners1, corners2, min_size):
@@ -970,11 +1011,11 @@ class Mosaic(object):
             profile_shape = (num_channels, 1, 1)
             return (
                 np.zeros(profile_shape)
-                    if profile_type is 'dark'
+                    if profile_type == 'dark'
                     else np.ones(profile_shape)
             )
 
-        expected_ndim = 2 if num_channels is 1 else 3
+        expected_ndim = 2 if num_channels == 1 else 3
         profile = skimage.io.imread(path)
         if profile.ndim != expected_ndim:
             raise ValueError(
@@ -1292,6 +1333,33 @@ def plot_edge_quality(
             **final_nx_kwargs
         )
     fig.set_facecolor('black')
+
+
+def plot_edge_scatter(aligner, annotate=True):
+    import seaborn as sns
+    xdata = aligner.all_errors
+    ydata = np.clip(
+        [np.linalg.norm(v[0]) for v in aligner._cache.values()], 0.01, np.inf
+    )
+    pdata = np.clip(aligner.errors_negative_sampled, 0, 10)
+    g = sns.JointGrid(xdata, ydata)
+    g.plot_joint(sns.scatterplot, alpha=0.5)
+    _, xbins = np.histogram(np.hstack([xdata, pdata]), bins=40)
+    sns.distplot(
+        xdata, ax=g.ax_marg_x, kde=False, bins=xbins, norm_hist=True
+    )
+    sns.distplot(
+        pdata, ax=g.ax_marg_x, kde=False, bins=xbins, norm_hist=True,
+        hist_kws=dict(histtype='step')
+    )
+    g.ax_joint.axvline(aligner.max_error, c='k', ls=':')
+    g.ax_joint.axhline(aligner.max_shift_pixels, c='k', ls=':')
+    g.ax_joint.set_yscale('log')
+    g.set_axis_labels('error', 'shift')
+    if annotate:
+        for pair, x, y in zip(aligner.neighbors_graph.edges, xdata, ydata):
+            plt.annotate(str(pair), (x, y), alpha=0.1)
+    plt.tight_layout()
 
 
 def plot_layer_shifts(aligner, img=None):

@@ -1,49 +1,30 @@
 import itertools
 import warnings
-import pyfftw
 import skimage
 import scipy
+from scipy.fft import fft2
 import numpy as np
-
-
-def fft2(img):
-    return pyfftw.builders.fft2(img, planner_effort='FFTW_ESTIMATE',
-                                avoid_copy=True, auto_align_input=True,
-                                auto_contiguous=True)()
 
 
 # Pre-calculate the Laplacian operator kernel. We'll always be using 2D images.
 _laplace_kernel = skimage.restoration.uft.laplacian(2, (3, 3))[1]
 
 def whiten(img, sigma):
-    # Copied from skimage.filters.edges, with explicit aligned output from
-    # convolve. Also the mask option was dropped.
-    img = skimage.img_as_float(img)
-    output = pyfftw.empty_aligned(img.shape, 'complex64')
-    output.imag[:] = 0
+    img = skimage.img_as_float32(img)
     if sigma == 0:
-        scipy.ndimage.convolve(img, _laplace_kernel, output.real)
+        output = scipy.ndimage.convolve(img, _laplace_kernel)
     else:
-        scipy.ndimage.gaussian_laplace(img, sigma, output=output.real)
+        output = scipy.ndimage.gaussian_laplace(img, sigma)
     return output
 
-    # Other possible whitening functions:
-    #img = skimage.filters.roberts(img)
-    #img = skimage.filters.scharr(img)
-    #img = skimage.filters.sobel(img)
-    #img = np.log(img)
-    #img = img - scipy.ndimage.filters.gaussian_filter(img, 2) + 0.5
 
-
-def register(img1, img2, sigma):
+def register(img1, img2, sigma, upsample=10):
     img1w = whiten(img1, sigma)
     img2w = whiten(img2, sigma)
     img1_f = fft2(img1w)
     img2_f = fft2(img2w)
-    img1w = img1w.real
-    img2w = img2w.real
-    shift, _, _ = skimage.feature.register_translation(
-        img1_f, img2_f, 10, 'fourier'
+    shift, _error, _phasediff = skimage.feature.register_translation(
+        img1_f, img2_f, upsample, 'fourier'
     )
     # At this point we may have a shift in the wrong quadrant since the FFT
     # assumes the signal is periodic. We test all four possibilities and return
@@ -53,7 +34,7 @@ def register(img1, img2, sigma):
     shift_neg = shift_pos - shape
     shifts = list(itertools.product(*zip(shift_pos, shift_neg)))
     correlations = [
-        np.abs(np.sum(img1w * scipy.ndimage.shift(img2w, s)))
+        np.abs(np.sum(img1w * scipy.ndimage.shift(img2w, s, order=0)))
         for s in shifts
     ]
     idx = np.argmax(correlations)
@@ -67,9 +48,21 @@ def register(img1, img2, sigma):
     return shift, error
 
 
+def nccw(img1, img2, sigma):
+    img1w = whiten(img1, sigma)
+    img2w = whiten(img2, sigma)
+    correlation = np.abs(np.sum(img1w * img2w))
+    total_amplitude = np.linalg.norm(img1w) * np.linalg.norm(img2w)
+    if correlation > 0 and total_amplitude > 0:
+        error = -np.log(correlation / total_amplitude)
+    else:
+        error = np.inf
+    return error
+
+
 def crop(img, offset, shape):
     # Note that this only crops to the nearest whole-pixel offset.
-    start = offset.astype(int)
+    start = offset.round().astype(int)
     end = start + shape
     img = img[start[0]:end[0], start[1]:end[1]]
     return img
