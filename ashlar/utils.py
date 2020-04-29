@@ -187,16 +187,23 @@ def crop_like(img, target):
 def imsave(fname, arr, **kwargs):
     """Save an image to file.
 
-    This is a wrapper around skimage.io.imsave to handle the lack of the
-    check_contrast argument on v0.14, which is the last version to support
-    Python 2.7.
+    This is a wrapper around skimage.io.imsave to force check_contrast=False
+    since the contrast check kills us on the huge images we create.
 
     """
-    if skimage.__version__.startswith('0.14.'):
-        warnings.warn(
-            "Please upgrade to Python 3 and scikit-image v0.15+ to make image"
-            " saving much less resource-intensive."
-        )
-    else:
-        kwargs['check_contrast'] = False
-    return skimage.io.imsave(fname, arr, **kwargs)
+
+    if "check_contrast" in kwargs:
+        warnings.warn("ignoring check_contrast argument -- forcing to False")
+    kwargs["check_contrast"] = False
+
+    # We use scikit-image's vendored copy of tifffile directly rather than allow
+    # scikit-image to optimistically use a separately-installed copy of tifffile
+    # due to bugs and API inconsistencies in the latest pypi-hosted version:
+    # * Use of "centimeter" for resolution units instead of "cm"
+    # * A bug in writing single-tile planes -- issue #3 on GitHub
+    # FIXME Once scikit-image un-vendors tifffile (#4235) AND tifffile fixes #3
+    # we can remove this block and use `skimage.io.imsave` directly again. Or we
+    # might just want to switch to tifffile.imsave.
+    del kwargs["check_contrast"]
+    import skimage.external.tifffile
+    skimage.external.tifffile.imsave(fname, arr, **kwargs)

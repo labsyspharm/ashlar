@@ -14,7 +14,11 @@ requires = [
     'matplotlib>=3.1.2',
     'networkx>=2.4',
     'scipy>=1.4.1',
-    'scikit-image>=0.16.2',
+    # We require scikit-image's vendored old copy of tifffile -- see imsave in
+    # ashlar/utils.py for details. They are un-vendoring it soon, so we're
+    # pinning our dependency to the exact latest version.
+    # FIXME Release the pin once all the issues are resolved.
+    'scikit-image==0.16.2',
     'scikit-learn>=0.21.1',
     'blessed>=1.17',
 ]

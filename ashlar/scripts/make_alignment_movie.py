@@ -5,9 +5,9 @@ import re
 import subprocess
 import gc
 import numpy as np
-import skimage.io
 import skimage.transform
 import skimage.exposure
+from .. import utils
 
 
 # Target width.
@@ -53,16 +53,7 @@ def main(argv=sys.argv):
         vmax = np.percentile(img_new, 99.5)
         img_new = skimage.exposure.rescale_intensity(img_new, (vmin, vmax))
         img_new = skimage.exposure.adjust_gamma(img_new, 1/2.2)
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                'ignore', r'Possible precision loss', UserWarning,
-                '^skimage\.util\.dtype'
-            )
-            warnings.filterwarnings(
-                'ignore', r'.* is a low contrast image', UserWarning,
-                '^skimage\.io'
-            )
-            skimage.io.imsave(out_path, img_new)
+        utils.imsave(out_path, img_new)
     print('rendering frames to %s' % (MOVIE_FILENAME))
     subprocess.call(CMD.split(' '))
     return 0

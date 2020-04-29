@@ -1095,6 +1095,7 @@ class Mosaic(object):
                     # FIXME Propagate this from input files (esp. RGB).
                     kwargs['photometric'] = 'minisblack'
                     resolution = np.round(10000 / self.aligner.reader.metadata.pixel_size)
+                    # FIXME Switch to "CENTIMETER" once we use tifffile directly.
                     kwargs['resolution'] = (resolution, resolution, 'cm')
                     kwargs['metadata'] = None
                     if self.first and ci == 0:
