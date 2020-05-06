@@ -1,4 +1,3 @@
-from __future__ import print_function, division
 import warnings
 import sys
 import argparse
@@ -36,12 +35,6 @@ def main(argv=sys.argv):
     )
     args = parser.parse_args()
 
-    try:
-        from modest_image import imshow
-    except ImportError:
-        warnings.warn("Please install ModestImage to speed up image rendering")
-        imshow = plt.imshow
-
     reader = reg.BioformatsReader(args.input)
     metadata = reader.metadata
 
@@ -65,7 +58,7 @@ def main(argv=sys.argv):
 
     ax = plt.gca()
 
-    imshow(X=mosaic, axes=ax)
+    plt.imshow(X=mosaic, axes=ax)
 
     h, w = metadata.size
     for i, (x, y) in enumerate(np.fliplr(positions)):

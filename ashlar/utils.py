@@ -1,8 +1,12 @@
 import itertools
 import warnings
-import skimage
-import scipy
-from scipy.fft import fft2
+import skimage.feature
+import skimage.io
+import skimage.restoration.uft
+import skimage.util
+import skimage.util.dtype
+import scipy.ndimage
+import scipy.fft
 import numpy as np
 
 
@@ -21,8 +25,8 @@ def whiten(img, sigma):
 def register(img1, img2, sigma, upsample=10):
     img1w = whiten(img1, sigma)
     img2w = whiten(img2, sigma)
-    img1_f = fft2(img1w)
-    img2_f = fft2(img2w)
+    img1_f = scipy.fft.fft2(img1w)
+    img2_f = scipy.fft.fft2(img2w)
     shift, _error, _phasediff = skimage.feature.register_translation(
         img1_f, img2_f, upsample, 'fourier'
     )
@@ -84,7 +88,7 @@ def crop(img, offset, shape):
 def fourier_shift(img, shift):
     # Ensure properly aligned complex64 data (fft requires complex to avoid
     # reallocation and copying).
-    img = convert(img, np.float32)
+    img = skimage.util.img_as_float32(img)
     img = pyfftw.byte_align(img, dtype=np.complex64)
     # Compute per-axis frequency values according to the Fourier shift theorem.
     # (Read "w" here as "omega".) We pre-multiply as many scalar values as
@@ -152,7 +156,7 @@ def paste(target, img, pos, func=None):
     target_slice = target_slice[y1:y2, x1:x2]
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
-    img = convert(img, target.dtype)
+    img = skimage.util.dtype.convert(img, target.dtype)
     if func is None:
         target_slice[:] = img
     elif isinstance(func, np.ufunc):
@@ -180,35 +184,26 @@ def crop_like(img, target):
     return img
 
 
-def convert(image, dtype, **kwargs):
-    """
-    Convert an image to the requested data-type.
-
-    This is just a wrapper around skimage's convert function to suppress the
-    precision loss warning.
-
-    """
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            'ignore', 'Possible precision loss', UserWarning,
-            '^skimage\.util\.dtype'
-        )
-        return skimage.util.dtype.convert(image, dtype, **kwargs)
-
-
 def imsave(fname, arr, **kwargs):
     """Save an image to file.
 
-    This is a wrapper around skimage.io.imsave to handle the lack of the
-    check_contrast argument on v0.14, which is the last version to support
-    Python 2.7.
+    This is a wrapper around skimage.io.imsave to force check_contrast=False
+    since the contrast check kills us on the huge images we create.
 
     """
-    if skimage.__version__.startswith('0.14.'):
-        warnings.warn(
-            "Please upgrade to Python 3 and scikit-image v0.15+ to make image"
-            " saving much less resource-intensive."
-        )
-    else:
-        kwargs['check_contrast'] = False
-    return skimage.io.imsave(fname, arr, **kwargs)
+
+    if "check_contrast" in kwargs:
+        warnings.warn("ignoring check_contrast argument -- forcing to False")
+    kwargs["check_contrast"] = False
+
+    # We use scikit-image's vendored copy of tifffile directly rather than allow
+    # scikit-image to optimistically use a separately-installed copy of tifffile
+    # due to bugs and API inconsistencies in the latest pypi-hosted version:
+    # * Use of "centimeter" for resolution units instead of "cm"
+    # * A bug in writing single-tile planes -- issue #3 on GitHub
+    # FIXME Once scikit-image un-vendors tifffile (#4235) AND tifffile fixes #3
+    # we can remove this block and use `skimage.io.imsave` directly again. Or we
+    # might just want to switch to tifffile.imsave.
+    del kwargs["check_contrast"]
+    import skimage.external.tifffile
+    skimage.external.tifffile.imsave(fname, arr, **kwargs)

@@ -1,12 +1,9 @@
-from __future__ import print_function, division
 import sys
 import pathlib
 import numpy as np
 from . import utils
 from skimage.transform import rescale
 from skimage.feature import register_translation
-from skimage.io import imsave
-import warnings
 
 
 def make_thumbnail(reader, channel=0, scale=0.05):
@@ -30,9 +27,9 @@ def make_thumbnail(reader, channel=0, scale=0.05):
 
 
 def calculate_image_offset(img1, img2, upsample_factor=1):
-    ref = utils.fft2(utils.whiten(img1, 0))
-    test = utils.fft2(utils.whiten(img2, 0))
-    shift, error, _ = register_translation(ref, test, upsample_factor, 'fourier')
+    ref = utils.whiten(img1, 0)
+    test = utils.whiten(img2, 0)
+    shift, error, _ = register_translation(ref, test, upsample_factor)
     return shift
 
 

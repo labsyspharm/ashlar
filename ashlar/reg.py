@@ -1,7 +1,6 @@
 import sys
 import warnings
 import re
-import itertools
 import xml.etree.ElementTree
 import io
 import uuid
@@ -9,23 +8,17 @@ import struct
 import pathlib
 import jnius_config
 import numpy as np
-import scipy.ndimage
+import scipy.spatial.distance
+import scipy.fft
 import skimage.util
-import skimage.feature
-import skimage.filters
-import skimage.restoration.uft
+import skimage.util.dtype
 import skimage.io
 import skimage.exposure
 import skimage.transform
 import sklearn.linear_model
 import networkx as nx
-import queue
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-try:
-    import modest_image
-except ImportError:
-    modest_image = None
 from . import utils
 from . import thumbnail
 from . import __version__ as _version
@@ -736,8 +729,8 @@ class EdgeAligner(object):
         its, o1, o2 = self.overlap(t1, t2, min_size)
         w1 = utils.whiten(o1, self.filter_sigma)
         w2 = utils.whiten(o2, self.filter_sigma)
-        corr = np.fft.fftshift(np.abs(np.fft.ifft2(
-            np.fft.fft2(w1) * np.fft.fft2(w2).conj()
+        corr = scipy.fft.fftshift(np.abs(scipy.fft.ifft2(
+            scipy.fft.fft2(w1) * scipy.fft.fft2(w2).conj()
         )))
         corr /= (np.linalg.norm(w1) * np.linalg.norm(w2))
         stack = np.vstack
@@ -915,8 +908,8 @@ class LayerAligner(object):
         its, o1, o2 = self.overlap(t)
         w1 = utils.whiten(o1, self.filter_sigma)
         w2 = utils.whiten(o2, self.filter_sigma)
-        corr = np.fft.fftshift(np.abs(np.fft.ifft2(
-            np.fft.fft2(w1) * np.fft.fft2(w2).conj()
+        corr = scipy.fft.fftshift(np.abs(scipy.fft.ifft2(
+            scipy.fft.fft2(w1) * scipy.fft.fft2(w2).conj()
         )))
         plt.figure()
         plt.subplot(1, 3, 1)
@@ -1102,6 +1095,7 @@ class Mosaic(object):
                     # FIXME Propagate this from input files (esp. RGB).
                     kwargs['photometric'] = 'minisblack'
                     resolution = np.round(10000 / self.aligner.reader.metadata.pixel_size)
+                    # FIXME Switch to "CENTIMETER" once we use tifffile directly.
                     kwargs['resolution'] = (resolution, resolution, 'cm')
                     kwargs['metadata'] = None
                     if self.first and ci == 0:
@@ -1127,7 +1121,7 @@ class Mosaic(object):
 
     def correct_illumination(self, img, channel):
         if self.do_correction:
-            img = skimage.img_as_float(img, force_copy=True)
+            img = skimage.util.img_as_float(img, force_copy=True)
             img -= self.dfp[channel, ...]
             img /= self.ffp[channel, ...]
             img.clip(0, 1, out=img)
@@ -1151,7 +1145,7 @@ def build_pyramid(
                 sys.stdout.flush()
             img = skimage.io.imread(path, series=prev_level, key=i)
             img = skimage.transform.pyramid_reduce(img, multichannel=False)
-            img = utils.convert(img, dtype)
+            img = skimage.util.dtype.convert(img, dtype)
             utils.imsave(
                 path, img, bigtiff=True, metadata=None, append=True,
                 tile=(tile_size, tile_size), photometric='minisblack'
@@ -1381,19 +1375,8 @@ def plot_layer_shifts(aligner, img=None):
 
 
 def draw_mosaic_image(ax, aligner, img, use_mi=True):
-    if use_mi and img is not None:
-        if sys.version_info[0] != 2:
-            warnings.warn('ModestImage module (required for image display)'
-                          ' is only compatible with Python 2')
-            img = None
-        elif modest_image is None:
-            warnings.warn('Please install ModestImage for image display')
-            img = None
     if img is not None:
-        if use_mi:
-            modest_image.imshow(ax, img)
-        else:
-            ax.imshow(img)
+        ax.imshow(img)
     else:
         h, w = aligner.mosaic_shape
         # Draw a single-pixel image in the lowest color in the colormap,
