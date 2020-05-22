@@ -3,6 +3,7 @@ import warnings
 import skimage.feature
 import skimage.io
 import skimage.restoration.uft
+import skimage.morphology
 import skimage.util
 import skimage.util.dtype
 import scipy.ndimage
@@ -166,8 +167,12 @@ def paste(target, img, pos, func=None):
 
 
 def pastefunc_blend(target, img):
-    # Linear blend based on distance to unfilled space in target.
-    dist = scipy.ndimage.distance_transform_cdt(target)
+    """Linear blend based on distance to unfilled space in target."""
+    # This should catch actual holes but not the actual unfilled space.
+    # FIXME Should generate mask from tile boundaries instead.
+    hole_threshold = np.mean(target.shape)
+    mask = skimage.morphology.remove_small_holes(target != 0, hole_threshold)
+    dist = scipy.ndimage.distance_transform_cdt(mask)
     dmax = dist.max()
     if dmax == 0:
         alpha = 0
