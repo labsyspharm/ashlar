@@ -446,7 +446,7 @@ class EdgeAligner(object):
 
     def __init__(
         self, reader, channel=0, max_shift=15, false_positive_ratio=0.01,
-        filter_sigma=0.0, do_make_thumbnail=True, verbose=False
+        randomize=False, filter_sigma=0.0, do_make_thumbnail=True, verbose=False
     ):
         self.channel = channel
         self.reader = CachingReader(reader, self.channel)
@@ -455,6 +455,7 @@ class EdgeAligner(object):
         self.max_shift = max_shift
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
         self.false_positive_ratio = false_positive_ratio
+        self.randomize = randomize
         self.filter_sigma = filter_sigma
         self.do_make_thumbnail = do_make_thumbnail
         self._cache = {}
@@ -521,11 +522,15 @@ class EdgeAligner(object):
         # Generate n random non-overlapping image strips. Strips are always
         # horizontal, across the entire image width.
         max_tries = 100
+        if self.randomize is False:
+            random_state = np.random.RandomState(0)
+        else:
+            random_state = np.random.RandomState()
         for i in range(n):
             # Limit tries to avoid infinite loop in pathological cases.
             for current_try in range(max_tries):
-                t1, t2 = np.random.randint(self.metadata.num_images, size=2)
-                o1, o2 = np.random.randint(max_offset, size=2)
+                t1, t2 = random_state.randint(self.metadata.num_images, size=2)
+                o1, o2 = random_state.randint(max_offset, size=2)
                 # Check for non-overlapping strips and abort the retry loop.
                 if t1 != t2 and (t1, t2) not in edges:
                     # Different, non-neighboring tiles -- always OK.
