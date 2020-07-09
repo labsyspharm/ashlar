@@ -32,7 +32,10 @@ def f2r_repl(m):
 
 class FileSeriesMetadata(reg.PlateMetadata):
 
-    def __init__(self, path, pattern, overlap, width, height, pixel_size):
+    def __init__(
+        self, path, pattern, overlap, width, height, layout, direction,
+        pixel_size,
+    ):
         # The pattern argument uses the Python Format String syntax with
         # required "series" and optionally "channel" fields. A width
         # specification with leading zeros must be used for any fields that are
@@ -45,6 +48,8 @@ class FileSeriesMetadata(reg.PlateMetadata):
         self.overlap = overlap
         self.width = width
         self.height = height
+        self.layout = layout
+        self.direction = direction
         self._pixel_size = pixel_size
         self._enumerate_tiles()
 
@@ -134,8 +139,16 @@ class FileSeriesMetadata(reg.PlateMetadata):
         return self._tile_size
 
     def tile_rc(self, i):
-        row = i // self.width
-        col = i % self.width
+        if self.direction == "horizontal":
+            row = i // self.width
+            col = i % self.width
+            if self.layout == "snake" and row % 2 == 1:
+                col = self.width - 1 - col
+        else:
+            row = i % self.height
+            col = i // self.height
+            if self.layout == "snake" and col % 2 == 1:
+                row = self.height - 1 - row
         return row, col
 
     def filename(self, series, c):
@@ -148,14 +161,19 @@ class FileSeriesMetadata(reg.PlateMetadata):
 class FileSeriesReader(reg.PlateReader):
 
     def __init__(
-        self, path, pattern, overlap, width, height, pixel_size=1.0,
-        plate=None, well=None
+        self, path, pattern, overlap, width, height, layout="raster",
+        direction="horizontal", pixel_size=1.0, plate=None, well=None
     ):
         # See FileSeriesMetadata for an explanation of the pattern syntax.
+        if layout not in ("raster", "snake"):
+            raise ValueError("layout must be 'raster' or 'snake'")
+        if direction not in ("horizontal", "vertical"):
+            raise ValueError("direction must be 'horizontal' or 'vertical'")
         self.path = pathlib.Path(path)
         self.pattern = pattern
         self.metadata = FileSeriesMetadata(
-            self.path, self.pattern, overlap, width, height, pixel_size
+            self.path, self.pattern, overlap, width, height, layout, direction,
+            pixel_size
         )
         self.metadata.set_active_plate_well(plate, well)
 
