@@ -212,3 +212,9 @@ def imsave(fname, arr, **kwargs):
     del kwargs["check_contrast"]
     import skimage.external.tifffile
     skimage.external.tifffile.imsave(fname, arr, **kwargs)
+
+
+def scale_shape(shape, scale):
+    scaled_shape = np.array(shape).astype(np.float64)
+    scaled_shape *= scale
+    return tuple(scaled_shape.astype(np.int64))

@@ -3,6 +3,7 @@ import warnings
 import re
 import xml.etree.ElementTree
 import io
+import copy
 import uuid
 import struct
 import pathlib
@@ -769,6 +770,43 @@ class EdgeAligner(object):
         plt.tight_layout()
 
 
+class ScaledEdgeAligner(EdgeAligner):
+
+    def __init__(self, original_aligner, scale):
+
+        super(ScaledEdgeAligner, self).__init__(
+            original_aligner.reader, channel=original_aligner.channel
+        )
+
+        self.original_aligner = original_aligner
+        self.scale = scale
+
+        self.reader = copy.deepcopy(self.original_aligner.reader)
+
+        # self.channel = self.original_aligner.channel
+        self.reader.thumbnail = skimage.transform.rescale(
+            self.original_aligner.reader.thumbnail,
+            self.scale,
+            multichannel=False,
+            anti_aliasing=False,
+            preserve_range=True,
+        ).astype(self.original_aligner.reader.thumbnail.dtype)
+        self.metadata._positions = (
+            self.original_aligner.metadata.positions * self.scale
+        )
+        self.positions = self.original_aligner.positions * self.scale
+
+        self.lr = sklearn.linear_model.LinearRegression()
+        self.lr.fit(self.metadata.positions, self.positions)
+        self.reader.read = self._read
+
+    def _read(self, series, c):
+        return skimage.transform.rescale(
+            self.original_aligner.reader.read(series, c), self.scale,
+            multichannel=False, anti_aliasing=True, preserve_range=True
+        )
+
+
 class LayerAligner(object):
 
     def __init__(self, reader, reference_aligner, channel=None, max_shift=15,
@@ -960,13 +998,14 @@ class Mosaic(object):
 
     def __init__(
             self, aligner, shape, filename_format, channels=None,
-            ffp_path=None, dfp_path=None, combined=False, tile_size=None,
-            first=False, verbose=False
+            ffp_path=None, dfp_path=None, scale=1., combined=False,
+            tile_size=None, first=False, verbose=False
     ):
         self.aligner = aligner
         self.shape = tuple(shape)
         self.filename_format = filename_format
         self.channels = self._sanitize_channels(channels)
+        self.scale = scale
         self.combined = combined
         self.tile_size = tile_size
         self.first = first
@@ -1074,6 +1113,11 @@ class Mosaic(object):
                     sys.stdout.flush()
                 tile_image = self.aligner.reader.read(c=channel, series=tile)
                 tile_image = self.correct_illumination(tile_image, channel)
+                if self.scale != 1:
+                    tile_image = skimage.transform.rescale(
+                        tile_image, self.scale, multichannel=False,
+                        anti_aliasing=True, preserve_range=True
+                    ).astype(tile_image.dtype)
                 if debug:
                     color_channel = node_colors[tile]
                     rgb_image = np.zeros(tile_image.shape + (3,),
@@ -1081,7 +1125,7 @@ class Mosaic(object):
                     rgb_image[:,:,color_channel] = tile_image
                     tile_image = rgb_image
                 func = utils.pastefunc_blend if not debug else np.add
-                utils.paste(mosaic_image, tile_image, position, func=func)
+                utils.paste(mosaic_image, tile_image, position * self.scale, func=func)
             if debug:
                 np.clip(mosaic_image, 0, 1, out=mosaic_image)
                 w = int(1e6)

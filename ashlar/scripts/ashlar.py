@@ -6,10 +6,11 @@ import pathlib
 import blessed
 from .. import __version__ as VERSION
 from .. import reg
-from ..reg import PlateReader, BioformatsReader
+from ..reg import PlateReader, BioformatsReader, ScaledEdgeAligner
 from ..filepattern import FilePatternReader
 from ..fileseries import FileSeriesReader
 from ..zen import ZenReader
+from ..utils import scale_shape
 
 
 def main(argv=sys.argv):
@@ -85,6 +86,12 @@ def main(argv=sys.argv):
               ' be one common file for all cycles or one file for each cycle')
     )
     parser.add_argument(
+        '--scales', type=float, metavar='SCALE', nargs='*',
+        help=('float point numbers denote the desired output scales relative'
+              'to the raw input images; must be one SCALE for all cycles or'
+              'one SCALE for each cycle')
+    )
+    parser.add_argument(
         '--plates', default=False, action='store_true',
         help='enable plate mode for HTS data'
     )
@@ -145,6 +152,21 @@ def main(argv=sys.argv):
         if len(dfp_paths) == 1:
             dfp_paths = dfp_paths * len(filepaths)
 
+    scales = args.scales
+    if not scales:
+        scales = [1.] * len(filepaths)
+    if len(scales) == 1:
+        scales *= len(filepaths)
+    if len(scales) != len(filepaths):
+        print_error(
+            "Wrong number of scales. Must be 1, or {} (number of input files)"
+            " but get {}".format(len(filepaths), len(scales))
+        )
+        return 1
+    if 0 in scales:
+        print_error("Any SCALE in scales ({}) must not be 0".format(scales))
+        return 1
+
     aligner_args = {}
     aligner_args['channel'] = args.align_channel
     aligner_args['verbose'] = not args.quiet
@@ -170,8 +192,8 @@ def main(argv=sys.argv):
             mosaic_path_format = str(output_path / args.filename_format)
             return process_single(
                 filepaths, mosaic_path_format, args.flip_x, args.flip_y,
-                ffp_paths, dfp_paths, aligner_args, mosaic_args, args.pyramid,
-                args.quiet
+                ffp_paths, dfp_paths, scales, aligner_args, mosaic_args,
+                args.pyramid, args.quiet
             )
     except ProcessingError as e:
         print_error(str(e))
@@ -180,21 +202,28 @@ def main(argv=sys.argv):
 
 def process_single(
     filepaths, mosaic_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
-    aligner_args, mosaic_args, pyramid, quiet, plate_well=None
+    scales, aligner_args, mosaic_args, pyramid, quiet, plate_well=None
 ):
 
-    output_path_0 = format_cycle(mosaic_path_format, 0)
     if pyramid:
-        if output_path_0 != mosaic_path_format:
+        if format_cycle(mosaic_path_format, 0) != mosaic_path_format:
             raise ProcessingError(
                 "For pyramid output, please use -f to specify an output"
                 " filename without {cycle} or {channel} placeholders"
             )
 
+    scale_set = set(scales)
+    if len(scale_set) > 1:
+        mosaic_name = pathlib.Path(mosaic_path_format).name
+        scale_format = 'scaled_{scale:4.2f}-' + mosaic_name
+        mosaic_path_format = mosaic_path_format.replace(
+            mosaic_name, scale_format
+        )
+
     mosaic_args = mosaic_args.copy()
     if pyramid:
         mosaic_args['combined'] = True
-    num_channels = 0
+    num_channels = [0 for i in scale_set]
 
     if not quiet:
         print('Cycle 0:')
@@ -208,16 +237,28 @@ def process_single(
     edge_aligner.run()
     mshape = edge_aligner.mosaic_shape
     mosaic_args_final = mosaic_args.copy()
-    mosaic_args_final['first'] = True
     if ffp_paths:
         mosaic_args_final['ffp_path'] = ffp_paths[0]
     if dfp_paths:
         mosaic_args_final['dfp_path'] = dfp_paths[0]
-    mosaic = reg.Mosaic(
-        edge_aligner, mshape, output_path_0, **mosaic_args_final
-    )
-    mosaic.run()
-    num_channels += len(mosaic.channels)
+
+    for idx, scale in enumerate(scale_set):
+        relative_scale = scale / scales[0]
+        if relative_scale <= 1:
+            output_path_0 = format_scale_and_cycle(
+                mosaic_path_format, scale=scale, cycle=0
+            )
+            is_first = num_channels[idx] == 0
+            mosaic_args_final['first'] = is_first
+            mosaic_args_final['scale'] = relative_scale
+            mosaic = reg.Mosaic(
+                edge_aligner,
+                scale_shape(mshape, scale / scales[0]),
+                output_path_0,
+                **mosaic_args_final
+            )
+            mosaic.run()
+            num_channels[idx] += len(mosaic.channels)
 
     for cycle, filepath in enumerate(filepaths[1:], 1):
         if not quiet:
@@ -225,26 +266,52 @@ def process_single(
             print('    reading %s' % filepath)
         reader = build_reader(filepath, plate_well=plate_well)
         process_axis_flip(reader, flip_x, flip_y)
-        layer_aligner = reg.LayerAligner(reader, edge_aligner, **aligner_args)
+
+        cycle_scale = scales[cycle] / scales[0]
+        if cycle_scale != 1:
+            scaled_edge_aligner = ScaledEdgeAligner(edge_aligner, cycle_scale)
+            layer_aligner = reg.LayerAligner(
+                reader, scaled_edge_aligner, **aligner_args
+            )
+        else:
+            layer_aligner = reg.LayerAligner(reader, edge_aligner, **aligner_args)
         layer_aligner.run()
         mosaic_args_final = mosaic_args.copy()
         if ffp_paths:
             mosaic_args_final['ffp_path'] = ffp_paths[cycle]
         if dfp_paths:
             mosaic_args_final['dfp_path'] = dfp_paths[cycle]
-        mosaic = reg.Mosaic(
-            layer_aligner, mshape, format_cycle(mosaic_path_format, cycle),
-            **mosaic_args_final
-        )
-        mosaic.run()
-        num_channels += len(mosaic.channels)
+
+        for idx, scale in enumerate(scale_set):
+            relative_scale = scale / scales[cycle]
+            if relative_scale <= 1:
+                output_path_n = format_scale_and_cycle(
+                    mosaic_path_format, scale=scale, cycle=cycle
+                )
+                is_first = num_channels[idx] == 0
+                mosaic_args_final['first'] = is_first
+                mosaic_args_final['scale'] = relative_scale
+                mosaic = reg.Mosaic(
+                    layer_aligner,
+                    scale_shape(mshape, scale / scales[0]),
+                    output_path_n,
+                    **mosaic_args_final
+                )
+                mosaic.run()
+                num_channels[idx] += len(mosaic.channels)
 
     if pyramid:
         print("Building pyramid")
-        reg.build_pyramid(
-            output_path_0, num_channels, mshape, reader.metadata.pixel_dtype,
-            reader.metadata.pixel_size, mosaic_args['tile_size'], not quiet
-        )
+        for idx, scale in enumerate(scale_set):
+            reg.build_pyramid(
+                format_scale_and_cycle(mosaic_path_format, scale, 0),
+                num_channels[idx],
+                scale_shape(mshape, scale / scales[0]),
+                reader.metadata.pixel_dtype,
+                reader.metadata.pixel_size * scales[-1] / scale,
+                mosaic_args['tile_size'],
+                not quiet
+            )
 
     return 0
 
@@ -284,6 +351,10 @@ def process_plates(
 
 def format_cycle(f, cycle):
     return f.format(cycle=cycle, channel='{channel}')
+
+
+def format_scale_and_cycle(f, scale, cycle):
+    return f.format(scale=scale, cycle=cycle, channel='{channel}')
 
 
 def process_axis_flip(reader, flip_x, flip_y):

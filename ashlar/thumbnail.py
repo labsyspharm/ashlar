@@ -42,7 +42,8 @@ def calculate_cycle_offset(reader1, reader2, scale=0.05):
     img2 = reader2.thumbnail
     if img1.shape != img2.shape:
         padded_shape = np.array((img1.shape, img2.shape)).max(axis=0)
-        padded_img1, padded_img2 = np.zeros(padded_shape), np.zeros(padded_shape)
+        padded_img1 = np.zeros(padded_shape, dtype=img1.dtype)
+        padded_img2 = np.zeros(padded_shape, dtype=img2.dtype)
         utils.paste(padded_img1, img1, [0, 0])
         utils.paste(padded_img2, img2, [0, 0])
         img1 = padded_img1
