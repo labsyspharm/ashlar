@@ -40,6 +40,7 @@ MetadataRetrieve = jnius.autoclass('ome.xml.meta.MetadataRetrieve')
 ServiceFactory = jnius.autoclass('loci.common.services.ServiceFactory')
 OMEXMLService = jnius.autoclass('loci.formats.services.OMEXMLService')
 ChannelSeparator = jnius.autoclass('loci.formats.ChannelSeparator')
+DynamicMetadataOptions = jnius.autoclass('loci.formats.in.DynamicMetadataOptions')
 UNITS = jnius.autoclass('ome.units.UNITS')
 DebugTools.enableLogging("ERROR")
 
@@ -219,6 +220,12 @@ class BioformatsMetadata(PlateMetadata):
         metadata = service.createOMEXMLMetadata()
         self._reader = ChannelSeparator()
         self._reader.setMetadataStore(metadata)
+        # For multi-scene .CZI files, we need raw tiles instead of the
+        # auto-stitched mosaic and we don't want labels or overview images
+        options = DynamicMetadataOptions()
+        options.setBoolean('zeissczi.autostitch', False)
+        options.setBoolean('zeissczi.attachments', False)
+        self._reader.setMetadataOptions(options)
         self._reader.setId(self.path)
 
         xml_content = service.getOMEXML(metadata)
