@@ -18,7 +18,9 @@ import skimage.transform
 import sklearn.linear_model
 import networkx as nx
 import matplotlib.pyplot as plt
+import matplotlib.cm as mcm
 import matplotlib.patches as mpatches
+import matplotlib.patheffects as mpatheffects
 from . import utils
 from . import thumbnail
 from . import __version__ as _version
@@ -868,6 +870,7 @@ class LayerAligner(object):
         extremes = distance > max_dist
         # Recalculate the mean shift, also ignoring the extreme values.
         discard |= extremes
+        self.discard = discard
         if discard.all():
             self.offset = 0
         else:
@@ -1377,6 +1380,62 @@ def plot_layer_shifts(aligner, img=None):
         node_size=100, font_size=6
     )
     fig.set_facecolor('black')
+
+
+def plot_layer_quality(
+    aligner, img=None, scale=1.0, artist='patches', annotate=True
+):
+    fig = plt.figure()
+    ax = plt.gca()
+    draw_mosaic_image(ax, aligner, img)
+
+    h, w = aligner.metadata.size
+    positions, centers, shifts = aligner.positions, aligner.centers, aligner.shifts
+
+    if scale != 1.0:
+        h, w, positions, centers, shifts = [scale * i
+            for i in [h, w, positions, centers, shifts]
+        ]
+
+    # Bounding boxes denoting new tile positions.
+    color_index = skimage.exposure.rescale_intensity(
+        aligner.errors, out_range=np.uint8
+    ).astype(np.uint8)
+    color_map = mcm.magma_r
+    for xy, c_idx in zip(np.fliplr(positions), color_index):
+        rect = mpatches.Rectangle(
+            xy, w, h, color=color_map(c_idx), fill=False, lw=0.5
+        )
+        ax.add_patch(rect)
+    
+    # Annotate tile numbering
+    if annotate:
+        for idx, (x, y) in enumerate(np.fliplr(positions)):
+            text = plt.annotate(str(idx), (x+0.1*w, y+0.9*h), alpha=0.7)
+            # add outline to text for better contract in different background color
+            text_outline = mpatheffects.Stroke(linewidth=1, foreground='#AAA')
+            text.set_path_effects(
+                [text_outline, mpatheffects.Normal()]
+            )
+
+    if artist is 'quiver':
+        ax.quiver(
+            *centers.T[::-1], *shifts.T[::-1], aligner.discard,
+            units='dots', width=2,
+            scale=1, scale_units='xy', angles='xy',
+            cmap='Greys'
+        )
+    if artist is 'patches':
+        for xy, dxy, is_discarded in zip(
+            np.fliplr(centers), np.fliplr(shifts), aligner.discard
+        ):
+            arrow = mpatches.FancyArrowPatch(
+                xy, np.array(xy) + np.array(dxy), 
+                arrowstyle='->', color='0' if is_discarded else '1',
+                mutation_scale=8,
+                )
+            ax.add_patch(arrow)
+    ax.axis('off')
 
 
 def draw_mosaic_image(ax, aligner, img, use_mi=True):
