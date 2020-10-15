@@ -146,15 +146,19 @@ def paste(target, img, pos, func=None):
         else:
             for c in range(img.shape[2]):
                 img[...,c] = scipy.ndimage.shift(img[...,c], pos_f)
-    # For any axis where there is a non-zero subpixel shift, crop out the last
-    # row or column of pixels on the "losing" side. These pixels will be darker
-    # than normal and will introduce artifacts in most blending modes.
-    y1 = None if pos_f[0] <= 0 else 1
-    y2 = None if pos_f[0] >= 0 else -1
-    x1 = None if pos_f[1] <= 0 else 1
-    x2 = None if pos_f[1] >= 0 else -1
-    img = img[y1:y2, x1:x2]
-    target_slice = target_slice[y1:y2, x1:x2]
+        # For any axis where there is a non-zero subpixel shift, crop out the
+        # last row or column of pixels on the "losing" side. These pixels will
+        # be darker than normal and will introduce artifacts in most blending
+        # modes.
+        y1 = None if pos_f[0] <= 0 else 1
+        y2 = None if pos_f[0] >= 0 else -1
+        x1 = None if pos_f[1] <= 0 else 1
+        x2 = None if pos_f[1] >= 0 else -1
+        img = img[y1:y2, x1:x2]
+        target_slice = target_slice[y1:y2, x1:x2]
+        # Exit if image area is zero after subpixel shift.
+        if not np.all(img.shape):
+            return
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     img = skimage.util.dtype.convert(img, target.dtype)
