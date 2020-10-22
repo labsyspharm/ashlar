@@ -1400,8 +1400,8 @@ def plot_layer_quality(
     positions, centers, shifts = aligner.positions, aligner.centers, aligner.shifts
 
     if scale != 1.0:
-        h, w, positions, centers, shifts = [scale * i
-            for i in [h, w, positions, centers, shifts]
+        h, w, positions, centers, shifts = [
+            scale * i for i in [h, w, positions, centers, shifts]
         ]
 
     # Bounding boxes denoting new tile positions.
@@ -1415,11 +1415,11 @@ def plot_layer_quality(
         )
         ax.add_patch(rect)
     
-    # Annotate tile numbering
+    # Annotate tile numbering.
     if annotate:
         for idx, (x, y) in enumerate(np.fliplr(positions)):
             text = plt.annotate(str(idx), (x+0.1*w, y+0.9*h), alpha=0.7)
-            # add outline to text for better contract in different background color
+            # Add outline to text for better contrast in different background color.
             text_outline = mpatheffects.Stroke(linewidth=1, foreground='#AAA')
             text.set_path_effects(
                 [text_outline, mpatheffects.Normal()]
@@ -1428,8 +1428,7 @@ def plot_layer_quality(
     if artist is 'quiver':
         ax.quiver(
             *centers.T[::-1], *shifts.T[::-1], aligner.discard,
-            units='dots', width=2,
-            scale=1, scale_units='xy', angles='xy',
+            units='dots', width=2, scale=1, scale_units='xy', angles='xy',
             cmap='Greys'
         )
     if artist is 'patches':
