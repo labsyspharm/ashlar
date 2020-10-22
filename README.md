@@ -75,7 +75,7 @@ conda activate ashlar_env
 In the activated environment (ashlar_env) install ashlar from pypi
 
 ```bash
-pip install ashlar
+pip install -q ashlar
 ```
 
 ### Docker image
