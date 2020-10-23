@@ -3,7 +3,7 @@
 ## Usage
 
 ```
-ashlar [-h] [-o DIR] [-c [CHANNEL]]
+ashlar [-h] [-o DIR] [-c [CHANNEL]] [--flip-x] [--flip-y]
        [--output-channels [CHANNEL [CHANNEL ...]]] [-m SHIFT]
        [--filter-sigma SIGMA] [-f FORMAT] [--pyramid]
        [--tile-size PIXELS] [--ffp [FILE [FILE ...]]]
@@ -22,6 +22,10 @@ optional arguments:
   -c [CHANNEL], --align-channel [CHANNEL]
                         align images using channel number CHANNEL; numbering
                         starts at 0
+  --flip-x              flip tile positions left-to-right to account for
+                        unusual microscope configurations
+  --flip-y              flip tile positions top-to-bottom to account for
+                        unusual microscope configurations
   --output-channels [CHANNEL [CHANNEL ...]]
                         output only channels listed in CHANNELS; numbering
                         starts at 0
