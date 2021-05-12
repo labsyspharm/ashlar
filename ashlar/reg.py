@@ -1425,13 +1425,13 @@ def plot_layer_quality(
                 [text_outline, mpatheffects.Normal()]
             )
 
-    if artist is 'quiver':
+    if artist == 'quiver':
         ax.quiver(
             *centers.T[::-1], *shifts.T[::-1], aligner.discard,
             units='dots', width=2, scale=1, scale_units='xy', angles='xy',
             cmap='Greys'
         )
-    if artist is 'patches':
+    if artist == 'patches':
         for xy, dxy, is_discarded in zip(
             np.fliplr(centers), np.fliplr(shifts), aligner.discard
         ):
