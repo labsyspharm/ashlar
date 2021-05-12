@@ -32,19 +32,22 @@ def main(argv=sys.argv):
         help="Channel number to display; default: 0",
     )
     parser.add_argument(
-        "-s", "--scale", type=float, default=10,
-        help="Scaling factor used to downsample the image for display; default: 10",
+        "-d", "--downsample", metavar="FACTOR", type=float, default=10,
+        help="Downsample the image resolution by this factor for display (reduces"
+        " memory requirements and improves performance); default: 10",
     )
     parser.add_argument(
         "-l", "--log", action="store_true", help="Log-transform pixel intensities"
+        " (helps visualize dim images)",
     )
     args = parser.parse_args()
 
     reader = reg.BioformatsReader(args.input)
     metadata = reader.metadata
 
-    positions = (metadata.positions - metadata.origin) / args.scale
-    pmax = (positions + metadata.size / args.scale).max(axis=0)
+    resolution_scale = 1 / args.downsample
+    positions = (metadata.positions - metadata.origin) * resolution_scale
+    pmax = (positions + metadata.size * resolution_scale).max(axis=0)
     mshape = (pmax + 0.5).astype(int)
     mosaic = np.zeros(mshape, dtype=np.uint16)
 
@@ -53,11 +56,11 @@ def main(argv=sys.argv):
         sys.stdout.write("\rLoading %d/%d" % (i + 1, total))
         sys.stdout.flush()
         img = reader.read(c=args.channel, series=i)
-        img = skimage.transform.rescale(img, 1 / args.scale, anti_aliasing=False)
+        img = skimage.transform.rescale(img, resolution_scale, anti_aliasing=False)
         img = skimage.img_as_uint(img)
         if args.log:
-            scale = 65535 / np.log(65535)
-            img = (np.log(np.maximum(img, 1)) * scale).astype(np.uint16)
+            intensity_scale = 65535 / np.log(65535)
+            img = (np.log(np.maximum(img, 1)) * intensity_scale).astype(np.uint16)
         # Round position so paste will skip the expensive subpixel shift.
         pos = np.round(positions[i])
         utils.paste(mosaic, img, pos, np.maximum)
@@ -67,7 +70,7 @@ def main(argv=sys.argv):
 
     plt.imshow(X=mosaic, axes=ax, extent=(0, pmax[1], pmax[0], 0))
 
-    h, w = metadata.size / args.scale
+    h, w = metadata.size * resolution_scale
     for i, (x, y) in enumerate(np.fliplr(positions)):
         if args.bounds:
             rect = mpatches.Rectangle((x, y), w, h, color='black', fill=False)
