@@ -1258,10 +1258,12 @@ def warn_data(message):
     warnings.warn(message, DataWarning)
 
 
-def plot_edge_shifts(aligner, img=None, bounds=True):
+def plot_edge_shifts(aligner, img=None, bounds=True, im_kwargs=None):
+    if im_kwargs is None:
+        im_kwargs = {}
     fig = plt.figure()
     ax = plt.gca()
-    draw_mosaic_image(ax, aligner, img)
+    draw_mosaic_image(ax, aligner, img, **im_kwargs)
     h, w = aligner.reader.metadata.size
     if bounds:
         # Bounding boxes denoting new tile positions.
@@ -1285,8 +1287,7 @@ def plot_edge_shifts(aligner, img=None, bounds=True):
 
 
 def plot_edge_quality(
-    aligner, img=None, show_tree=True, pos='metadata', use_mi=True,
-    nx_kwargs=None
+    aligner, img=None, show_tree=True, pos='metadata', im_kwargs=None, nx_kwargs=None
 ):
     if pos == 'metadata':
         centers = aligner.metadata.centers - aligner.metadata.origin
@@ -1294,6 +1295,8 @@ def plot_edge_quality(
         centers = aligner.centers
     else:
         raise ValueError("pos must be either 'metadata' or 'aligner'")
+    if im_kwargs is None:
+        im_kwargs = {}
     if nx_kwargs is None:
         nx_kwargs = {}
     final_nx_kwargs = dict(width=2, node_size=100, font_size=6)
@@ -1306,7 +1309,7 @@ def plot_edge_quality(
         nrows, ncols = 1, 1
     fig = plt.figure()
     ax = plt.subplot(nrows, ncols, 1)
-    draw_mosaic_image(ax, aligner, img, use_mi)
+    draw_mosaic_image(ax, aligner, img, **im_kwargs)
     error = np.array([aligner._cache[tuple(sorted(e))][1]
                       for e in aligner.neighbors_graph.edges])
     # Manually center and scale data to 0-1, except infinity which is set to -1.
@@ -1334,7 +1337,7 @@ def plot_edge_quality(
     )
     if show_tree:
         ax = plt.subplot(nrows, ncols, 2)
-        draw_mosaic_image(ax, aligner, img, use_mi)
+        draw_mosaic_image(ax, aligner, img, **im_kwargs)
         # Spanning tree with nodes at original tile positions.
         nx.draw(
             aligner.spanning_tree, ax=ax, with_labels=True,
@@ -1371,10 +1374,12 @@ def plot_edge_scatter(aligner, annotate=True):
     plt.tight_layout()
 
 
-def plot_layer_shifts(aligner, img=None):
+def plot_layer_shifts(aligner, img=None, im_kwargs=None):
+    if im_kwargs is None:
+        im_kwargs = {}
     fig = plt.figure()
     ax = plt.gca()
-    draw_mosaic_image(ax, aligner, img)
+    draw_mosaic_image(ax, aligner, img, **im_kwargs)
     h, w = aligner.metadata.size
     # Bounding boxes denoting new tile positions.
     for xy in np.fliplr(aligner.positions):
@@ -1390,11 +1395,13 @@ def plot_layer_shifts(aligner, img=None):
 
 
 def plot_layer_quality(
-    aligner, img=None, scale=1.0, artist='patches', annotate=True
+    aligner, img=None, scale=1.0, artist='patches', annotate=True, im_kwargs=None
 ):
+    if im_kwargs is None:
+        im_kwargs = {}
     fig = plt.figure()
     ax = plt.gca()
-    draw_mosaic_image(ax, aligner, img)
+    draw_mosaic_image(ax, aligner, img, **im_kwargs)
 
     h, w = aligner.metadata.size
     positions, centers, shifts = aligner.positions, aligner.centers, aligner.shifts
@@ -1425,14 +1432,14 @@ def plot_layer_quality(
                 [text_outline, mpatheffects.Normal()]
             )
 
-    if artist is 'quiver':
+    if artist == 'quiver':
         ax.quiver(
             *centers.T[::-1], *shifts.T[::-1], aligner.discard,
             units='dots', width=2,
             scale=1, scale_units='xy', angles='xy',
             cmap='Greys'
         )
-    if artist is 'patches':
+    if artist == 'patches':
         for xy, dxy, is_discarded in zip(
             np.fliplr(centers), np.fliplr(shifts), aligner.discard
         ):
@@ -1445,12 +1452,8 @@ def plot_layer_quality(
     ax.axis('off')
 
 
-def draw_mosaic_image(ax, aligner, img, use_mi=True):
-    if img is not None:
-        ax.imshow(img)
-    else:
-        h, w = aligner.mosaic_shape
-        # Draw a single-pixel image in the lowest color in the colormap,
-        # stretched across the same extent that the real image would be.
-        # This makes the graph edge colors visible even if there's no image.
-        ax.imshow([[0]], extent=(-0.5, w-0.5, h-0.5, -0.5))
+def draw_mosaic_image(ax, aligner, img, **kwargs):
+    if img is None:
+        img = [[0]]
+    h, w = aligner.mosaic_shape
+    ax.imshow(img, extent=(-0.5, w-0.5, h-0.5, -0.5), **kwargs)
