@@ -970,13 +970,15 @@ class Mosaic(object):
 
     def __init__(
             self, aligner, shape, filename_format, channels=None,
-            ffp_path=None, dfp_path=None, combined=False, tile_size=None,
-            first=False, verbose=False
+            ffp_path=None, dfp_path=None, flip_mosaic_x=False, flip_mosaic_y=False,
+            combined=False, tile_size=None, first=False, verbose=False
     ):
         self.aligner = aligner
         self.shape = tuple(shape)
         self.filename_format = filename_format
         self.channels = self._sanitize_channels(channels)
+        self.flip_mosaic_x = flip_mosaic_x
+        self.flip_mosaic_y = flip_mosaic_y
         self.combined = combined
         self.tile_size = tile_size
         self.first = first
@@ -1100,6 +1102,10 @@ class Mosaic(object):
                     mi_flat[p:p+w] = skimage.exposure.adjust_gamma(
                         mi_flat[p:p+w], 1/2.2
                     )
+            if self.flip_mosaic_x:
+                mosaic_image = np.fliplr(mosaic_image)
+            if self.flip_mosaic_y:
+                mosaic_image = np.flipud(mosaic_image)
             if self.verbose:
                 print()
             if mode == 'write':
