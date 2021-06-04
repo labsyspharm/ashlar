@@ -42,6 +42,14 @@ def main(argv=sys.argv):
               ' microscope configurations')
     )
     parser.add_argument(
+        '--flip-mosaic-x', default=False, action='store_true',
+        help=('flip output image horizontally')
+    )
+    parser.add_argument(
+        '--flip-mosaic-y', default=False, action='store_true',
+        help=('flip output image vertically')
+    )
+    parser.add_argument(
         '--output-channels', nargs='*', type=int, metavar='CHANNEL',
         help=('output only channels listed in CHANNELS; numbering starts at 0')
     )
@@ -158,6 +166,8 @@ def main(argv=sys.argv):
         mosaic_args['tile_size'] = args.tile_size
     if args.quiet is False:
         mosaic_args['verbose'] = True
+    mosaic_args['flip_mosaic_x'] = args.flip_mosaic_x
+    mosaic_args['flip_mosaic_y'] = args.flip_mosaic_y
 
     try:
         if args.plates:

@@ -26,6 +26,8 @@ optional arguments:
                         unusual microscope configurations
   --flip-y              flip tile positions top-to-bottom to account for
                         unusual microscope configurations
+  --flip-mosaic-x       flip output image horizontally
+  --flip-mosaic-y       flip output image vertically
   --output-channels [CHANNEL [CHANNEL ...]]
                         output only channels listed in CHANNELS; numbering
                         starts at 0
