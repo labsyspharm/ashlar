@@ -1135,14 +1135,19 @@ class Mosaic(object):
         return img
 
 
-def tile_from_combined_mosaics(mosaics, tile_size):
+def tile_from_combined_mosaics(mosaics, tile_shape):
     num_rows, num_cols = mosaics[0].shape
-    h, w = tile_size
+    h, w = tile_shape
     for m in mosaics:
         for c in m.run():
             for y in range(0, num_rows, h):
                 for x in range(0, num_cols, w):
                     yield c[y:y+h, x:x+w]
+
+
+def compute_tile_shape(img_shape=None, tile_size=1024):
+    if not img_shape:
+        return (tile_size, tile_size)
 
 
 import tifffile
@@ -1151,10 +1156,10 @@ def write_pyramid(mosaics, verbose=False):
     path = ref_m.filename_format
     num_channels = np.sum([len(m.channels) for m in mosaics])
     base_shape = ref_m.shape
-    tile_size = ref_m.tile_size
+    tile_shape = compute_tile_shape(tile_size=ref_m.tile_size)
     options = dict(
         dtype=ref_m.aligner.metadata.pixel_dtype,
-        tile=tile_size
+        tile=tile_shape
     )
     num_levels = np.ceil(np.log2(max(base_shape) / 1024)) + 1
     factors = 2 ** np.arange(num_levels)
@@ -1170,7 +1175,7 @@ def write_pyramid(mosaics, verbose=False):
     }
     tif = tifffile.TiffWriter(path, bigtiff=True)
     tif.write(
-        data=tile_from_combined_mosaics(mosaics, tile_size=tile_size),
+        data=tile_from_combined_mosaics(mosaics, tile_shape=tile_shape),
         metadata=metadata,
         software=software,
         shape=(num_channels, *base_shape),
@@ -1183,7 +1188,7 @@ def write_pyramid(mosaics, verbose=False):
                 path,
                 num_channels,
                 level=i,
-                tile_size=tile_size
+                tile_shape=tile_shape
             ),
             shape=(num_channels, *s),
             subfiletype=1,
@@ -1195,10 +1200,10 @@ def write_pyramid(mosaics, verbose=False):
 def tile_from_pyramid(
     path,
     num_channels,
-    tile_size,
+    tile_shape,
     level=0
 ):
-    h, w = tile_size
+    h, w = tile_shape
     for c in range(num_channels):
         img = tifffile.imread(
             path, is_ome=False, series=0, key=c, level=level
