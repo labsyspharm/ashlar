@@ -1112,29 +1112,15 @@ class Mosaic(object):
                 filename = self.filename_format.format(channel=channel)
                 kwargs = {}
                 if self.combined:
-                    kwargs['bigtiff'] = True
+                    yield mosaic_image
                     # FIXME Propagate this from input files (esp. RGB).
-                    kwargs['photometric'] = 'minisblack'
-                    resolution = np.round(10000 / self.aligner.reader.metadata.pixel_size)
                     # FIXME Switch to "CENTIMETER" once we use tifffile directly.
-                    kwargs['resolution'] = (resolution, resolution, 'cm')
-                    kwargs['metadata'] = None
-                    if self.first and ci == 0:
-                        # Set description to a short placeholder that will fit
-                        # within the IFD. We'll check for this string later.
-                        kwargs['description'] = '!!xml!!'
-                        kwargs['software'] = (
-                            'Ashlar v{} (Glencoe/Faas pyramid output)'
-                            .format(_version)
-                        )
-                    else:
-                        # Overwite if first channel of first cycle.
-                        kwargs['append'] = True
-                if self.tile_size:
-                    kwargs['tile'] = (self.tile_size, self.tile_size)
-                if self.verbose:
-                    print("        writing to %s" % filename)
-                utils.imsave(filename, mosaic_image, **kwargs)
+                else:
+                    if self.tile_size:
+                        kwargs['tile'] = (self.tile_size, self.tile_size)
+                    if self.verbose:
+                        print("        writing to %s" % filename)
+                    utils.imsave(filename, mosaic_image, **kwargs)
             elif mode == 'return':
                 all_images.append(mosaic_image)
         if mode == 'return':
@@ -1149,110 +1135,81 @@ class Mosaic(object):
         return img
 
 
-def build_pyramid(
-        path, num_channels, shape, dtype, pixel_size, tile_size, verbose=False
-):
-    max_level = 0
-    shapes = [shape]
-    while any(s > tile_size for s in shape):
-        prev_level = max_level
-        max_level += 1
-        if verbose:
-            print("    Level %d:" % max_level)
-        for i in range(num_channels):
-            if verbose:
-                sys.stdout.write('\r        processing channel %d/%d'
-                                 % (i + 1, num_channels))
-                sys.stdout.flush()
-            img = skimage.io.imread(path, series=prev_level, key=i)
-            img = skimage.transform.pyramid_reduce(img, multichannel=False)
-            img = skimage.util.dtype.convert(img, dtype)
-            utils.imsave(
-                path, img, bigtiff=True, metadata=None, append=True,
-                tile=(tile_size, tile_size), photometric='minisblack'
-            )
-        shapes.append(img.shape)
-        if verbose:
-            print()
-        shape = img.shape
-    # Now that we have the number and dimensions of all levels, we can generate
-    # the corresponding OME-XML and patch it into the Image Description tag of
-    # the first IFD.
-    filename = pathlib.Path(path).name
-    img_uuid = uuid.uuid4().urn
-    ome_dtype = BioformatsMetadata._ome_dtypes[dtype]
-    ifd = 0
-    xml = io.StringIO()
-    xml.write(u'<?xml version="1.0" encoding="UTF-8"?>')
-    xml.write(
-        (u'<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"'
-         ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
-         ' UUID="{uuid}"'
-         ' xsi:schemaLocation="http://www.openmicroscopy.org/Schemas/OME/2016-06'
-         ' http://www.openmicroscopy.org/Schemas/OME/2016-06/ome.xsd">')
-        .format(uuid=img_uuid)
+def tile_from_combined_mosaics(mosaics, tile_size):
+    num_rows, num_cols = mosaics[0].shape
+    h, w = tile_size
+    for m in mosaics:
+        for c in m.run():
+            for y in range(0, num_rows, h):
+                for x in range(0, num_cols, w):
+                    yield c[y:y+h, x:x+w]
+
+
+import tifffile
+def write_pyramid(mosaics, verbose=False):
+    ref_m = mosaics[0]
+    path = ref_m.filename_format
+    num_channels = np.sum([len(m.channels) for m in mosaics])
+    base_shape = ref_m.shape
+    tile_size = ref_m.tile_size
+    options = dict(
+        dtype=ref_m.aligner.metadata.pixel_dtype,
+        tile=tile_size
     )
-    for level in range(max_level + 1):
-        shape = shapes[level]
-        if level == 0:
-            psize_xml = (
-                u'PhysicalSizeX="{0}" PhysicalSizeXUnit="\u00b5m"'
-                u' PhysicalSizeY="{0}" PhysicalSizeYUnit="\u00b5m"'
-                .format(pixel_size)
-            )
-        else:
-            psize_xml = u''
-        xml.write(u'<Image ID="Image:{}">'.format(level))
-        xml.write(
-            (u'<Pixels BigEndian="false" DimensionOrder="XYZCT"'
-             ' ID="Pixels:{level}" {psize_xml} SizeC="{num_channels}" SizeT="1"'
-             ' SizeX="{sizex}" SizeY="{sizey}" SizeZ="1" Type="{ome_dtype}">')
-            .format(
-                level=level, psize_xml=psize_xml, num_channels=num_channels,
-                sizex=shape[1], sizey=shape[0], ome_dtype=ome_dtype
-            )
+    num_levels = np.ceil(np.log2(max(base_shape) / 1024)) + 1
+    factors = 2 ** np.arange(num_levels)
+    shapes = (np.ceil(np.array(base_shape) / factors[:,None])).astype(int)
+    software = f'Ashlar v{_version}'
+    pixel_size = ref_m.aligner.metadata.pixel_size
+    metadata = {
+        'Creator': software,
+        'Pixels': {
+            'PhysicalSizeX': pixel_size, 'PhysicalSizeXUnit': '\u00b5m',
+            'PhysicalSizeY': pixel_size, 'PhysicalSizeYUnit': '\u00b5m'
+        },
+    }
+    tif = tifffile.TiffWriter(path, bigtiff=True)
+    tif.write(
+        data=tile_from_combined_mosaics(mosaics, tile_size=tile_size),
+        metadata=metadata,
+        software=software,
+        shape=(num_channels, *base_shape),
+        subifds=int(num_levels - 1),
+        **options
+    )
+    for i, s in enumerate(shapes[1:]):
+        tif.write(
+            data=tile_from_pyramid(
+                path,
+                num_channels,
+                level=i,
+                tile_size=tile_size
+            ),
+            shape=(num_channels, *s),
+            subfiletype=1,
+            **options
         )
-        for channel in range(num_channels):
-            xml.write(
-                (u'<Channel ID="Channel:{level}:{channel}"'
-                 + (u' Name="Channel {channel}"' if level == 0 else u'')
-                 + u' SamplesPerPixel="1"><LightPath/></Channel>')
-                .format(level=level, channel=channel)
-            )
-        for channel in range(num_channels):
-            xml.write(
-                (u'<TiffData FirstC="{channel}" FirstT="0" FirstZ="0"'
-                 ' IFD="{ifd}" PlaneCount="1">'
-                 '<UUID FileName="{filename}">{uuid}</UUID>'
-                 '</TiffData>')
-                .format(
-                    channel=channel, ifd=ifd, filename=filename, uuid=img_uuid
-                )
-            )
-            ifd += 1
-        if level == 0:
-            for channel in range(num_channels):
-                xml.write(
-                    u'<Plane TheC="{channel}" TheT="0" TheZ="0"/>'
-                    .format(channel=channel)
-                )
-        xml.write(u'</Pixels>')
-        xml.write(u'</Image>')
-    xml.write(u'</OME>')
-    xml_bytes = xml.getvalue().encode('utf-8') + b'\x00'
-    # Append the XML and patch up the Image Description tag in the first IFD.
-    with open(path, 'rb+') as f:
-        f.seek(0, io.SEEK_END)
-        xml_offset = f.tell()
-        f.write(xml_bytes)
-        f.seek(0)
-        ifd_block = f.read(500)
-        match = re.search(b'!!xml!!\x00', ifd_block)
-        if match is None:
-            raise RuntimeError("Did not find placeholder string in IFD")
-        f.seek(match.start() - 8)
-        f.write(struct.pack('<Q', len(xml_bytes)))
-        f.write(struct.pack('<Q', xml_offset))
+    tif.close()
+
+
+def tile_from_pyramid(
+    path,
+    num_channels,
+    tile_size,
+    level=0
+):
+    h, w = tile_size
+    for c in range(num_channels):
+        img = tifffile.imread(
+            path, is_ome=False, series=0, key=c, level=level
+        )
+        img = skimage.transform.downscale_local_mean(
+            img, (2, 2)
+        ).astype(img.dtype)
+        num_rows, num_columns = img.shape
+        for y in range(0, num_rows, h):
+            for x in range(0, num_columns, w):
+                yield img[y:y+h, x:x+w]
 
 
 class DataWarning(UserWarning):
