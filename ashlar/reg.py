@@ -1173,27 +1173,30 @@ def write_pyramid(mosaics, verbose=False):
             'PhysicalSizeY': pixel_size, 'PhysicalSizeYUnit': '\u00b5m'
         },
     }
-    tif = tifffile.TiffWriter(path, bigtiff=True)
+
     tif.write(
-        data=tile_from_combined_mosaics(mosaics, tile_shape=tile_shape),
-        metadata=metadata,
-        software=software,
-        shape=(num_channels, *base_shape),
-        subifds=int(num_levels - 1),
-        **options
-    )
-    for i, s in enumerate(shapes[1:]):
+    with tifffile.TiffWriter(path, bigtiff=True) as tif:
         tif.write(
-            data=tile_from_pyramid(
-                path,
-                num_channels,
-                level=i,
-                tile_shape=tile_shape
-            ),
-            shape=(num_channels, *s),
-            subfiletype=1,
+            data=tile_from_combined_mosaics(mosaics, tile_shape=tile_shape),
+            metadata=metadata,
+            software=software,
+            # dtype conversion required to prevent overflow
+            shape=np.array((num_channels, *base_shape), dtype=np.int64),
+            subifds=int(num_levels - 1),
             **options
         )
+        for i, s in enumerate(shapes[1:]):
+            tif.write(
+                data=tile_from_pyramid(
+                    path,
+                    num_channels,
+                    level=i,
+                    tile_shape=tile_shape
+                ),
+                shape=(num_channels, *s),
+                subfiletype=1,
+                **options
+            )
     tif.close()
 
 
