@@ -1142,7 +1142,7 @@ def tile_from_combined_mosaics(mosaics, tile_shape):
         for c in m.run():
             for y in range(0, num_rows, h):
                 for x in range(0, num_cols, w):
-                    yield c[y:y+h, x:x+w]
+                    yield c[y:y+h, x:x+w].copy()
 
 
 def compute_tile_shape(img_shape=None, tile_size=1024):
@@ -1214,7 +1214,7 @@ def tile_from_pyramid(
         num_rows, num_columns = img.shape
         for y in range(0, num_rows, h):
             for x in range(0, num_columns, w):
-                yield img[y:y+h, x:x+w]
+                yield img[y:y+h, x:x+w].copy()
 
 
 class DataWarning(UserWarning):
