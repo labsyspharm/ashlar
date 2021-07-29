@@ -1196,7 +1196,8 @@ def write_pyramid(mosaics, verbose=True):
                     level=i,
                     tile_shape=tile_shape
                 ),
-                shape=(num_channels, *s),
+                # dtype conversion required to prevent overflow
+                shape=np.array((num_channels, *s), dtype=np.int64),
                 subfiletype=1,
                 **options
             )
