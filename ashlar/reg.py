@@ -1151,7 +1151,7 @@ def compute_tile_shape(img_shape=None, tile_size=1024):
 
 
 import tifffile
-def write_pyramid(mosaics, verbose=False):
+def write_pyramid(mosaics, verbose=True):
     ref_m = mosaics[0]
     path = ref_m.filename_format
     num_channels = np.sum([len(m.channels) for m in mosaics])
@@ -1174,7 +1174,7 @@ def write_pyramid(mosaics, verbose=False):
         },
     }
 
-    tif.write(
+    print("    writing to %s" % path)
     with tifffile.TiffWriter(path, bigtiff=True) as tif:
         tif.write(
             data=tile_from_combined_mosaics(mosaics, tile_shape=tile_shape),
@@ -1185,7 +1185,10 @@ def write_pyramid(mosaics, verbose=False):
             subifds=int(num_levels - 1),
             **options
         )
+        print('    generating pyramid')
         for i, s in enumerate(shapes[1:]):
+            if verbose:
+                print(f"    Level {i+1} - {s[0]} x {s[1]}")
             tif.write(
                 data=tile_from_pyramid(
                     path,
@@ -1197,7 +1200,8 @@ def write_pyramid(mosaics, verbose=False):
                 subfiletype=1,
                 **options
             )
-    tif.close()
+            if verbose:
+                print()
 
 
 def tile_from_pyramid(
@@ -1208,6 +1212,9 @@ def tile_from_pyramid(
 ):
     h, w = tile_shape
     for c in range(num_channels):
+        sys.stdout.write('\r        processing channel %d/%d'
+                        % (c + 1, num_channels))
+        sys.stdout.flush()
         img = tifffile.imread(
             path, is_ome=False, series=0, key=c, level=level
         )
