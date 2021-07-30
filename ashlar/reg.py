@@ -1,10 +1,7 @@
 import sys
+import math
 import warnings
-import re
 import xml.etree.ElementTree
-import io
-import uuid
-import struct
 import pathlib
 import jnius_config
 import numpy as np
@@ -17,6 +14,7 @@ import skimage.exposure
 import skimage.transform
 import sklearn.linear_model
 import networkx as nx
+import tifffile
 import matplotlib.pyplot as plt
 import matplotlib.cm as mcm
 import matplotlib.patches as mpatches
@@ -1145,25 +1143,52 @@ def tile_from_combined_mosaics(mosaics, tile_shape):
                     yield c[y:y+h, x:x+w].copy()
 
 
-def compute_tile_shape(img_shape=None, tile_size=1024):
-    if not img_shape:
-        return (tile_size, tile_size)
+class PyramidSetting(object):
+
+    def __init__(
+        self,
+        downscale_factor=2,
+        tile_size=1024,
+        max_pyramid_img_size=1024
+    ):
+        self.downscale_factor = downscale_factor
+        self.tile_size = tile_size
+        self.max_pyramid_img_size = max_pyramid_img_size
+
+    def tile_shapes(self, base_shape):
+        shapes = np.array(self.pyramid_shapes(base_shape))
+        n_rows_n_cols = np.ceil(shapes / self.tile_size)
+        tile_shapes = np.ceil(shapes / n_rows_n_cols / 16) * 16
+        return [tuple(map(int, s)) for s in tile_shapes]
+
+    def pyramid_shapes(self, base_shape):
+        num_levels = self.num_levels(base_shape)
+        factors = self.downscale_factor ** np.arange(num_levels)
+        shapes = np.ceil(np.array(base_shape) / factors[:,None])
+        return [tuple(map(int, s)) for s in shapes]
+
+    def num_levels(self, base_shape):
+        factor = max(base_shape) / self.max_pyramid_img_size
+        return math.ceil(math.log(factor, self.downscale_factor)) + 1
 
 
-import tifffile
 def write_pyramid(mosaics, verbose=True):
     ref_m = mosaics[0]
     path = ref_m.filename_format
-    num_channels = np.sum([len(m.channels) for m in mosaics])
+    num_channels = sum([len(m.channels) for m in mosaics])
+
     base_shape = ref_m.shape
-    tile_shape = compute_tile_shape(tile_size=ref_m.tile_size)
-    options = dict(
-        dtype=ref_m.aligner.metadata.pixel_dtype,
-        tile=tile_shape
+    downscale_factor = 2
+    pyramid_setting = PyramidSetting(
+        downscale_factor=downscale_factor,
+        tile_size=ref_m.tile_size
     )
-    num_levels = np.ceil(np.log2(max(base_shape) / 1024)) + 1
-    factors = 2 ** np.arange(num_levels)
-    shapes = (np.ceil(np.array(base_shape) / factors[:,None])).astype(int)
+    num_levels = pyramid_setting.num_levels(base_shape)
+    tile_shapes = pyramid_setting.tile_shapes(base_shape)
+    shapes = pyramid_setting.pyramid_shapes(base_shape)
+
+    dtype = ref_m.aligner.metadata.pixel_dtype
+
     software = f'Ashlar v{_version}'
     pixel_size = ref_m.aligner.metadata.pixel_size
     metadata = {
@@ -1177,29 +1202,32 @@ def write_pyramid(mosaics, verbose=True):
     print("    writing to %s" % path)
     with tifffile.TiffWriter(path, bigtiff=True) as tif:
         tif.write(
-            data=tile_from_combined_mosaics(mosaics, tile_shape=tile_shape),
+            data=tile_from_combined_mosaics(mosaics, tile_shape=tile_shapes[0]),
             metadata=metadata,
             software=software,
-            # dtype conversion required to prevent overflow
-            shape=np.array((num_channels, *base_shape), dtype=np.int64),
+            shape=(num_channels, *shapes[0]),
             subifds=int(num_levels - 1),
-            **options
+            dtype=dtype,
+            tile=tile_shapes[0]
         )
         print('    generating pyramid')
-        for i, s in enumerate(shapes[1:]):
+        for level, (shape, tile_shape) in enumerate(
+            zip(shapes[1:], tile_shapes[1:])
+        ):
             if verbose:
-                print(f"    Level {i+1} - {s[0]} x {s[1]}")
+                print(f"    Level {level+1} ({shape[0]} x {shape[1]})")
             tif.write(
                 data=tile_from_pyramid(
                     path,
                     num_channels,
-                    level=i,
-                    tile_shape=tile_shape
+                    tile_shape=tile_shape,
+                    downscale_factor=downscale_factor,
+                    level=level,
                 ),
-                # dtype conversion required to prevent overflow
-                shape=np.array((num_channels, *s), dtype=np.int64),
+                shape=(num_channels, *shape),
                 subfiletype=1,
-                **options
+                dtype=dtype,
+                tile=tile_shape
             )
             if verbose:
                 print()
@@ -1209,6 +1237,7 @@ def tile_from_pyramid(
     path,
     num_channels,
     tile_shape,
+    downscale_factor=2,
     level=0
 ):
     h, w = tile_shape
@@ -1220,7 +1249,7 @@ def tile_from_pyramid(
             path, is_ome=False, series=0, key=c, level=level
         )
         img = skimage.transform.downscale_local_mean(
-            img, (2, 2)
+            img, (downscale_factor, downscale_factor)
         ).astype(img.dtype)
         num_rows, num_columns = img.shape
         for y in range(0, num_rows, h):
