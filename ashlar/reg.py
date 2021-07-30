@@ -736,7 +736,7 @@ class EdgeAligner(object):
     def mosaic_shape(self):
         upper_corners = self.positions + self.metadata.size
         max_dimensions = upper_corners.max(axis=0)
-        return np.ceil(max_dimensions).astype(int)
+        return tuple(map(int, np.ceil(max_dimensions)))
 
     def debug(self, t1, t2, min_size=0):
         shift, _ = self._register(t1, t2, min_size)
