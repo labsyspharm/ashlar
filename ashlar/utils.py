@@ -14,6 +14,9 @@ import numpy as np
 # Pre-calculate the Laplacian operator kernel. We'll always be using 2D images.
 _laplace_kernel = skimage.restoration.uft.laplacian(2, (3, 3))[1]
 
+# Fix random state for random noise generator
+_noise_rgn = np.random.default_rng(0)
+
 def whiten(img, sigma):
     img = skimage.img_as_float32(img)
     if sigma == 0:
@@ -23,9 +26,27 @@ def whiten(img, sigma):
     return output
 
 
-def register(img1, img2, sigma, upsample=10):
+def edge_amplitude(img, sigma):
+    return np.linalg.norm(
+        whiten(img, sigma)
+    )
+
+
+def add_noise(img, noise_factor):
+    noise = _noise_rgn.normal(0, 0.1, img.shape)
+    noise /= np.linalg.norm(noise)
+    noise *= noise_factor
+    return img + noise
+
+
+def register(img1, img2, sigma, upsample=10, noise_factor=0):
     img1w = whiten(img1, sigma)
     img2w = whiten(img2, sigma)
+    
+    if noise_factor != 0:
+        img1w = add_noise(img1w, noise_factor)
+        img2w = add_noise(img2w, noise_factor)
+
     img1_f = scipy.fft.fft2(img1w)
     img2_f = scipy.fft.fft2(img2w)
     shift, _error, _phasediff = skimage.feature.register_translation(
@@ -53,9 +74,14 @@ def register(img1, img2, sigma, upsample=10):
     return shift, error
 
 
-def nccw(img1, img2, sigma):
+def nccw(img1, img2, sigma, noise_factor=0):
     img1w = whiten(img1, sigma)
     img2w = whiten(img2, sigma)
+    
+    if noise_factor != 0:
+        img1w = add_noise(img1w, noise_factor)
+        img2w = add_noise(img2w, noise_factor)
+
     correlation = np.abs(np.sum(img1w * img2w))
     total_amplitude = np.linalg.norm(img1w) * np.linalg.norm(img2w)
     if correlation > 0 and total_amplitude > 0:

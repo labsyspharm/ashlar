@@ -13,6 +13,7 @@ import scipy.fft
 import skimage.util
 import skimage.util.dtype
 import skimage.io
+import skimage.filters
 import skimage.exposure
 import skimage.transform
 import sklearn.linear_model
@@ -455,7 +456,8 @@ class EdgeAligner(object):
 
     def __init__(
         self, reader, channel=0, max_shift=15, false_positive_ratio=0.01,
-        randomize=False, filter_sigma=0.0, do_make_thumbnail=True, verbose=False
+        randomize=False, filter_sigma=0.0, add_noise=False,
+        do_make_thumbnail=True, verbose=False
     ):
         self.channel = channel
         self.reader = CachingReader(reader, self.channel)
@@ -466,6 +468,7 @@ class EdgeAligner(object):
         self.false_positive_ratio = false_positive_ratio
         self.randomize = randomize
         self.filter_sigma = filter_sigma
+        self.add_noise=add_noise
         self.do_make_thumbnail = do_make_thumbnail
         self._cache = {}
 
@@ -474,6 +477,8 @@ class EdgeAligner(object):
     def run(self):
         self.make_thumbnail()
         self.check_overlaps()
+        self.find_permutation_pairs()
+        self.compute_edge_amplitude()
         self.compute_threshold()
         self.register_all()
         self.build_spanning_tree()
@@ -502,11 +507,7 @@ class EdgeAligner(object):
         elif any(failures):
             warn_data("Some neighboring tiles have zero overlap.")
 
-    def compute_threshold(self):
-        # Compute error threshold for rejecting aligments. We generate a
-        # distribution of error scores for many known non-overlapping image
-        # regions and take a certain percentile as the maximum allowable error.
-        # The percentile becomes our accepted false-positive ratio.
+    def find_permutation_pairs(self):
         edges = self.neighbors_graph.edges
         num_tiles = self.metadata.num_images
         # If not enough tiles overlap to matter, skip this whole thing.
@@ -518,7 +519,8 @@ class EdgeAligner(object):
             self.intersection(t1, t2).shape.min()
             for t1, t2 in edges
         ])
-        w = widths.max()
+        self.permutation_width = widths.max()
+        w = self.permutation_width
         max_offset = self.metadata.size[0] - w
         # Number of possible pairs minus number of actual neighbor pairs.
         num_distant_pairs = num_tiles * (num_tiles - 1) // 2 - len(edges)
@@ -526,8 +528,9 @@ class EdgeAligner(object):
         # possible truly distinct strips with fewer tiles. The calculation here
         # is just a heuristic, not rigorously derived.
         n = 1000 if num_distant_pairs > 8 else (num_distant_pairs + 1) * 10
-        pairs = np.empty((n, 2), dtype=int)
-        offsets = np.empty((n, 2), dtype=int)
+
+        self.permutation_pairs = np.empty((n, 2), dtype=int)
+        self.permutation_offsets = np.empty((n, 2), dtype=int)
         # Generate n random non-overlapping image strips. Strips are always
         # horizontal, across the entire image width.
         max_tries = 100
@@ -561,10 +564,49 @@ class EdgeAligner(object):
             else:
                 # Retries exhausted. This should be very rare.
                 warn_data(
-                    "Could not find non-overlapping strips in {max_tries} tries"
+                    f"Could not find non-overlapping strips in {max_tries} tries"
                 )
-            pairs[i] = t1, t2
-            offsets[i] = o1, o2
+            self.permutation_pairs[i] = t1, t2
+            self.permutation_offsets[i] = o1, o2
+
+    def compute_edge_amplitude(self):
+        # When the edge amplitudes (Frobenius norm of the laplacian/LoG filtered
+        # image) in the overlapping pairs are low, our registration will yeild
+        # low errors, which, in general, are not "correct". Here we compute edge
+        # amplitudes  of all the permutation tiles. And find the minimum
+        # amplitude needed to generate confident registration error.
+        if not self.add_noise:
+            self.min_edge_amplitude = 0
+            return 
+        pairs = self.permutation_pairs
+        offsets = self.permutation_offsets
+        w = self.permutation_width
+        n = len(self.permutation_pairs) * 2
+        edge_amplitudes = np.empty(n)
+        for i, (t, o) in enumerate(zip(pairs.flatten(), offsets.flatten())):
+            if self.verbose and (i % 10 == 9 or i == n - 1):
+                sys.stdout.write(
+                    '\r    quantifying edge amplitude %d/%d' % (i + 1, n)
+                )
+                sys.stdout.flush()
+            img = self.reader.read(t, self.channel)[o:o+w, :]
+            edge_amplitudes[i] = utils.edge_amplitude(img, self.filter_sigma)
+        if self.verbose: print()
+        self.edge_amplitudes = edge_amplitudes
+        # Triangle threshold seems to work in our limited tests
+        self.min_edge_amplitude = skimage.filters.threshold_triangle(
+            self.edge_amplitudes
+        )
+
+    def compute_threshold(self):
+        # Compute error threshold for rejecting aligments. We generate a
+        # distribution of error scores for many known non-overlapping image
+        # regions and take a certain percentile as the maximum allowable error.
+        # The percentile becomes our accepted false-positive ratio.
+        pairs = self.permutation_pairs
+        offsets = self.permutation_offsets
+        w = self.permutation_width
+        n = len(self.permutation_pairs)
         errors = np.empty(n)
         for i, ((t1, t2), (offset1, offset2)) in enumerate(zip(pairs, offsets)):
             if self.verbose and (i % 10 == 9 or i == n - 1):
@@ -574,7 +616,10 @@ class EdgeAligner(object):
                 sys.stdout.flush()
             img1 = self.reader.read(t1, self.channel)[offset1:offset1+w, :]
             img2 = self.reader.read(t2, self.channel)[offset2:offset2+w, :]
-            _, errors[i] = utils.register(img1, img2, self.filter_sigma, upsample=1)
+            _, errors[i] = utils.register(
+                img1, img2, self.filter_sigma,
+                upsample=1, noise_factor=self.min_edge_amplitude
+            )
         if self.verbose:
             print()
         self.errors_negative_sampled = errors
@@ -687,7 +732,7 @@ class EdgeAligner(object):
             # metric on these images. This should be even lower than the error
             # computed above.
             _, o1, o2 = self.overlap(key[0], key[1], shift=shift)
-            error = utils.nccw(o1, o2, self.filter_sigma)
+            error = utils.nccw(o1, o2, self.filter_sigma, self.min_edge_amplitude)
             self._cache[key] = (shift, error)
         if t1 > t2:
             shift = -shift
@@ -702,7 +747,9 @@ class EdgeAligner(object):
         sx = 1 if p1[1] >= p2[1] else -1
         sy = 1 if p1[0] >= p2[0] else -1
         padding = its.padding * [sy, sx]
-        shift, error = utils.register(img1, img2, self.filter_sigma)
+        shift, error = utils.register(
+            img1, img2, self.filter_sigma, noise_factor=self.min_edge_amplitude
+        )
         shift += padding
         return shift, error
 

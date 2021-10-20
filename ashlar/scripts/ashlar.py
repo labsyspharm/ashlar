@@ -58,6 +58,10 @@ def main(argv=sys.argv):
         help='maximum allowed per-tile corrective shift in microns'
     )
     parser.add_argument(
+        '--add-noise', default=False, action='store_true',
+        help=('add noise during stitching')
+    )
+    parser.add_argument(
         '--filter-sigma', type=float, default=0.0, metavar='SIGMA',
         help=('width in pixels of Gaussian filter to apply to images before'
               ' alignment; default is 0 which disables filtering')
@@ -157,6 +161,7 @@ def main(argv=sys.argv):
     aligner_args['channel'] = args.align_channel
     aligner_args['verbose'] = not args.quiet
     aligner_args['max_shift'] = args.maximum_shift
+    aligner_args['add_noise'] = args.add_noise
     aligner_args['filter_sigma'] = args.filter_sigma
 
     mosaic_args = {}
@@ -212,6 +217,7 @@ def process_single(
     reader = build_reader(filepaths[0], plate_well=plate_well)
     process_axis_flip(reader, flip_x, flip_y)
     ea_args = aligner_args.copy()
+    del aligner_args['add_noise']
     if len(filepaths) == 1:
         ea_args['do_make_thumbnail'] = False
     edge_aligner = reg.EdgeAligner(reader, **ea_args)
