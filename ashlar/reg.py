@@ -571,9 +571,9 @@ class EdgeAligner(object):
 
     def compute_edge_amplitude(self):
         # When the edge amplitudes (Frobenius norm of the laplacian/LoG filtered
-        # image) in the overlapping pairs are low, our registration will yeild
+        # image) in the overlapping pairs are low, our registration will yield
         # low errors, which, in general, are not "correct". Here we compute edge
-        # amplitudes  of all the permutation tiles. And find the minimum
+        # amplitudes of all the permutation tiles. And find the minimum edge
         # amplitude needed to generate confident registration error.
         if not self.add_noise:
             self.min_edge_amplitude = 0
