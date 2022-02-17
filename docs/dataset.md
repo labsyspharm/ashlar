@@ -12,42 +12,6 @@ last_modified_date: 2022-02-17
     image=imageUrl
 %}
 
-Primary colon data set available on Synapse [https://dx.doi.org/10.7303/syn25826362](https://dx.doi.org/10.7303/syn25826362)
+Primary colon data set available on Synapse [https://dx.doi.org/10.7303/syn25826362](https://dx.doi.org/10.7303/syn25826362). This normal colon specimen was acquired from the Cooperative Human Tumor Network (https://www.chtn.org/). 
 
 Note that the representative images above only depict a subset of the full list of image channels present in the dataset.
-
-Below are examples of image cards. They can serve as links to your external data location.
-
-<div class="basic-grid three-column">
-
-<div markdown="1">
-{% include image-card.html 
-    image="https://via.placeholder.com/500"
-    link="http://example.com/"
-    label="MinervaStory-001"
-%}
-</div>
-<div markdown="1">
-{% include image-card.html 
-    image="https://via.placeholder.com/500"
-    link="http://example.com/"
-    label="MinervaStory-002"
-%}
-</div>
-<div markdown="1">
-{% include image-card.html 
-    image="https://via.placeholder.com/500"
-    link="http://example.com/"
-    label="MinervaStory-003"
-%}
-</div>
-
-</div><!-- end grid -->
-
-# Data table
-
-Another way to showcase your dataset is put them in tables. 
-
-| name | type | link |
-| thing 1 | type 1| [link 1](https://www.nobelprize.org/prizes/chemistry/2021/summary/) |
-| thing 2 | type 2| [link 2](https://www.improbable.com/2021-ceremony/winners/#ig2021) |
