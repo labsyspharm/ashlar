@@ -2,10 +2,19 @@
 layout: default
 title: Dataset
 nav_order: 20
-last_modified_date: 2021-10-06
+last_modified_date: 2022-02-17
 ---
 
-# Minerva Stories
+# Example Data Set
+
+{% assign imageUrl = site.baseurl | append: "/images/ColonExampleDataInsets.jpg" %}
+{% include image-card.html 
+    image=imageUrl
+%}
+
+Primary colon data set available on Synapse [https://dx.doi.org/10.7303/syn25826362](https://dx.doi.org/10.7303/syn25826362)
+
+Note that the representative images above only depict a subset of the full list of image channels present in the dataset.
 
 Below are examples of image cards. They can serve as links to your external data location.
 
