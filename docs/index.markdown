@@ -19,8 +19,10 @@ last_modified_date: 2022-02-17
 ASHLAR uses a novel alignment method that results in improved accuracy across imaging cycles. In short, the first cycle of images are combined by aligning the overlapping regions. Next, ASHLAR aligns images between cycles by finding the relative of images from each subsequent cycle to the first cycle image. This results in minimal alignment errors between cycles. 
 
 ## Designed for multiplexed images
+ASHLAR has been optimized for computationally efficient generation of high dimensional mosaic images.
 
 ## Able to handle samples with irregular or discontinuous edges
+ASHLAR allows reconstruction of irregular and discontinuous sample edges, as is often seen in biological slide samples.
 
 ## Integrated into the Multiple Choice Microscopy Pipeline
 For more information about the MCMICRO pipeline, see [mcmicro.org](mcmicro.org).
