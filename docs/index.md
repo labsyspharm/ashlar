@@ -6,8 +6,8 @@ description: ""
 hero_heading: "Alignment by Simultaneous Harmonization of Layer/Adjacency Registration (ASHLAR)"
 hero_body: "ASHLAR is a software package that combines multi-tile microscopy images into a high dimensional mosaic image."
 hero_ctas:
-  - label: "SUMMARY"
-    link: "summary.html"
+  - label: "OVERVIEW"
+    link: "overview.html"
   - label: "DATASET"
     link: "dataset.html"
 last_modified_date: 2022-02-17
