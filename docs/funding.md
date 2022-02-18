@@ -1,6 +1,6 @@
 ---
 layout: default
-nav_order: 90
+nav_exclude: true
 last_modified_date: 2022-02-17
 ---
 
