@@ -23,6 +23,6 @@ __
 # Funding
 
 This work is supported by:
-- The National Institutes of Health (U2C-CA233262, U2C-CA233280)
-- The Ludwig Cancer Center
+- The National Institutes of Health National Cancer Institute (U2C-CA233262, U2C-CA233280)
+- The Ludwig Cancer Center at Harvard Medical School
 
