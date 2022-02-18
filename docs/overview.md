@@ -1,6 +1,6 @@
 ---
 layout: default
-title: ASHLAR Overview
+title: Overview
 nav_order: 2
 last_modified_date: 2022-02-18
 ---
