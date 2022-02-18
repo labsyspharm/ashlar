@@ -7,7 +7,7 @@ last_modified_date: 2022-02-17
 
 # Example Data Set
 
-![Example Data: Colon sample at three levels of increasing magnification]({{ site.baseurl }}/images/ColonExampleDataInsets.png)
+![Example Data: Colon sample at three levels of increasing magnification]({{ site.baseurl }}/assets/images/ColonExampleDataInsets.png)
 
 
 This primary colon data set is available for download on Synapse [https://dx.doi.org/10.7303/syn25826362](https://dx.doi.org/10.7303/syn25826362).  
