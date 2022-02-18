@@ -5,11 +5,12 @@ nav_order: 2
 last_modified_date: 2022-02-18
 ---
 
-### Brief Summary
+## Why ASHLAR?
 {: .no_toc }
 
 Recent imaging advances have enabled scientists to cyclically image pathology samples for 20-60 unique proteins, resulting in a tremendous amount of data per pathology slide. These sample areas are generally quite large, therefore, high-magnification images must ‘tile’ to cover the whole slide. Together, this results in highly multiplexed, biologically-rich, image sets that encompass many sample positions and many proteins. To functionally visualize and analyze this data, the images must be combined to seamlessly align both adjacent images within cycles and corresponding locations between cycles. ASHLAR is a new software package that enables this process for highly accurate (sub-pixel resolution) multiplexed image alignment. 
 
+## How?
 ASHLAR combines multiplex images through a 3-step process that i) stitches together adjacent images within the first imaging cycle, ii) registers the relative location of images from subsequent cycles to the first cycle, and iii) uses these relative positions to generate a final multidimensional mosaic image. 
 
 ASHLAR directly reads image formats from most commercial microscopes and slide scanners and outputs standard OME-TIFF images. ASHLAR is written in Python and is available under the MIT License. It can be downloaded at: [https://github.com/labsyspharm/ashlar](https://github.com/labsyspharm/ashlar).
@@ -50,7 +51,7 @@ Each image tile is assigned an identifier based on sample location. Location dat
 
 ![Representation of the mosaic image data. Each cycle contains stiched image data for multiple channels, and these aligned cycles are stacked into a single image file.]({{ site.baseurl }}/assets/images/Step3.png)
 
-View the [detailed computational methods](./DetCompMethods.md) for more information on how each step is performed.
+**View the [detailed computational methods](./DetCompMethods.md) for more information on how each step is performed.**
 
 <details open markdown="block">
   <summary>
