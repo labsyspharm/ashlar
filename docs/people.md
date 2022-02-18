@@ -1,7 +1,7 @@
 ---
 layout: default
-title: People
-nav_order: 89
+title: Acknowledgements
+nav_order: 90
 last_modified_date: 2022-02-17
 ---
 
@@ -18,3 +18,11 @@ __
 ## Laboratory Principal Investigators:
 * [Peter K. Sorger](https://scholar.google.com/citations?user=wS6Ii_cAAAAJ&hl=en)
 * [Sandro Santagata](https://scholar.google.com/citations?hl=en&user=9dUOqJ0AAAAJ)
+
+
+# Funding
+
+This work is supported by:
+- The National Institutes of Health (U2C-CA233262, U2C-CA233280)
+- The Ludwig Cancer Center
+
