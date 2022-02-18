@@ -14,11 +14,13 @@ Recent imaging advances have enabled scientists to cyclically image pathology sa
 ASHLAR is a new software package that fills this need and enables multiplexed image alignment with sub-pixel resolution accuracy. 
 
 ### How does it work?
-ASHLAR combines multiplex images through a 3-step process that i) stitches together adjacent images within the first imaging cycle, ii) registers the relative location of images from subsequent cycles to the first cycle, and iii) uses these relative positions to generate a final multidimensional mosaic image. 
+ASHLAR combines multiplex images through a 3-step process that:  
+i) stitches together adjacent images within the first imaging cycle,  
+ii) registers the relative location of images from subsequent cycles to the first cycle, and  
+iii) uses these relative positions to generate a final multidimensional mosaic image. 
 
-ASHLAR reads image formats from most commercial microscopes and outputs standard OME-TIFF images. ASHLAR is written in Python and is available under the MIT License. Download ASHLAR at: [https://github.com/labsyspharm/ashlar](https://github.com/labsyspharm/ashlar).
-
-*For more details, read the pre-print manuscript here: [https://doi.org/10.1101/2021.04.20.440625](https://doi.org/10.1101/2021.04.20.440625).*
+ASHLAR reads image formats from most commercial microscopes and outputs standard OME-TIFF images.  
+ASHLAR is written in Python and is available under the MIT License. Download ASHLAR at: [https://github.com/labsyspharm/ashlar](https://github.com/labsyspharm/ashlar).
 
 ## Step 0: Collect multidimensional image data   
 **Collect overlapping image tiles from sample.**
@@ -52,6 +54,8 @@ Each image tile is assigned an identifier based on sample location. Location dat
 ![Representation of the mosaic image data. Each cycle contains stiched image data for multiple channels, and these aligned cycles are stacked into a single image file.]({{ site.baseurl }}/assets/images/Step3.png)
 
 **View the [detailed computational methods](./DetCompMethods.md) for more information on how each step is performed.**
+
+*For more details, read the pre-print manuscript here: [https://doi.org/10.1101/2021.04.20.440625](https://doi.org/10.1101/2021.04.20.440625).*
 
 <details open markdown="block">
   <summary>
