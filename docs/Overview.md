@@ -7,6 +7,7 @@ last_modified_date: 2022-02-18
 
 ### Brief Summary
 {: .no_toc }
+
 Recent imaging advances have enabled scientists to cyclically image pathology samples for 20-60 unique proteins, resulting in a tremendous amount of data per pathology slide. These sample areas are generally quite large, therefore, high-magnification images must ‘tile’ to cover the whole slide. Together, this results in highly multiplexed, biologically-rich, image sets that encompass many sample positions and many proteins. To functionally visualize and analyze this data, the images must be combined to seamlessly align both adjacent images within cycles and corresponding locations between cycles. ASHLAR is a new software package that enables this process for highly accurate (sub-pixel resolution) multiplexed image alignment. 
 
 ASHLAR combines multiplex images through a 3-step process that i) stitches together adjacent images within the first imaging cycle, ii) registers the relative location of images from subsequent cycles to the first cycle, and iii) uses these relative positions to generate a final multidimensional mosaic image. 
@@ -23,7 +24,7 @@ For more details, you may download the pre-print manuscript here: [https://doi.o
 
 ![Grid of overlapping image tiles, with each tile labeled with a consecutive tile identifier that indicates the microsope path. Each tile corresponds to a multi-channel image, which may encompass 4-6 channels of data.]({{ site.baseurl }}/images/ashlar1.png)
 
-Each image tile is assigned an identifier based on sample location. Location data can be extracted directly from BioFormats image metadata [Li et al., 2016](https://doi.org/10.1016/j.ymeth.2015.10.006) that is produced by many commercial microscopes. ASHLAR can also process images from microscopes that do not support BioFormats if they follow consistent naming convention, acquisition order, and tile overlap.
+Each image tile is assigned an identifier based on sample location. Location data can be extracted directly from BioFormats image metadata ([Li et al., 2016](https://doi.org/10.1016/j.ymeth.2015.10.006)) that is produced by many commercial microscopes. ASHLAR can also process images from microscopes that do not support BioFormats if they follow consistent naming convention, acquisition order, and tile overlap.
 
 *For more information on how multidimensional images are collected experimentally, see [https://dx.doi.org/10.17504/protocols.io.bjiukkew](https://dx.doi.org/10.17504/protocols.io.bjiukkew).*
 
