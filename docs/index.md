@@ -7,7 +7,7 @@ hero_heading: "ASHLAR"
 hero_body: "A software package that combines multi-tile microscopy images into a high dimensional mosaic image."
 hero_ctas:
   - label: "OVERVIEW"
-    link: "overview-land.html"
+    link: "overview/overview-land.html"
   - label: "DATASET"
     link: "dataset.html"
 last_modified_date: 2022-02-17
