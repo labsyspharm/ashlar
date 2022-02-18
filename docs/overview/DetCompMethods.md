@@ -2,7 +2,7 @@
 layout: default
 title: Detailed Computational Methods
 nav_order: 20
-parent: ASHLAR Overview
+parent: Overview
 ---
 
 # Step 1: Stitching
