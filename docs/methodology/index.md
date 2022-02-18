@@ -5,30 +5,106 @@ nav_order: 8
 has_children: true
 ---
 
-# Methodology
+# ASHLAR: Alignment by Simultaneous Harmonization of Layer/Adjacency Registration
 
-Provide information on the methods of this publication. This section also shows you how to construct a page hierachy structure. By default, this page will have a Table of Content at the bottom to show all its "children".
+## Whole-slide microscopy image stitching and registration in Python
 
----
+**Ashlar** performs fast, high-quality stitching of microscopy images. It also
+co-registers multiple rounds of cyclic imaging for methods such as CyCIF and
+CODEX. Ashlar can read image data directly from BioFormats-supported microscope
+vendor file formats as well as a directory of plain TIFF files. Output is saved
+as pyramidal, tiled OME-TIFF.
 
-You can also make an beautiful grid to show off different parts of the methodology:
+Note that Ashlar requires unstitched individual "tile" images as input, so it is
+not suitable for microscopes or slide scanners that only provide pre-stitched
+images.
 
-<div class="basic-grid">
+## Usage
 
-<div markdown="1">
-## Method 1
-This is a description of this part of the method.
+```
+ashlar [-h] [-o DIR] [-c [CHANNEL]] [--flip-x] [--flip-y]
+       [--output-channels [CHANNEL [CHANNEL ...]]] [-m SHIFT]
+       [--filter-sigma SIGMA] [-f FORMAT] [--pyramid]
+       [--tile-size PIXELS] [--ffp [FILE [FILE ...]]]
+       [--dfp [FILE [FILE ...]]] [--plates] [-q] [--version]
+       [FILE [FILE ...]]
 
-[![example](../assets/images/sample-image.jpg)](http://example.com/)
-{: .mt-6 .mr-10}
-</div>
+Stitch and align one or more multi-series images
 
-<div markdown="1">
-## Method part 2
-This is a description of the second part of the methods
+positional arguments:
+  FILE                  an image file to be processed (one file per cycle)
 
-[![](https://img.youtube.com/vi/tLWMe_uJY9A/0.jpg)](https://youtu.be/tLWMe_uJY9A)
-{: .mt-6 .mr-10}
-</div>
+optional arguments:
+  -h, --help            show this help message and exit
+  -o DIR, --output DIR  write output image files to DIR; default is the
+                        current directory
+  -c [CHANNEL], --align-channel [CHANNEL]
+                        align images using channel number CHANNEL; numbering
+                        starts at 0
+  --flip-x              flip tile positions left-to-right to account for
+                        unusual microscope configurations
+  --flip-y              flip tile positions top-to-bottom to account for
+                        unusual microscope configurations
+  --flip-mosaic-x       flip output image horizontally
+  --flip-mosaic-y       flip output image vertically
+  --output-channels [CHANNEL [CHANNEL ...]]
+                        output only channels listed in CHANNELS; numbering
+                        starts at 0
+  -m SHIFT, --maximum-shift SHIFT
+                        maximum allowed per-tile corrective shift in microns
+  --filter-sigma SIGMA  width in pixels of Gaussian filter to apply to images
+                        before alignment; default is 0 which disables
+                        filtering
+  -f FORMAT, --filename-format FORMAT
+                        use FORMAT to generate output filenames, with {cycle}
+                        and {channel} as required placeholders for the cycle
+                        and channel numbers; default is
+                        cycle_{cycle}_channel_{channel}.tif
+  --pyramid             write output as a single pyramidal TIFF
+  --tile-size PIXELS    set tile width and height to PIXELS (pyramid output
+                        only); default is 1024
+  --ffp [FILE [FILE ...]]
+                        read flat field profile image from FILES; if specified
+                        must be one common file for all cycles or one file for
+                        each cycle
+  --dfp [FILE [FILE ...]]
+                        read dark field profile image from FILES; if specified
+                        must be one common file for all cycles or one file for
+                        each cycle
+  --plates              enable plate mode for HTS data
+  -q, --quiet           suppress progress display
+  --version             print version
+```
 
-</div><!-- end grid -->
+## Installation
+
+### Pip install
+
+Ashlar can be installed in most Python environments using `pip`:
+``` bash
+pip install ashlar
+```
+
+### Using a conda environment
+
+If you don't already have [miniconda](https://docs.conda.io/en/latest/miniconda.html)
+or [Anaconda](https://www.anaconda.com/products/individual), download the python
+3.x version and install. Then, run the following commands from a terminal (Linux/Mac)
+or command prompt (Windows):
+
+Create a named conda environment with python 3.7:
+```bash
+conda create -y -n ashlar python=3.7
+```
+
+Activate the conda environment:
+```bash
+conda activate ashlar
+```
+
+In the activated environment, install dependencies and ashlar itself:
+```bash
+conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.16.2 scikit-learn pyjnius
+pip install ashlar
+```
+
