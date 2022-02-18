@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Related Publications
-nav_order: 70
+nav_exclude: true
 ---
 
 # Related Publications
