@@ -55,7 +55,7 @@ Each image tile is assigned an identifier based on sample location. Location dat
 ![Representation of the mosaic image data. Each cycle contains stiched image data for multiple channels, and these aligned cycles are stacked into a single image file.]({{ site.baseurl }}/assets/images/Step3.png)
 
 ## Learn More
-**View the [detailed computational methods](./overview/DetCompMethods.html) for more information on how each step is performed.**
+**View the [detailed computational methods](./DetCompMethods.html) for more information on how each step is performed.**
 
 *For more details, read the pre-print manuscript here: [https://doi.org/10.1101/2021.04.20.440625](https://doi.org/10.1101/2021.04.20.440625).*
 
