@@ -22,7 +22,7 @@ For more details, you may download the pre-print manuscript here: [https://doi.o
 ## Step 0: Collect multidimensional image data   
 **Collect overlapping image tiles from sample.**
 
-![Grid of overlapping image tiles, with each tile labeled with a consecutive tile identifier that indicates the microsope path. Each tile corresponds to a multi-channel image, which may encompass 4-6 channels of data.]({{ site.baseurl }}/images/ashlar1.png)
+![Grid of overlapping image tiles, with each tile labeled with a consecutive tile identifier that indicates the microsope path. Each tile corresponds to a multi-channel image, which may encompass 4-6 channels of data.]({{ site.baseurl }}/images/step0.png)
 
 Each image tile is assigned an identifier based on sample location. Location data can be extracted directly from BioFormats image metadata ([Li et al., 2016](https://doi.org/10.1016/j.ymeth.2015.10.006)) that is produced by many commercial microscopes. ASHLAR can also process images from microscopes that do not support BioFormats if they follow consistent naming convention, acquisition order, and tile overlap.
 
@@ -31,7 +31,7 @@ Each image tile is assigned an identifier based on sample location. Location dat
 ## Step 1: Stitching
 **Align adjacent images across a single cycle by using overlapping regions.**
 
-![Grid of overlapping image tiles, with an inset that zooms into the region of overlap between 4 tiles. The first image in the inset shows that the original postitions of the overlapped tiles are misaligned. The second image shows the corrected alignment, and final stitched image.]({{ site.baseurl }}/images/ashlar1.png)
+![Grid of overlapping image tiles, with an inset that zooms into the region of overlap between 4 tiles. The first image in the inset shows that the original postitions of the overlapped tiles are misaligned. The second image shows the corrected alignment, and final stitched image.]({{ site.baseurl }}/images/step1.png)
 
 
 *Use one representative channel and propagate locations to other channels per tile. (DNA marker is recommended.)* 
@@ -40,7 +40,7 @@ Each image tile is assigned an identifier based on sample location. Location dat
 ## Step 2: Registration
 **Align corresponding tiles from each subsequent cycle.**
 
-![Top image shows several image tiles from different cycles that correspond to the same position within the sample. An inset shows the overlapping region between the first and second cycle of imaging in one region. The first image of the inset shows misalignment. The second image shows the corrected alignment with altered positions. This altered position is then saved and propogated to other channels within the image tile. This process is repeated for each subsequent image in the cycle.]({{ site.baseurl }}/images/ashlar1.png)
+![Top image shows several image tiles from different cycles that correspond to the same position within the sample. An inset shows the overlapping region between the first and second cycle of imaging in one region. The first image of the inset shows misalignment. The second image shows the corrected alignment with altered positions. This altered position is then saved and propogated to other channels within the image tile. This process is repeated for each subsequent image in the cycle.]({{ site.baseurl }}/images/step2.png)
 
 
 *Use one representative channel and propagate locations to other channels per tile. (DNA marker is recommended.)* 
@@ -48,7 +48,7 @@ Each image tile is assigned an identifier based on sample location. Location dat
 ## Step 3: Mosaic Image Generation
 **All corrected tile positions from Step 1 (stitching) and Step 2 (registration) are combined.**
 
-![Representation of the mosaic image data. Each cycle contains stiched image data for multiple channels, and these aligned cycles are stacked into a single image file.]({{ site.baseurl }}/images/ashlar1.png)
+![Representation of the mosaic image data. Each cycle contains stiched image data for multiple channels, and these aligned cycles are stacked into a single image file.]({{ site.baseurl }}/images/step3.png)
 
 View the [detailed computational methods](./DetCompMethods.md) for more information on how each step is performed.
 
