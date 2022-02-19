@@ -7,6 +7,8 @@ last_modified_date: 2022-02-17
 
 # Example Data Set
 
+[View Example Data on Synapse](https://dx.doi.org/10.7303/syn25826362){: .btn .btn-outline .btn-arrow }
+
 ![Example Data: Colon sample at three levels of increasing magnification]({{ site.baseurl }}/assets/images/ColonExampleDataInsets.png)
 **Upper:** Pseudocolor image showing 5 channels from a 28-plex (9-cycle) t-CyCIF image of a normal human colon section. Tiles, denoted by the gray grid, overlapped by ~31 pixels (20 μm).  
 **Lower right:** Higher magnification view of the area surrounding a single tile showing 7 channels from 4 different cycles to highlight stitching and registration accuracy.   
