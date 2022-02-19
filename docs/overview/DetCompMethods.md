@@ -4,13 +4,15 @@ title: Computational Method
 nav_order: 20
 parent: Overview
 ---
+# Computational Method
+{:.no_toc }
 
 <details open markdown="block">
   <summary>
     Table of contents
   </summary>
   {: .text-delta }
-1. TOC
+  - TOC
 {:toc}
 </details>
 
