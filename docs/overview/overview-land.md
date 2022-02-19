@@ -8,8 +8,16 @@ last_modified_date: 2022-02-18
 
 # Overview
 
+<details open markdown="block">
+  <summary>
+    Table of contents
+  </summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
 ### Why ASHLAR?
-{: .no_toc }
 
 Recent imaging advances have enabled scientists to cyclically image pathology samples for 20-60 unique proteins, resulting in a tremendous amount of data per pathology slide. These sample areas are generally quite large, so high-magnification images must ‘tile’ to cover the whole slide. Together, this results in highly multiplexed, biologically-rich, image sets that encompass many sample positions and many proteins. To visualize and analyze this data, the images must be combined to seamlessly align adjacent images within cycles and corresponding locations between cycles. To date, this has been a challenge.  
 ASHLAR is a new software package that fills this need and enables multiplexed image alignment with sub-pixel resolution accuracy. 
@@ -59,11 +67,3 @@ Each image tile is assigned an identifier based on sample location. Location dat
 
 *For more details, read the pre-print manuscript here: [https://doi.org/10.1101/2021.04.20.440625](https://doi.org/10.1101/2021.04.20.440625).*
 
-<details open markdown="block">
-  <summary>
-    Table of contents
-  </summary>
-  {: .text-delta }
-1. TOC
-{:toc}
-</details>

@@ -5,6 +5,15 @@ nav_order: 20
 parent: Overview
 ---
 
+<details open markdown="block">
+  <summary>
+    Table of contents
+  </summary>
+  {: .text-delta }
+1. TOC
+{:toc}
+</details>
+
 # Step 1: Stitching
 ![Image corresponding to description of steps below.]({{ site.baseurl }}/assets/images/details1.png)
 

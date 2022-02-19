@@ -1,10 +1,8 @@
 ---
 layout: default
 nav_exclude: false
-title: Tutorial
+title: Installation
 parent: Methodology
 ---
 
-# Tutorial
-
-
+# Installation
