@@ -69,7 +69,6 @@ Each image tile is assigned an identifier based on sample location. Location dat
 *For more details, read the pre-print manuscript here: [https://doi.org/10.1101/2021.04.20.440625](https://doi.org/10.1101/2021.04.20.440625).*
 
 ## Integration with MCMICRO Pipeline
-![Visual overview of the MC MICRO pipeline components: Basic for illumination correction, Ashlar for alignment and stitching, Coreograph for TMA Core detection, UnMicst or S3 segmenter for segmentation, MC Quant for image quantification.]({{ site.baseurl }}/assets/images/mcmicro-module-overview.png)
 **The Multiple-choice microscopy pipeline (MCMICRO)** is an end-to-end processing pipeline to transform large, multi-channel whole slide images into single-cell data. See [https://mcmicro.org/](https://mcmicro.org/) for more information on the MCMICRO pipeline documentation, implementation, troubleshooting, and more.
 
-
+![Visual overview of the MC MICRO pipeline components: Basic for illumination correction, Ashlar for alignment and stitching, Coreograph for TMA Core detection, UnMicst or S3 segmenter for segmentation, MC Quant for image quantification.]({{ site.baseurl }}/assets/images/mcmicro-module-overview-2.png)
