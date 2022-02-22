@@ -1,8 +1,8 @@
 ---
 layout: default
 nav_exclude: true
-title: Tutorial
-parent: Methodology
+title: Extra Page
+parent: Tutorial
 ---
 
 # Tutorial
