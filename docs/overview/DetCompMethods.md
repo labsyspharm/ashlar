@@ -4,6 +4,17 @@ title: Computational Method
 nav_order: 20
 parent: Overview
 ---
+# Computational Method
+{:.no_toc }
+
+<details open markdown="block">
+  <summary>
+    Table of contents
+  </summary>
+  {: .text-delta }
+  - TOC
+{:toc}
+</details>
 
 # Step 1: Stitching
 ![Image corresponding to description of steps below.]({{ site.baseurl }}/assets/images/details1.png)

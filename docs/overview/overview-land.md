@@ -7,14 +7,23 @@ last_modified_date: 2022-02-18
 ---
 
 # Overview
+{:.no_toc }
 
-### Why ASHLAR?
-{: .no_toc }
+<details open markdown="block">
+  <summary>
+    Table of contents
+  </summary>
+  {: .text-delta }
+  - TOC
+{:toc}
+</details>
+
+# Why ASHLAR?
 
 Recent imaging advances have enabled scientists to cyclically image pathology samples for 20-60 unique proteins, resulting in a tremendous amount of data per pathology slide. These sample areas are generally quite large, so high-magnification images must ‘tile’ to cover the whole slide. Together, this results in highly multiplexed, biologically-rich, image sets that encompass many sample positions and many proteins. To visualize and analyze this data, the images must be combined to seamlessly align adjacent images within cycles and corresponding locations between cycles. To date, this has been a challenge.  
 ASHLAR is a new software package that fills this need and enables multiplexed image alignment with sub-pixel resolution accuracy. 
 
-### How does it work?
+# How does it work?
 ASHLAR combines multiplex images through a 3-step process that:  
 i) stitches together adjacent images within the first imaging cycle,  
 ii) registers the relative location of images from subsequent cycles to the first cycle, and  
@@ -54,16 +63,8 @@ Each image tile is assigned an identifier based on sample location. Location dat
 
 ![Representation of the mosaic image data. Each cycle contains stiched image data for multiple channels, and these aligned cycles are stacked into a single image file.]({{ site.baseurl }}/assets/images/Step3.png)
 
-## Learn More
+# Learn More
 **View the [detailed computational methods](./DetCompMethods.html) for more information on how each step is performed.**
 
 *For more details, read the pre-print manuscript here: [https://doi.org/10.1101/2021.04.20.440625](https://doi.org/10.1101/2021.04.20.440625).*
 
-<details open markdown="block">
-  <summary>
-    Table of contents
-  </summary>
-  {: .text-delta }
-1. TOC
-{:toc}
-</details>

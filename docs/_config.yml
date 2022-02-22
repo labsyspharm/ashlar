@@ -41,9 +41,12 @@ back_to_top_text: "Back to Top"
 
 # License Information
 license:
-  - description:
+  - description: "Contents of this website is licensed under the "
     name: "CC0 1.0 License"
     url: "https://github.com/labsyspharm/blank-pub-microsite/blob/main/LICENSE"
+  - description: "ASHLAR the software is licenced under the "
+    name: "MIT License"
+    url: "https://github.com/hxu-hms/ashlar/blob/master/LICENSE"
 
 # Linked logos
 footer_logos:
@@ -55,7 +58,7 @@ footer_logos:
     url: "https://hms.harvard.edu/"
 
 # Footer last edited timestamp
-last_edit_timestamp: true # show or hide edit time - page must have `last_modified_date` defined in the frontmatter
+last_edit_timestamp: false # show or hide edit time - page must have `last_modified_date` defined in the frontmatter
 last_edit_time_format: "%b %e %Y" # format: https://ruby-doc.org/stdlib-2.7.0/libdoc/time/rdoc/Time.html
 
 # Footer "Edit this page on GitHub" link text
