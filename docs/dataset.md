@@ -12,7 +12,8 @@ The following images show an example mosaic image compiled by ASHLAR from high-p
 To test ASHLAR, download the data below and process the data set yourself by following the [tutorial](https://hxu-hms.github.io/ashlar/methodology/).
 [Download Example Data on Synapse](https://dx.doi.org/10.7303/syn25826362){: .btn .btn-outline .btn-arrow }
 
-![Example Data: Colon sample at three levels of increasing magnification]({{ site.baseurl }}/assets/images/ColonExampleDataInsets.png)
+![Example Data: Full tiled mosaic image of colon sample and a higher magnification inset at tile overlap region.]({{ site.baseurl }}/assets/images/fig4-zooms-v2-upper.png)
+![Example Data: Four full-resolution insets at tile overlaps.]({{ site.baseurl }}/assets/images/fig4-zooms-v2-lower.png)
 ### Figure 1: ASHLAR mosaic results of a normal human colon.
 **Upper left:** Pseudocolor image showing 5 channels from a 28-plex (9-cycle) t-CyCIF image of a normal human colon section. Tiles, denoted by the gray grid, overlapped by ~31 pixels (20 μm).  
 **Upper right:** Higher magnification view of the area surrounding a single tile showing 7 channels from 4 different cycles to highlight stitching and registration accuracy.   
