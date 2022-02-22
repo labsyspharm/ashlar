@@ -20,6 +20,4 @@ To test ASHLAR, download the data below and process the data set yourself by fol
 **Lower panels:** Regions of the tile overlap area at full resolution. Insets correspond to the white box with the matching number in the upper right panel.    
 (Note that the antibodies shown in the upper right and lower panels differ from the upper left panel to make structures relevant for the different spatial scales more apparent.)
 
-This primary colon data set is available for download on Synapse [https://dx.doi.org/10.7303/syn25826362](https://dx.doi.org/10.7303/syn25826362).  
-
-*Note that the representative images above only depict a subset of the full list of image channels present in the dataset.*
+*Note:* The representative images above only depict a subset of the full list of image channels present in the dataset.
