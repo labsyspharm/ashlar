@@ -7,7 +7,9 @@ has_children: true
 
 # ASHLAR: Alignment by Simultaneous Harmonization of Layer/Adjacency Registration
 
-## Whole-slide microscopy image stitching and registration in Python
+For detailed instructions on how to install ASHLAR, see [installation](https://hxu-hms.github.io/ashlar/methodology/installation.html).
+
+## Stitch & register whole-slide microscopy images in Python
 
 **Ashlar** performs fast, high-quality stitching of microscopy images. It also
 co-registers multiple rounds of cyclic imaging for methods such as CyCIF and
@@ -15,11 +17,13 @@ CODEX. Ashlar can read image data directly from BioFormats-supported microscope
 vendor file formats as well as a directory of plain TIFF files. Output is saved
 as pyramidal, tiled OME-TIFF.
 
-Note that Ashlar requires unstitched individual "tile" images as input, so it is
+*Note:* Ashlar requires unstitched individual "tile" images as input, so it is
 not suitable for microscopes or slide scanners that only provide pre-stitched
 images.
 
-## Usage
+## Parameters
+
+For detailed information on tuning these parameters, see [Parameter Tuning](https://hxu-hms.github.io/ashlar/methodology/parameter-tuning.html).
 
 ```
 ashlar [-h] [-o DIR] [-c [CHANNEL]] [--flip-x] [--flip-y]
@@ -76,35 +80,4 @@ optional arguments:
   --version             print version
 ```
 
-## Installation
-
-### Pip install
-
-Ashlar can be installed in most Python environments using `pip`:
-``` bash
-pip install ashlar
-```
-
-### Using a conda environment
-
-If you don't already have [miniconda](https://docs.conda.io/en/latest/miniconda.html)
-or [Anaconda](https://www.anaconda.com/products/individual), download the python
-3.x version and install. Then, run the following commands from a terminal (Linux/Mac)
-or command prompt (Windows):
-
-Create a named conda environment with python 3.7:
-```bash
-conda create -y -n ashlar python=3.7
-```
-
-Activate the conda environment:
-```bash
-conda activate ashlar
-```
-
-In the activated environment, install dependencies and ashlar itself:
-```bash
-conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.16.2 scikit-learn pyjnius
-pip install ashlar
-```
 
