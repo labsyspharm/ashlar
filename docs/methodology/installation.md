@@ -37,4 +37,5 @@ conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.1
 pip install ashlar
 ```
 
-Return to the [tutorial](https://hxu-hms.github.io/ashlar/methodology/) to learn more about how to use ASHLAR.
+
+**Return to the [tutorial](https://hxu-hms.github.io/ashlar/methodology/) to learn more about how to use ASHLAR.**
