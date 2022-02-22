@@ -36,3 +36,5 @@ In the activated environment, install dependencies and ashlar itself:
 conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.16.2 scikit-learn pyjnius
 pip install ashlar
 ```
+
+Return to the [tutorial](https://hxu-hms.github.io/ashlar/methodology/) to learn more about how to use ASHLAR.
