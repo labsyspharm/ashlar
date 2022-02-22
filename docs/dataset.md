@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Dataset
+title: Example Data
 nav_order: 20
 last_modified_date: 2022-02-17
 ---
