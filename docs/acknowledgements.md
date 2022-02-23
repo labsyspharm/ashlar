@@ -8,7 +8,7 @@ last_modified_date: 2022-02-17
 # People
 
 ## Lead Developers
-* [Jeremy Mulich](https://github.com/jmuhlich)
+* [Jeremy Muhlich](https://github.com/jmuhlich)
 * [Yu-An Chen](https://github.com/Yu-AnChen)
 * [Douglas Russell](https://github.com/dpwrussell)
 
