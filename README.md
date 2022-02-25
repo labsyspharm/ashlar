@@ -97,7 +97,7 @@ conda activate ashlar
 
 In the activated environment, install dependencies and ashlar itself:
 ```bash
-conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.16.2 scikit-learn pyjnius
+conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.16.2 scikit-learn pyjnius=1.2.1
 pip install ashlar
 ```
 
