@@ -15,12 +15,12 @@ images.
 ## Usage
 
 ```
-ashlar [-h] [-o DIR] [-c [CHANNEL]] [--flip-x] [--flip-y]
+ashlar [-h] [-o DIR] [-c CHANNEL] [--flip-x] [--flip-y]
        [--output-channels [CHANNEL [CHANNEL ...]]] [-m SHIFT]
        [--filter-sigma SIGMA] [-f FORMAT] [--pyramid]
        [--tile-size PIXELS] [--ffp [FILE [FILE ...]]]
        [--dfp [FILE [FILE ...]]] [--plates] [-q] [--version]
-       [FILE [FILE ...]]
+       FILE [FILE ...]
 
 Stitch and align one or more multi-series images
 
@@ -31,7 +31,7 @@ optional arguments:
   -h, --help            show this help message and exit
   -o DIR, --output DIR  write output image files to DIR; default is the
                         current directory
-  -c [CHANNEL], --align-channel [CHANNEL]
+  -c CHANNEL, --align-channel CHANNEL
                         align images using channel number CHANNEL; numbering
                         starts at 0
   --flip-x              flip tile positions left-to-right to account for

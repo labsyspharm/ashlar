@@ -18,7 +18,7 @@ def main(argv=sys.argv):
         description='Stitch and align one or more multi-series images'
     )
     parser.add_argument(
-        'filepaths', metavar='FILE', nargs='*',
+        'filepaths', metavar='FILE', nargs='+',
         help='an image file to be processed (one file per cycle)'
     )
     parser.add_argument(
@@ -26,7 +26,7 @@ def main(argv=sys.argv):
         help='write output image files to DIR; default is the current directory'
     )
     parser.add_argument(
-        '-c', '--align-channel', dest='align_channel', nargs='?', type=int,
+        '-c', '--align-channel', dest='align_channel', type=int,
         default='0', metavar='CHANNEL',
         help=('align images using channel number CHANNEL; numbering starts'
               ' at 0')
