@@ -103,5 +103,5 @@ pip install ashlar
 
 ### Docker image
 
-The docker image of ashlar is on DockerHub at `sorgerlab/ashlar` which should be
+The docker image of ashlar is on DockerHub at `labsyspharm/ashlar` which should be
 suitable for many use cases.
