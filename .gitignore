@@ -7,3 +7,5 @@ ashlar/jars
 *.tif
 *.rcpnl
 output/*
+
+.obsidian/*
