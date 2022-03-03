@@ -26,7 +26,7 @@ hero_background: "/assets/images/ashlar1.PNG"
 
 # Build settings
 remote_theme: labsyspharm/just-the-docs-lsp
-# color_scheme: light
+color_scheme: blue
 # color scheme supports "light" (default), "blue", "bold", and "dark"
 heading_anchors: true
 

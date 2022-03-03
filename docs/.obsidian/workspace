@@ -9,7 +9,9 @@
         "state": {
           "type": "markdown",
           "state": {
-            "file": "overview/overview-land.md",
+
+            "file": "instructions/FAQ.md",
+
             "mode": "source"
           }
         }
@@ -52,7 +54,9 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+
+    "width": 203
+
   },
   "right": {
     "id": "610d1d83b48137d3",
@@ -68,7 +72,9 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "overview/overview-land.md",
+
+                "file": "instructions/FAQ.md",
+
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -88,15 +94,15 @@
   },
   "active": "ea779694784fc800",
   "lastOpenFiles": [
+    "instructions/FAQ.md",
+    "roadmap/updates.md",
+    "how-to-use.md",
+    "instructions/running.md",
+    "instructions/index.md",
+    "instructions/installation.md",
     "overview/overview-land.md",
     "dataset.md",
-    "instructions/index.md",
-    "instructions/FAQ.md",
     "overview/DetCompMethods.md",
-    "people.md",
-    "funding.md",
-    "instructions/running.md",
-    "instructions/options-tuning.md",
-    "instructions/options.md"
+    "people.md"
   ]
 }
