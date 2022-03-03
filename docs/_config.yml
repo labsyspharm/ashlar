@@ -43,7 +43,7 @@ back_to_top_text: "Back to Top"
 license:
   - description: "Contents of this website is licensed under the "
     name: "CC0 1.0 License"
-    url: "https://github.com/labsyspharm/blank-pub-microsite/blob/main/LICENSE"
+    url: "https://github.com/labsyspharm/ashlar/blob/master/docs/LICENSE"
   - description: "ASHLAR the software is licenced under the "
     name: "MIT License"
     url: "https://github.com/hxu-hms/ashlar/blob/master/LICENSE"
@@ -64,7 +64,7 @@ last_edit_time_format: "%b %e %Y" # format: https://ruby-doc.org/stdlib-2.7.0/li
 # Footer "Edit this page on GitHub" link text
 gh_edit_link: true # show or hide edit this page link
 gh_edit_link_text: "Edit this page on GitHub."
-gh_edit_repository: "https://github.com/hxu-hms/ashlar" # the github URL for your repo
+gh_edit_repository: "https://github.com/labsyspharm/ashlar" # the github URL for your repo
 gh_edit_branch: "main" # the branch that your docs is served from
 gh_edit_source: docs # the source that your files originate from
 gh_edit_view_mode: "tree" # "tree" or "edit" if you want the user to jump into the editor immediately
@@ -76,7 +76,7 @@ plugins:
   - jekyll-include-cache
   - jekyll-feed
 
-repository: hxu-hms/ashlar
+repository: labsyspharm/ashlar
 
 exclude: ["node_modules/", "*.gemspec", "*.gem", "Gemfile", "Gemfile.lock", "package.json", "package-lock.json",  "script/", "LICENSE.txt", "lib/", "bin/", "README.md", "Rakefile"]
 compress_html:
