@@ -13,13 +13,19 @@ This page serves as a reference guide for ASHLAR syntax. Refer to the [quick sta
 ## Description
 **Ashlar** performs fast, high-quality stitching of microscopy images. It also co-registers multiple rounds of cyclic imaging for methods such as CyCIF and CODEX. 
 
-### Input
-Ashlar can read image data directly from BioFormats-supported microscope vendor file formats. ASHLAR can also read a directory of plain TIFF files, however, additional steps are required for this. Further details about how to make TIFF files compatible with ASHLAR will be added soon. 
+## Input
+An ```.ome.tiff``` file of **unstitched**\* images
 
-> **Note:** *Ashlar requires unstitched individual "tile" images as input, so it is not suitable for microscopes or slide scanners that only provide pre-stitched images.*
+{: .fs-3 }
+{: .fw-300 }
+> Many BioFormats-supported microscope vendor file formats are supported. Further information on how to determine if your file format is compatible will be added soon. 
 
-### Output
-Output is saved as pyramidal, tiled OME-TIFF.
+{: .fs-3 }
+{: .fw-300 }
+> \*Ashlar requires unstitched individual "tile" images as input - it is not suitable for microscopes or slide scanners that only provide pre-stitched images. A list of microscopes that we know are compatible with ASHLAR will be coming soon. 
+
+## Output
+A pyramidal, tiled ```.ome.tif```
 
 ## Usage:
 Stitch and align one or more multi-series images
@@ -57,6 +63,7 @@ ashlar FILE [FILE ...] [OPTIONS]
 |```--version```|Print version||
 
   
-  > **Note:** *Detailed information on how to tune these parameters will be added soon.*
-  
-## Examples
+{: .fs-3 }
+{: .fw-300 }
+**Note:** Detailed information on how to tune these parameters will be added soon.
+

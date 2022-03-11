@@ -34,6 +34,7 @@ ASHLAR combines multiplex images through a 3-step process that:
 >2. registers the relative location of images from subsequent cycles to the first cycle, and  
 >3. uses these relative positions to generate a final multidimensional mosaic image. 
 
+{: .fw-300 }
 ASHLAR reads image formats from most commercial microscopes and outputs standard OME-TIFF images. 
 ASHLAR is written in Python and is available under the MIT License. Access it at: [https://github.com/labsyspharm/ashlar](https://github.com/labsyspharm/ashlar).
 
@@ -44,6 +45,8 @@ ASHLAR is written in Python and is available under the MIT License. Access it at
 
 Each image tile is assigned an identifier based on sample location. Location data can be extracted directly from BioFormats image metadata ([Li et al., 2016](https://doi.org/10.1016/j.ymeth.2015.10.006)) that is produced by many commercial microscopes. ASHLAR can also process images from microscopes that do not support BioFormats if they follow consistent naming convention, acquisition order, and tile overlap.
 
+{: .fs-3 }
+{: .fw-300 }
 > **Note:** *There are a number of methods to collect multidimensional images. ASHLAR is compatible with many of these methods. For more information on CyCIF, the primary multiplexed image acquisition method used by the Laboratory of Systems Pharmacology at HMS, read the [CyCIF manuscript](https://doi.org/10.7554/eLife.31657) or [protocol](https://dx.doi.org/10.17504/protocols.io.bjiukkew).*
 
 ## Step 1: Stitching
@@ -51,8 +54,9 @@ Each image tile is assigned an identifier based on sample location. Location dat
 
 ![Grid of overlapping image tiles, with an inset that zooms into the region of overlap between 4 tiles. The first image in the inset shows that the original positions of the overlapped tiles are misaligned. The second image shows the corrected alignment, and final stitched image.]({{ site.baseurl }}/assets/images/Step1.png)
 
-
-*Use one representative channel and propagate locations to other channels per tile. (DNA marker is recommended.)* 
+{: .fs-3 }
+{: .text-center }
+Use one representative channel and propagate locations to other channels per tile. (DNA marker is recommended.)
 
 
 ## Step 2: Registration
@@ -60,8 +64,9 @@ Each image tile is assigned an identifier based on sample location. Location dat
 
 ![Top image shows several image tiles from different cycles that correspond to the same position within the sample. An inset shows the overlapping region between the first and second cycle of imaging in one region. The first image of the inset shows misalignment. The second image shows the corrected alignment with altered positions. This altered position is then saved and propagated to other channels within the image tile. This process is repeated for each subsequent image in the cycle.]({{ site.baseurl }}/assets/images/Step2.png)
 
-
-*Use one representative channel and propagate locations to other channels per tile. (DNA marker is recommended.)* 
+{: .fs-3 }
+{: .text-center }
+Use one representative channel and propagate locations to other channels per tile. (DNA marker is recommended.)
 
 ## Step 3: Mosaic Image Generation
 **All corrected tile positions from Step 1 (stitching) and Step 2 (registration) are combined.**
@@ -76,4 +81,4 @@ Each image tile is assigned an identifier based on sample location. Location dat
 ## Integration with MCMICRO Pipeline
 **The Multiple-choice microscopy pipeline (MCMICRO)** is an end-to-end processing pipeline to transform large, multi-channel whole slide images into single-cell data. See [https://mcmicro.org/](https://mcmicro.org/) for more information on the MCMICRO pipeline documentation, implementation, troubleshooting, and more.
 
-![Visual overview of the MC MICRO pipeline components: Basic for illumination correction, Ashlar for alignment and stitching, Coreograph for TMA Core detection, UnMicst or S3 segmenter for segmentation, MC Quant for image quantification.]({{ site.baseurl }}/assets/images/mcmicro-pipeline-two-rows-v2.png)
+![Visual overview of the MC MICRO pipeline components: Basic for illumination correction, Ashlar for alignment and stitching, Coreograph for TMA Core detection, UnMicst or S3 segmenter for segmentation, MC Quant for image quantification.]({{ site.baseurl }}/assets/images/pipeline-no-microscope.png)
