@@ -12,6 +12,8 @@ Note that Ashlar requires unstitched individual "tile" images as input, so it is
 not suitable for microscopes or slide scanners that only provide pre-stitched
 images.
 
+**Visit [labsyspharm.github.io/ashlar/](https://labsyspharm.github.io/ashlar/) for the most up-to-date information on ASHLAR.**
+
 ## Usage
 
 ```
