@@ -7,16 +7,21 @@ has_children: true
 
 # ASHLAR Quick Start
 
-[Install](./installation.html) ASHLAR before proceeding through this quick-start guide.  Refer to [Running ASHLAR](./running.html) for more information about required and optional inputs.
+1. [Install](./installation.html) ASHLAR.
 
+2. Open an un-stitched set of ```.ome.tif``` images. You may [download](https://mcmicro.org/datasets.html){:target="_blank"} ```Exemplar 001``` from MCMICRO as an appropriate example data set.
 
-1. Step 1:
+{: .fs-3 }
+{: .fw-300 }
+> **Note:** ASHLAR is capable of inputting many types of BioFormats-supported microscope vendor file formats, but some formats require additional processing steps. Please check back soon for detailed instructions on how to verify that your data is compatible and how to correct compatibility issues.
+	
+3. [Run ASHLAR](./running.html).
 
-2. Step 2:
+4. Check the result of the mosaic image output using a visualization software (such as [FIJI](https://imagej.net/software/fiji/downloads))*.
 
-3. Step 3:
-
-> **Note:** *ASHLAR is capable of inputting general TIFF images; however, some additional processing steps are required before these images can be inputted into ASHLAR. Please check back soon for these detailed instructions.*
+{: .fs-3 }
+{: .fw-300 }
+> \*Some images will require parameters to be adjusted in order to attain perfect stitching. More information on how to tune the optional parameters will be added soon. 
 
 
 
