@@ -1242,9 +1242,13 @@ def tile_from_pyramid(path, num_channels, tile_shape, downscale_factor, level):
         img = tifffile.imread(
             path, is_ome=False, series=0, key=c, level=level
         )
+        dtype = img.dtype
         img = skimage.transform.downscale_local_mean(
             img, (downscale_factor, downscale_factor)
-        ).astype(img.dtype)
+        )
+        if np.issubdtype(dtype, np.integer):
+            np.around(img, out=img)
+        img = img.astype(dtype)
         num_rows, num_columns = img.shape
         for y in range(0, num_rows, h):
             for x in range(0, num_columns, w):
