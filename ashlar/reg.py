@@ -1111,8 +1111,6 @@ class Mosaic(object):
                 kwargs = {}
                 if self.combined:
                     yield mosaic_image
-                    # FIXME Propagate this from input files (esp. RGB).
-                    # FIXME Switch to "CENTIMETER" once we use tifffile directly.
                 else:
                     if self.tile_size:
                         kwargs['tile'] = (self.tile_size, self.tile_size)
@@ -1175,7 +1173,7 @@ class PyramidSetting(object):
 def write_pyramid(mosaics, verbose=True):
     ref_m = mosaics[0]
     path = ref_m.filename_format
-    num_channels = sum([len(m.channels) for m in mosaics])
+    num_channels = sum(len(m.channels) for m in mosaics)
 
     base_shape = ref_m.shape
     downscale_factor = 2
@@ -1191,6 +1189,7 @@ def write_pyramid(mosaics, verbose=True):
 
     software = f'Ashlar v{_version}'
     pixel_size = ref_m.aligner.metadata.pixel_size
+    resolution_cm = round(10000 / pixel_size)
     metadata = {
         'Creator': software,
         'Pixels': {
@@ -1201,14 +1200,18 @@ def write_pyramid(mosaics, verbose=True):
 
     print("    writing to %s" % path)
     with tifffile.TiffWriter(path, bigtiff=True) as tif:
+        data = tile_from_combined_mosaics(mosaics, tile_shape=tile_shapes[0])
         tif.write(
-            data=tile_from_combined_mosaics(mosaics, tile_shape=tile_shapes[0]),
+            data=data,
             metadata=metadata,
             software=software,
             shape=(num_channels, *shapes[0]),
             subifds=int(num_levels - 1),
             dtype=dtype,
-            tile=tile_shapes[0]
+            tile=tile_shapes[0],
+            resolution=(resolution_cm, resolution_cm, "centimeter"),
+            # FIXME Propagate this from input files (especially RGB).
+            photometric="minisblack",
         )
         print('    generating pyramid')
         for level, (shape, tile_shape) in enumerate(
@@ -1216,30 +1219,21 @@ def write_pyramid(mosaics, verbose=True):
         ):
             if verbose:
                 print(f"    Level {level+1} ({shape[0]} x {shape[1]})")
+            level_data = tile_from_pyramid(
+                path, num_channels, tile_shape, downscale_factor, level
+            )
             tif.write(
-                data=tile_from_pyramid(
-                    path,
-                    num_channels,
-                    tile_shape=tile_shape,
-                    downscale_factor=downscale_factor,
-                    level=level,
-                ),
+                data=level_data,
                 shape=(num_channels, *shape),
                 subfiletype=1,
                 dtype=dtype,
-                tile=tile_shape
+                tile=tile_shape,
             )
             if verbose:
                 print()
 
 
-def tile_from_pyramid(
-    path,
-    num_channels,
-    tile_shape,
-    downscale_factor=2,
-    level=0
-):
+def tile_from_pyramid(path, num_channels, tile_shape, downscale_factor, level):
     h, w = tile_shape
     for c in range(num_channels):
         sys.stdout.write('\r        processing channel %d/%d'
@@ -1254,6 +1248,8 @@ def tile_from_pyramid(
         num_rows, num_columns = img.shape
         for y in range(0, num_rows, h):
             for x in range(0, num_columns, w):
+                # Returning a copy makes the array contiguous, avoiding a
+                # severely unoptimized code path in numpy.ndarray.tofile.
                 yield img[y:y+h, x:x+w].copy()
 
 
