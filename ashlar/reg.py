@@ -1060,67 +1060,30 @@ class Mosaic(object):
             self.dfp /= np.iinfo(self.dtype).max
             self.do_correction = True
 
-    def run(self, mode='write', debug=False):
-        if mode not in ('write', 'return'):
-            raise ValueError('Invalid mode')
+    def assemble_channel(self, channel, out=None):
         num_tiles = len(self.aligner.positions)
-        all_images = []
-        if debug:
-            node_colors = nx.greedy_color(self.aligner.neighbors_graph)
-            num_colors = max(node_colors.values()) + 1
-            if num_colors > 3:
-                raise ValueError("neighbor graph requires more than 3 colors")
-        for ci, channel in enumerate(self.channels):
+        if out is None:
+            out = np.zeros(self.shape, self.dtype)
+        else:
+            if out.shape != self.shape:
+                raise ValueError(
+                    f"out array shape {out.shape} does not match Mosaic"
+                    f" shape {self.shape}"
+                )
+        for si, position in enumerate(self.aligner.positions):
             if self.verbose:
-                print('    Channel %d:' % channel)
-            if not debug:
-                mosaic_image = np.zeros(self.shape, self.dtype)
-            else:
-                mosaic_image = np.zeros(self.shape + (3,), np.float32)
-            for tile, position in enumerate(self.aligner.positions):
-                if self.verbose:
-                    sys.stdout.write('\r        merging tile %d/%d'
-                                     % (tile + 1, num_tiles))
-                    sys.stdout.flush()
-                tile_image = self.aligner.reader.read(c=channel, series=tile)
-                tile_image = self.correct_illumination(tile_image, channel)
-                if debug:
-                    color_channel = node_colors[tile]
-                    rgb_image = np.zeros(tile_image.shape + (3,),
-                                         tile_image.dtype)
-                    rgb_image[:,:,color_channel] = tile_image
-                    tile_image = rgb_image
-                func = utils.pastefunc_blend if not debug else np.add
-                utils.paste(mosaic_image, tile_image, position, func=func)
-            if debug:
-                np.clip(mosaic_image, 0, 1, out=mosaic_image)
-                w = int(1e6)
-                mi_flat = mosaic_image.reshape(-1, 3)
-                for p in np.arange(0, mi_flat.shape[0], w, dtype=int):
-                    mi_flat[p:p+w] = skimage.exposure.adjust_gamma(
-                        mi_flat[p:p+w], 1/2.2
-                    )
-            if self.flip_mosaic_x:
-                mosaic_image = np.fliplr(mosaic_image)
-            if self.flip_mosaic_y:
-                mosaic_image = np.flipud(mosaic_image)
-            if self.verbose:
-                print()
-            if mode == 'write':
-                filename = self.filename_format.format(channel=channel)
-                kwargs = {}
-                if self.combined:
-                    yield mosaic_image
-                else:
-                    if self.tile_size:
-                        kwargs['tile'] = (self.tile_size, self.tile_size)
-                    if self.verbose:
-                        print("        writing to %s" % filename)
-                    utils.imsave(filename, mosaic_image, **kwargs)
-            elif mode == 'return':
-                all_images.append(mosaic_image)
-        if mode == 'return':
-            return all_images
+                sys.stdout.write(f"\r        merging tile {si + 1}/{num_tiles}")
+                sys.stdout.flush()
+            img = self.aligner.reader.read(c=channel, series=si)
+            img = self.correct_illumination(img, channel)
+            utils.paste(out, img, position, func=utils.pastefunc_blend)
+        if self.flip_mosaic_x:
+            mosaic_image = np.fliplr(mosaic_image)
+        if self.flip_mosaic_y:
+            mosaic_image = np.flipud(mosaic_image)
+        if self.verbose:
+            print()
+        return out
 
     def correct_illumination(self, img, channel):
         if self.do_correction:
@@ -1131,130 +1094,150 @@ class Mosaic(object):
         return img
 
 
-def tile_from_combined_mosaics(mosaics, tile_shape):
-    num_rows, num_cols = mosaics[0].shape
-    h, w = tile_shape
-    for m in mosaics:
-        for c in m.run():
-            for y in range(0, num_rows, h):
-                for x in range(0, num_cols, w):
-                    yield c[y:y+h, x:x+w].copy()
-
-
-class PyramidSetting(object):
+class PyramidWriter:
 
     def __init__(
-        self,
-        downscale_factor=2,
-        tile_size=1024,
-        max_pyramid_img_size=1024
+        self, mosaics, path, scale=2, tile_size=1024, peak_size=1024, verbose=False
     ):
-        self.downscale_factor = downscale_factor
+        if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
+            raise ValueError("mosaics must all have the same shape")
+        if tile_size % 16 != 0:
+            raise ValueError("tile_size must be a multiple of 16")
+        self.mosaics = mosaics
+        self.path = path
+        self.scale = scale
         self.tile_size = tile_size
-        self.max_pyramid_img_size = max_pyramid_img_size
+        self.peak_size = peak_size
+        self.verbose = verbose
 
-    def tile_shapes(self, base_shape):
-        shapes = np.array(self.pyramid_shapes(base_shape))
-        n_rows_n_cols = np.ceil(shapes / self.tile_size)
-        tile_shapes = np.ceil(shapes / n_rows_n_cols / 16) * 16
-        return [tuple(map(int, s)) for s in tile_shapes]
+    @property
+    def ref_mosaic(self):
+        "The reference mosaic."
+        return self.mosaics[0]
 
-    def pyramid_shapes(self, base_shape):
-        num_levels = self.num_levels(base_shape)
-        factors = self.downscale_factor ** np.arange(num_levels)
-        shapes = np.ceil(np.array(base_shape) / factors[:,None])
+    @property
+    def base_shape(self):
+        "Shape of the base level."
+        return self.ref_mosaic.shape
+
+    @property
+    def num_channels(self):
+        return sum(len(m.channels) for m in self.mosaics)
+
+    @property
+    def num_levels(self):
+        "Number of levels."
+        factor = max(self.base_shape) / self.peak_size
+        return math.ceil(math.log(factor, self.scale)) + 1
+
+    @property
+    def level_shapes(self):
+        "Shape of all levels."
+        factors = self.scale ** np.arange(self.num_levels)
+        shapes = np.ceil(np.array(self.base_shape) / factors[:, None])
         return [tuple(map(int, s)) for s in shapes]
 
-    def num_levels(self, base_shape):
-        factor = max(base_shape) / self.max_pyramid_img_size
-        return math.ceil(math.log(factor, self.downscale_factor)) + 1
+    @property
+    def level_full_shapes(self):
+        "Shape of all levels, including channel dimension."
+        return [(self.num_channels, *shape) for shape in self.level_shapes]
 
+    @property
+    def tile_shapes(self):
+        "Tile shape of all levels."
+        level_shapes = np.array(self.level_shapes)
+        # The last level where we want to use the standard square tile size.
+        tip_level = np.argmax(np.all(level_shapes < self.tile_size, axis=1))
+        tile_shapes = [
+            (self.tile_size, self.tile_size) if i <= tip_level else None
+            for i in range(len(level_shapes))
+        ]
+        return tile_shapes
 
-def write_pyramid(mosaics, verbose=True):
-    ref_m = mosaics[0]
-    path = ref_m.filename_format
-    num_channels = sum(len(m.channels) for m in mosaics)
+    def base_tiles(self):
+        h, w = self.base_shape
+        th, tw = self.tile_shapes[0]
+        for mi, mosaic in enumerate(self.mosaics):
+            if self.verbose:
+                print(f"Cycle {mi}:")
+            for ci, channel in enumerate(mosaic.channels):
+                if self.verbose:
+                    print(f"    Channel {ci}:")
+                img = mosaic.assemble_channel(channel)
+                for y in range(0, h, th):
+                    for x in range(0, w, tw):
+                        # Returning a copy makes the array contiguous, avoiding
+                        # a severely unoptimized code path in ndarray.tofile.
+                        yield img[y:y+th, x:x+tw].copy()
 
-    base_shape = ref_m.shape
-    downscale_factor = 2
-    pyramid_setting = PyramidSetting(
-        downscale_factor=downscale_factor,
-        tile_size=ref_m.tile_size
-    )
-    num_levels = pyramid_setting.num_levels(base_shape)
-    tile_shapes = pyramid_setting.tile_shapes(base_shape)
-    shapes = pyramid_setting.pyramid_shapes(base_shape)
-
-    dtype = ref_m.aligner.metadata.pixel_dtype
-
-    software = f'Ashlar v{_version}'
-    pixel_size = ref_m.aligner.metadata.pixel_size
-    resolution_cm = round(10000 / pixel_size)
-    metadata = {
-        'Creator': software,
-        'Pixels': {
-            'PhysicalSizeX': pixel_size, 'PhysicalSizeXUnit': '\u00b5m',
-            'PhysicalSizeY': pixel_size, 'PhysicalSizeYUnit': '\u00b5m'
-        },
-    }
-
-    print("    writing to %s" % path)
-    with tifffile.TiffWriter(path, bigtiff=True) as tif:
-        data = tile_from_combined_mosaics(mosaics, tile_shape=tile_shapes[0])
-        tif.write(
-            data=data,
-            metadata=metadata,
-            software=software,
-            shape=(num_channels, *shapes[0]),
-            subifds=int(num_levels - 1),
-            dtype=dtype,
-            tile=tile_shapes[0],
-            resolution=(resolution_cm, resolution_cm, "centimeter"),
-            # FIXME Propagate this from input files (especially RGB).
-            photometric="minisblack",
-        )
-        print('    generating pyramid')
-        for level, (shape, tile_shape) in enumerate(
-            zip(shapes[1:], tile_shapes[1:])
-        ):
-            if verbose:
-                print(f"    Level {level+1} ({shape[0]} x {shape[1]})")
-            level_data = tile_from_pyramid(
-                path, num_channels, tile_shape, downscale_factor, level
+    def subres_tiles(self, level):
+        assert level >= 1
+        num_channels, h, w = self.level_full_shapes[level]
+        tshape = self.tile_shapes[level]
+        for c in range(num_channels):
+            sys.stdout.write('\r        processing channel %d/%d'
+                            % (c + 1, num_channels))
+            sys.stdout.flush()
+            img = tifffile.imread(
+                self.path, is_ome=False, series=0, key=c, level=level-1
             )
-            tif.write(
-                data=level_data,
-                shape=(num_channels, *shape),
-                subfiletype=1,
+            dtype = img.dtype
+            img = skimage.transform.downscale_local_mean(
+                img, (self.scale, self.scale)
+            )
+            if np.issubdtype(dtype, np.integer):
+                np.around(img, out=img)
+            img = img.astype(dtype)
+            assert img.shape == (h, w)
+            if tshape:
+                th, tw = tshape
+                for y in range(0, h, th):
+                    for x in range(0, w, tw):
+                        yield img[y:y+th, x:x+tw].copy()
+            else:
+                yield img
+
+    def run(self):
+        dtype = self.ref_mosaic.aligner.metadata.pixel_dtype
+        pixel_size = self.ref_mosaic.aligner.metadata.pixel_size
+        resolution_cm = round(10000 / pixel_size)
+        software = f"Ashlar v{_version}"
+        metadata = {
+            "Creator": software,
+            "Pixels": {
+                "PhysicalSizeX": pixel_size, "PhysicalSizeXUnit": "\u00b5m",
+                "PhysicalSizeY": pixel_size, "PhysicalSizeYUnit": "\u00b5m"
+            },
+        }
+        with tifffile.TiffWriter(self.path, bigtiff=True) as tiff:
+            tiff.write(
+                data=self.base_tiles(),
+                metadata=metadata,
+                software=software.encode("utf-8"),
+                shape=self.level_full_shapes[0],
+                subifds=int(self.num_levels - 1),
                 dtype=dtype,
-                tile=tile_shape,
+                tile=self.tile_shapes[0],
+                resolution=(resolution_cm, resolution_cm, "centimeter"),
+                # FIXME Propagate this from input files (especially RGB).
+                photometric="minisblack",
             )
-            if verbose:
-                print()
-
-
-def tile_from_pyramid(path, num_channels, tile_shape, downscale_factor, level):
-    h, w = tile_shape
-    for c in range(num_channels):
-        sys.stdout.write('\r        processing channel %d/%d'
-                        % (c + 1, num_channels))
-        sys.stdout.flush()
-        img = tifffile.imread(
-            path, is_ome=False, series=0, key=c, level=level
-        )
-        dtype = img.dtype
-        img = skimage.transform.downscale_local_mean(
-            img, (downscale_factor, downscale_factor)
-        )
-        if np.issubdtype(dtype, np.integer):
-            np.around(img, out=img)
-        img = img.astype(dtype)
-        num_rows, num_columns = img.shape
-        for y in range(0, num_rows, h):
-            for x in range(0, num_columns, w):
-                # Returning a copy makes the array contiguous, avoiding a
-                # severely unoptimized code path in numpy.ndarray.tofile.
-                yield img[y:y+h, x:x+w].copy()
+            if self.verbose:
+                print("Generating pyramid")
+            for level, (shape, tile_shape) in enumerate(
+                zip(self.level_full_shapes[1:], self.tile_shapes[1:]), 1
+            ):
+                if self.verbose:
+                    print(f"    Level {level} ({shape[2]} x {shape[1]})")
+                tiff.write(
+                    data=self.subres_tiles(level),
+                    shape=shape,
+                    subfiletype=1,
+                    dtype=dtype,
+                    tile=tile_shape,
+                )
+                if self.verbose:
+                    print()
 
 
 class DataWarning(UserWarning):

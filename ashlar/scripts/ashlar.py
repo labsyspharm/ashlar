@@ -202,11 +202,10 @@ def process_single(
             )
 
     mosaic_args = mosaic_args.copy()
-    if pyramid:
-        mosaic_args['combined'] = True
-    num_channels = 0
+    mosaics = []
 
     if not quiet:
+        print("Stitching and registering input images")
         print('Cycle 0:')
         print('    reading %s' % filepaths[0])
     reader = build_reader(filepaths[0], plate_well=plate_well)
@@ -218,16 +217,13 @@ def process_single(
     edge_aligner.run()
     mshape = edge_aligner.mosaic_shape
     mosaic_args_final = mosaic_args.copy()
-    mosaic_args_final['first'] = True
     if ffp_paths:
         mosaic_args_final['ffp_path'] = ffp_paths[0]
     if dfp_paths:
         mosaic_args_final['dfp_path'] = dfp_paths[0]
-    mosaic = reg.Mosaic(
-        edge_aligner, mshape, output_path_0, **mosaic_args_final
+    mosaics.append(
+        reg.Mosaic(edge_aligner, mshape, output_path_0, **mosaic_args_final)
     )
-    mosaic.run()
-    num_channels += len(mosaic.channels)
 
     for cycle, filepath in enumerate(filepaths[1:], 1):
         if not quiet:
@@ -242,19 +238,21 @@ def process_single(
             mosaic_args_final['ffp_path'] = ffp_paths[cycle]
         if dfp_paths:
             mosaic_args_final['dfp_path'] = dfp_paths[cycle]
-        mosaic = reg.Mosaic(
-            layer_aligner, mshape, format_cycle(mosaic_path_format, cycle),
-            **mosaic_args_final
+        mosaics.append(
+            reg.Mosaic(
+                layer_aligner, mshape, format_cycle(mosaic_path_format, cycle),
+                **mosaic_args_final
+            )
         )
-        mosaic.run()
-        num_channels += len(mosaic.channels)
 
-    if pyramid:
-        print("Building pyramid")
-        reg.build_pyramid(
-            output_path_0, num_channels, mshape, reader.metadata.pixel_dtype,
-            reader.metadata.pixel_size, mosaic_args['tile_size'], not quiet
-        )
+    if not quiet:
+        print()
+        print(f"Merging tiles and writing to {output_path_0}")
+
+    writer = reg.PyramidWriter(
+        mosaics, output_path_0, tile_size=mosaic_args['tile_size'], verbose=not quiet
+    )
+    writer.run()
 
     return 0
 
