@@ -189,17 +189,9 @@ def main(argv=sys.argv):
 
 
 def process_single(
-    filepaths, mosaic_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
+    filepaths, output_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
     aligner_args, mosaic_args, pyramid, quiet, plate_well=None
 ):
-
-    output_path_0 = format_cycle(mosaic_path_format, 0)
-    if pyramid:
-        if output_path_0 != mosaic_path_format:
-            raise ProcessingError(
-                "For pyramid output, please use -f to specify an output"
-                " filename without {cycle} or {channel} placeholders"
-            )
 
     mosaic_args = mosaic_args.copy()
     mosaics = []
@@ -221,9 +213,7 @@ def process_single(
         mosaic_args_final['ffp_path'] = ffp_paths[0]
     if dfp_paths:
         mosaic_args_final['dfp_path'] = dfp_paths[0]
-    mosaics.append(
-        reg.Mosaic(edge_aligner, mshape, output_path_0, **mosaic_args_final)
-    )
+    mosaics.append(reg.Mosaic(edge_aligner, mshape, **mosaic_args_final))
 
     for cycle, filepath in enumerate(filepaths[1:], 1):
         if not quiet:
@@ -238,20 +228,22 @@ def process_single(
             mosaic_args_final['ffp_path'] = ffp_paths[cycle]
         if dfp_paths:
             mosaic_args_final['dfp_path'] = dfp_paths[cycle]
-        mosaics.append(
-            reg.Mosaic(
-                layer_aligner, mshape, format_cycle(mosaic_path_format, cycle),
-                **mosaic_args_final
-            )
-        )
+        mosaics.append(reg.Mosaic(layer_aligner, mshape, **mosaic_args_final))
 
     if not quiet:
         print()
-        print(f"Merging tiles and writing to {output_path_0}")
-
-    writer = reg.PyramidWriter(
-        mosaics, output_path_0, tile_size=mosaic_args['tile_size'], verbose=not quiet
-    )
+    if pyramid:
+        if not quiet:
+            print(f"Merging tiles and writing to {mosaic_path_format}")
+        writer = reg.PyramidWriter(
+            mosaics, output_path_format, tile_size=mosaic_args['tile_size'], verbose=not quiet
+        )
+    else:
+        if not quiet:
+            print(f"Merging tiles and writing to separate TIFF files")
+        writer = reg.TiffListWriter(
+            mosaics, output_path_format, verbose=not quiet
+        )
     writer.run()
 
     return 0
@@ -288,10 +280,6 @@ def process_plates(
         print()
 
     return 0
-
-
-def format_cycle(f, cycle):
-    return f.format(cycle=cycle, channel='{channel}')
 
 
 def process_axis_flip(reader, flip_x, flip_y):

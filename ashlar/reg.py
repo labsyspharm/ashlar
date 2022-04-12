@@ -967,19 +967,14 @@ class Intersection(object):
 class Mosaic(object):
 
     def __init__(
-            self, aligner, shape, filename_format, channels=None,
-            ffp_path=None, dfp_path=None, flip_mosaic_x=False, flip_mosaic_y=False,
-            combined=False, tile_size=None, first=False, verbose=False
+        self, aligner, shape, channels=None, ffp_path=None, dfp_path=None,
+        flip_mosaic_x=False, flip_mosaic_y=False, verbose=False
     ):
         self.aligner = aligner
         self.shape = tuple(shape)
-        self.filename_format = filename_format
         self.channels = self._sanitize_channels(channels)
         self.flip_mosaic_x = flip_mosaic_x
         self.flip_mosaic_y = flip_mosaic_y
-        self.combined = combined
-        self.tile_size = tile_size
-        self.first = first
         self.dtype = aligner.metadata.pixel_dtype
         self._load_correction_profiles(dfp_path, ffp_path)
         self.verbose = verbose
@@ -1162,7 +1157,7 @@ class PyramidWriter:
                 print(f"Cycle {mi}:")
             for ci, channel in enumerate(mosaic.channels):
                 if self.verbose:
-                    print(f"    Channel {ci}:")
+                    print(f"    Channel {channel}:")
                 img = mosaic.assemble_channel(channel)
                 for y in range(0, h, th):
                     for x in range(0, w, tw):
@@ -1238,6 +1233,37 @@ class PyramidWriter:
                 )
                 if self.verbose:
                     print()
+
+
+class TiffListWriter:
+
+    def __init__(self, mosaics, path_format, verbose=False):
+        if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
+            raise ValueError("mosaics must all have the same shape")
+        self.mosaics = mosaics
+        self.path_format = path_format
+        self.verbose = verbose
+
+    def run(self):
+        pixel_size = self.mosaics[0].aligner.metadata.pixel_size
+        resolution_cm = round(10000 / pixel_size)
+        software = f"Ashlar v{_version}"
+        for mi, mosaic in enumerate(self.mosaics):
+            if self.verbose:
+                print(f"Cycle {mi}:")
+            for ci, channel in enumerate(mosaic.channels):
+                if self.verbose:
+                    print(f"    Channel {channel}:")
+                img = mosaic.assemble_channel(channel)
+                path = self.path_format.format(cycle=mi, channel=channel)
+                with tifffile.TiffWriter(path, bigtiff=True) as tiff:
+                    tiff.write(
+                        data=img,
+                        software=software.encode("utf-8"),
+                        resolution=(resolution_cm, resolution_cm, "centimeter"),
+                        # FIXME Propagate this from input files (especially RGB).
+                        photometric="minisblack",
+                    )
 
 
 class DataWarning(UserWarning):
