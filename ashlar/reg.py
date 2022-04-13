@@ -1204,7 +1204,7 @@ class PyramidWriter:
                 "PhysicalSizeY": pixel_size, "PhysicalSizeYUnit": "\u00b5m"
             },
         }
-        with tifffile.TiffWriter(self.path, bigtiff=True) as tiff:
+        with tifffile.TiffWriter(self.path, ome=True, bigtiff=True) as tiff:
             tiff.write(
                 data=self.base_tiles(),
                 metadata=metadata,
