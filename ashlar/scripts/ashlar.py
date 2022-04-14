@@ -120,7 +120,19 @@ def main(argv=sys.argv):
     filepaths = args.filepaths
 
     output_path = pathlib.Path(args.output)
-    if not output_path.exists():
+    if re.search(r"\.tiff?$", output_path.name):
+        if args.filename_format != arg_f_default:
+            print_error(
+                "Filename may be appended to the output path specified by"
+                " -o/--output, or specified separately with"
+                " -f/--filename-format, but not both at the same time"
+            )
+            return 1
+        if re.search(r"\.ome\.tiff?$", output_path.name):
+            args.pyramid = True
+        args.filename_format = output_path.name
+        output_path = output_path.parent
+    if output_path.is_dir() and not output_path.exists():
         print_error("Output directory '{}' does not exist".format(output_path))
         return 1
 
@@ -194,6 +206,9 @@ def process_single(
 ):
 
     mosaic_args = mosaic_args.copy()
+    writer_args = {}
+    if pyramid:
+        writer_args["tile_size"] = mosaic_args.pop("tile_size", None)
     mosaics = []
 
     if not quiet:
@@ -232,18 +247,11 @@ def process_single(
 
     if not quiet:
         print()
-    if pyramid:
-        if not quiet:
-            print(f"Merging tiles and writing to {mosaic_path_format}")
-        writer = reg.PyramidWriter(
-            mosaics, output_path_format, tile_size=mosaic_args['tile_size'], verbose=not quiet
-        )
-    else:
-        if not quiet:
-            print(f"Merging tiles and writing to separate TIFF files")
-        writer = reg.TiffListWriter(
-            mosaics, output_path_format, verbose=not quiet
-        )
+        print(f"Merging tiles and writing to {output_path_format}")
+    writer_class = reg.PyramidWriter if pyramid else reg.TiffListWriter
+    writer = writer_class(
+        mosaics, output_path_format, verbose=not quiet, **writer_args
+    )
     writer.run()
 
     return 0

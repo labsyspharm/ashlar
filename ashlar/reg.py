@@ -1248,6 +1248,7 @@ class TiffListWriter:
         pixel_size = self.mosaics[0].aligner.metadata.pixel_size
         resolution_cm = round(10000 / pixel_size)
         software = f"Ashlar v{_version}"
+        used_paths = set()
         for mi, mosaic in enumerate(self.mosaics):
             if self.verbose:
                 print(f"Cycle {mi}:")
@@ -1256,6 +1257,17 @@ class TiffListWriter:
                     print(f"    Channel {channel}:")
                 img = mosaic.assemble_channel(channel)
                 path = self.path_format.format(cycle=mi, channel=channel)
+                # FIXME: We would ideally report this and exit immediately
+                # rather than warn after all the alignment has been done, but
+                # that will require some refactoring to open each input file
+                # right away to discover channel counts.
+                if path in used_paths:
+                    warn_data(
+                        f"Output path collision -- overwriting {path} (please"
+                        " include both {cycle} and {channel} placeholders in"
+                        " the output path)"
+                    )
+                used_paths.add(path)
                 with tifffile.TiffWriter(path, bigtiff=True) as tiff:
                     tiff.write(
                         data=img,
