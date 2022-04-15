@@ -12,7 +12,7 @@ jobs:
         name: Remove leading v from the release tag
         id: rmv
         run: |
-          sansv=$(echo ${{ github.event.release.tag_name }} | cut -c2-)
+          sansv=$(echo ${{ github.event.release.tag_name }} | tr -d v)
           echo "::set-output name=tag::${{ github.repository }}:$sansv"
       -
         name: Set up QEMU
