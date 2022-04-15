@@ -118,5 +118,5 @@ class FilePatternReader(reg.Reader):
 
     def filename(self, series, c):
         row, col = self.metadata.tile_rc(series)
+        c = self.metadata.channel_map[c]
         return self.pattern.format(row=row, col=col, channel=c)
-
