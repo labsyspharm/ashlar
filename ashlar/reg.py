@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as mcm
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as mpatheffects
+import zarr
 from . import utils
 from . import thumbnail
 from . import __version__ as _version
@@ -1072,10 +1073,13 @@ class Mosaic(object):
             img = self.aligner.reader.read(c=channel, series=si)
             img = self.correct_illumination(img, channel)
             utils.paste(out, img, position, func=utils.pastefunc_blend)
+        # Memory-conserving axis flips.
         if self.flip_mosaic_x:
-            mosaic_image = np.fliplr(mosaic_image)
+            for i in range(len(out)):
+                out[i] = out[i, ::-1]
         if self.flip_mosaic_y:
-            mosaic_image = np.flipud(mosaic_image)
+            for i in range(len(out) // 2):
+                out[[i, -i-1]] = out[[-i-1, i]]
         if self.verbose:
             print()
         return out
@@ -1164,33 +1168,34 @@ class PyramidWriter:
                         # Returning a copy makes the array contiguous, avoiding
                         # a severely unoptimized code path in ndarray.tofile.
                         yield img[y:y+th, x:x+tw].copy()
+                # Allow img to be freed immediately to avoid keeping it in
+                # memory while the next loop iteration calls assemble_channel.
+                img = None
 
     def subres_tiles(self, level):
         assert level >= 1
         num_channels, h, w = self.level_full_shapes[level]
-        tshape = self.tile_shapes[level]
+        tshape = self.tile_shapes[level] or (h, w)
+        tiff = tifffile.TiffFile(self.path)
+        zimg = zarr.open(tiff.aszarr(series=0, level=level-1))
         for c in range(num_channels):
-            sys.stdout.write('\r        processing channel %d/%d'
-                            % (c + 1, num_channels))
-            sys.stdout.flush()
-            img = tifffile.imread(
-                self.path, is_ome=False, series=0, key=c, level=level-1
-            )
-            dtype = img.dtype
-            img = skimage.transform.downscale_local_mean(
-                img, (self.scale, self.scale)
-            )
-            if np.issubdtype(dtype, np.integer):
-                np.around(img, out=img)
-            img = img.astype(dtype)
-            assert img.shape == (h, w)
-            if tshape:
-                th, tw = tshape
-                for y in range(0, h, th):
-                    for x in range(0, w, tw):
-                        yield img[y:y+th, x:x+tw].copy()
-            else:
-                yield img
+            if self.verbose:
+                sys.stdout.write(
+                    f"\r        processing channel {c + 1}/{num_channels}"
+                )
+                sys.stdout.flush()
+            th = tshape[0] * self.scale
+            tw = tshape[1] * self.scale
+            for y in range(0, zimg.shape[1], th):
+                for x in range(0, zimg.shape[2], tw):
+                    a = zimg[c, y:y+th, x:x+tw]
+                    a = skimage.transform.downscale_local_mean(
+                        a, (self.scale, self.scale)
+                    )
+                    if np.issubdtype(zimg.dtype, np.integer):
+                        a = np.around(a)
+                    a = a.astype(zimg.dtype)
+                    yield a
 
     def run(self):
         dtype = self.ref_mosaic.aligner.metadata.pixel_dtype
@@ -1276,6 +1281,8 @@ class TiffListWriter:
                         # FIXME Propagate this from input files (especially RGB).
                         photometric="minisblack",
                     )
+                # Allow img to be freed.
+                img = None
 
 
 class DataWarning(UserWarning):

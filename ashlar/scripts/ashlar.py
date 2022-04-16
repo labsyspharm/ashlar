@@ -245,6 +245,9 @@ def process_single(
             mosaic_args_final['dfp_path'] = dfp_paths[cycle]
         mosaics.append(reg.Mosaic(layer_aligner, mshape, **mosaic_args_final))
 
+    # Disable reader caching to save memory during mosaicing and writing.
+    edge_aligner.reader = edge_aligner.reader.reader
+
     if not quiet:
         print()
         print(f"Merging tiles and writing to {output_path_format}")

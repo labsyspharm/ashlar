@@ -20,6 +20,8 @@ requires = [
     # FIXME Release the pin once all the issues are resolved.
     'scikit-image==0.16.2',
     'scikit-learn>=0.21.1',
+    'tifffile>=2022.4.8',
+    'zarr>=2.11.3',
     'blessed>=1.17',
 ]
 
