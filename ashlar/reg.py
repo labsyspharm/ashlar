@@ -32,6 +32,9 @@ if not jnius_config.vm_running:
         raise RuntimeError("loci_tools.jar missing from distribution"
                            " (expected it at %s)" % bf_jar_path)
     jnius_config.add_classpath(str(bf_jar_path))
+    # These settings constrain the memory used by BioFormats to near the minimum
+    # possible working set without requiring the choice of a max heap size.
+    jnius_config.add_options("-Xms10m", "-XX:+UseSerialGC")
 
 import jnius
 
