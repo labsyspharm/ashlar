@@ -22,8 +22,14 @@ def main(argv=sys.argv):
         help='an image file to be processed (one file per cycle)'
     )
     parser.add_argument(
-        '-o', '--output', dest='output', default='.', metavar='DIR',
-        help='write output image files to DIR; default is the current directory'
+        '-o', '--output', dest='output', default='ashlar-output.ome.tif',
+        metavar='PATH',
+        help="write output to PATH; default is ashlar_output.ome.tif. If value"
+        " ends in .ome.tif an OME-TIFF with tiled image pyramid will be written."
+        " If value ends in just .tif and includes {cycle} and {channel}"
+        " placeholders a series of single-channel TIFF files will be written."
+        " Otherwise value will be interpreted as a directory and the '-f' and"
+        " '--pyramid' arguments will control the file names and format."
     )
     parser.add_argument(
         '-c', '--align-channel', dest='align_channel', type=int,
@@ -66,13 +72,14 @@ def main(argv=sys.argv):
     parser.add_argument(
         '-f', '--filename-format', dest='filename_format',
         default=arg_f_default, metavar='FORMAT',
-        help=('use FORMAT to generate output filenames, with {{cycle}} and'
-              ' {{channel}} as required placeholders for the cycle and channel'
-              ' numbers; default is {default}'.format(default=arg_f_default))
+        help="use FORMAT to generate output filenames, with {cycle} and"
+        " {channel} as required placeholders for the cycle and channel"
+        f" numbers; default is {arg_f_default} (DEPRECATED: Use the '-o'"
+        " argument to specify the output filename format.)"
     )
     parser.add_argument(
         '--pyramid', default=False, action='store_true',
-        help='write output as a single pyramidal TIFF'
+        help='write output as a single pyramidal OME-TIFF'
     )
     # Implement default-value logic ourselves so we can detect when the user
     # has explicitly set a value.
