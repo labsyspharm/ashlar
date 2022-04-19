@@ -1,10 +1,7 @@
 import sys
+import math
 import warnings
-import re
 import xml.etree.ElementTree
-import io
-import uuid
-import struct
 import pathlib
 import jnius_config
 import numpy as np
@@ -17,10 +14,12 @@ import skimage.exposure
 import skimage.transform
 import sklearn.linear_model
 import networkx as nx
+import tifffile
 import matplotlib.pyplot as plt
 import matplotlib.cm as mcm
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as mpatheffects
+import zarr
 from . import utils
 from . import thumbnail
 from . import __version__ as _version
@@ -736,7 +735,7 @@ class EdgeAligner(object):
     def mosaic_shape(self):
         upper_corners = self.positions + self.metadata.size
         max_dimensions = upper_corners.max(axis=0)
-        return np.ceil(max_dimensions).astype(int)
+        return tuple(map(int, np.ceil(max_dimensions)))
 
     def debug(self, t1, t2, min_size=0):
         shift, _ = self._register(t1, t2, min_size)
@@ -969,19 +968,14 @@ class Intersection(object):
 class Mosaic(object):
 
     def __init__(
-            self, aligner, shape, filename_format, channels=None,
-            ffp_path=None, dfp_path=None, flip_mosaic_x=False, flip_mosaic_y=False,
-            combined=False, tile_size=None, first=False, verbose=False
+        self, aligner, shape, channels=None, ffp_path=None, dfp_path=None,
+        flip_mosaic_x=False, flip_mosaic_y=False, verbose=False
     ):
         self.aligner = aligner
         self.shape = tuple(shape)
-        self.filename_format = filename_format
         self.channels = self._sanitize_channels(channels)
         self.flip_mosaic_x = flip_mosaic_x
         self.flip_mosaic_y = flip_mosaic_y
-        self.combined = combined
-        self.tile_size = tile_size
-        self.first = first
         self.dtype = aligner.metadata.pixel_dtype
         self._load_correction_profiles(dfp_path, ffp_path)
         self.verbose = verbose
@@ -1062,83 +1056,33 @@ class Mosaic(object):
             self.dfp /= np.iinfo(self.dtype).max
             self.do_correction = True
 
-    def run(self, mode='write', debug=False):
-        if mode not in ('write', 'return'):
-            raise ValueError('Invalid mode')
+    def assemble_channel(self, channel, out=None):
         num_tiles = len(self.aligner.positions)
-        all_images = []
-        if debug:
-            node_colors = nx.greedy_color(self.aligner.neighbors_graph)
-            num_colors = max(node_colors.values()) + 1
-            if num_colors > 3:
-                raise ValueError("neighbor graph requires more than 3 colors")
-        for ci, channel in enumerate(self.channels):
+        if out is None:
+            out = np.zeros(self.shape, self.dtype)
+        else:
+            if out.shape != self.shape:
+                raise ValueError(
+                    f"out array shape {out.shape} does not match Mosaic"
+                    f" shape {self.shape}"
+                )
+        for si, position in enumerate(self.aligner.positions):
             if self.verbose:
-                print('    Channel %d:' % channel)
-            if not debug:
-                mosaic_image = np.zeros(self.shape, self.dtype)
-            else:
-                mosaic_image = np.zeros(self.shape + (3,), np.float32)
-            for tile, position in enumerate(self.aligner.positions):
-                if self.verbose:
-                    sys.stdout.write('\r        merging tile %d/%d'
-                                     % (tile + 1, num_tiles))
-                    sys.stdout.flush()
-                tile_image = self.aligner.reader.read(c=channel, series=tile)
-                tile_image = self.correct_illumination(tile_image, channel)
-                if debug:
-                    color_channel = node_colors[tile]
-                    rgb_image = np.zeros(tile_image.shape + (3,),
-                                         tile_image.dtype)
-                    rgb_image[:,:,color_channel] = tile_image
-                    tile_image = rgb_image
-                func = utils.pastefunc_blend if not debug else np.add
-                utils.paste(mosaic_image, tile_image, position, func=func)
-            if debug:
-                np.clip(mosaic_image, 0, 1, out=mosaic_image)
-                w = int(1e6)
-                mi_flat = mosaic_image.reshape(-1, 3)
-                for p in np.arange(0, mi_flat.shape[0], w, dtype=int):
-                    mi_flat[p:p+w] = skimage.exposure.adjust_gamma(
-                        mi_flat[p:p+w], 1/2.2
-                    )
-            if self.flip_mosaic_x:
-                mosaic_image = np.fliplr(mosaic_image)
-            if self.flip_mosaic_y:
-                mosaic_image = np.flipud(mosaic_image)
-            if self.verbose:
-                print()
-            if mode == 'write':
-                filename = self.filename_format.format(channel=channel)
-                kwargs = {}
-                if self.combined:
-                    kwargs['bigtiff'] = True
-                    # FIXME Propagate this from input files (esp. RGB).
-                    kwargs['photometric'] = 'minisblack'
-                    resolution = np.round(10000 / self.aligner.reader.metadata.pixel_size)
-                    # FIXME Switch to "CENTIMETER" once we use tifffile directly.
-                    kwargs['resolution'] = (resolution, resolution, 'cm')
-                    kwargs['metadata'] = None
-                    if self.first and ci == 0:
-                        # Set description to a short placeholder that will fit
-                        # within the IFD. We'll check for this string later.
-                        kwargs['description'] = '!!xml!!'
-                        kwargs['software'] = (
-                            'Ashlar v{} (Glencoe/Faas pyramid output)'
-                            .format(_version)
-                        )
-                    else:
-                        # Overwite if first channel of first cycle.
-                        kwargs['append'] = True
-                if self.tile_size:
-                    kwargs['tile'] = (self.tile_size, self.tile_size)
-                if self.verbose:
-                    print("        writing to %s" % filename)
-                utils.imsave(filename, mosaic_image, **kwargs)
-            elif mode == 'return':
-                all_images.append(mosaic_image)
-        if mode == 'return':
-            return all_images
+                sys.stdout.write(f"\r        merging tile {si + 1}/{num_tiles}")
+                sys.stdout.flush()
+            img = self.aligner.reader.read(c=channel, series=si)
+            img = self.correct_illumination(img, channel)
+            utils.paste(out, img, position, func=utils.pastefunc_blend)
+        # Memory-conserving axis flips.
+        if self.flip_mosaic_x:
+            for i in range(len(out)):
+                out[i] = out[i, ::-1]
+        if self.flip_mosaic_y:
+            for i in range(len(out) // 2):
+                out[[i, -i-1]] = out[[-i-1, i]]
+        if self.verbose:
+            print()
+        return out
 
     def correct_illumination(self, img, channel):
         if self.do_correction:
@@ -1149,110 +1093,196 @@ class Mosaic(object):
         return img
 
 
-def build_pyramid(
-        path, num_channels, shape, dtype, pixel_size, tile_size, verbose=False
-):
-    max_level = 0
-    shapes = [shape]
-    while any(s > tile_size for s in shape):
-        prev_level = max_level
-        max_level += 1
-        if verbose:
-            print("    Level %d:" % max_level)
-        for i in range(num_channels):
-            if verbose:
-                sys.stdout.write('\r        processing channel %d/%d'
-                                 % (i + 1, num_channels))
+class PyramidWriter:
+
+    def __init__(
+        self, mosaics, path, scale=2, tile_size=1024, peak_size=1024, verbose=False
+    ):
+        if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
+            raise ValueError("mosaics must all have the same shape")
+        if tile_size % 16 != 0:
+            raise ValueError("tile_size must be a multiple of 16")
+        self.mosaics = mosaics
+        self.path = path
+        self.scale = scale
+        self.tile_size = tile_size
+        self.peak_size = peak_size
+        self.verbose = verbose
+
+    @property
+    def ref_mosaic(self):
+        "The reference mosaic."
+        return self.mosaics[0]
+
+    @property
+    def base_shape(self):
+        "Shape of the base level."
+        return self.ref_mosaic.shape
+
+    @property
+    def num_channels(self):
+        return sum(len(m.channels) for m in self.mosaics)
+
+    @property
+    def num_levels(self):
+        "Number of levels."
+        factor = max(self.base_shape) / self.peak_size
+        return math.ceil(math.log(factor, self.scale)) + 1
+
+    @property
+    def level_shapes(self):
+        "Shape of all levels."
+        factors = self.scale ** np.arange(self.num_levels)
+        shapes = np.ceil(np.array(self.base_shape) / factors[:, None])
+        return [tuple(map(int, s)) for s in shapes]
+
+    @property
+    def level_full_shapes(self):
+        "Shape of all levels, including channel dimension."
+        return [(self.num_channels, *shape) for shape in self.level_shapes]
+
+    @property
+    def tile_shapes(self):
+        "Tile shape of all levels."
+        level_shapes = np.array(self.level_shapes)
+        # The last level where we want to use the standard square tile size.
+        tip_level = np.argmax(np.all(level_shapes < self.tile_size, axis=1))
+        tile_shapes = [
+            (self.tile_size, self.tile_size) if i <= tip_level else None
+            for i in range(len(level_shapes))
+        ]
+        return tile_shapes
+
+    def base_tiles(self):
+        h, w = self.base_shape
+        th, tw = self.tile_shapes[0]
+        for mi, mosaic in enumerate(self.mosaics):
+            if self.verbose:
+                print(f"Cycle {mi}:")
+            for ci, channel in enumerate(mosaic.channels):
+                if self.verbose:
+                    print(f"    Channel {channel}:")
+                img = mosaic.assemble_channel(channel)
+                for y in range(0, h, th):
+                    for x in range(0, w, tw):
+                        # Returning a copy makes the array contiguous, avoiding
+                        # a severely unoptimized code path in ndarray.tofile.
+                        yield img[y:y+th, x:x+tw].copy()
+                # Allow img to be freed immediately to avoid keeping it in
+                # memory while the next loop iteration calls assemble_channel.
+                img = None
+
+    def subres_tiles(self, level):
+        assert level >= 1
+        num_channels, h, w = self.level_full_shapes[level]
+        tshape = self.tile_shapes[level] or (h, w)
+        tiff = tifffile.TiffFile(self.path)
+        zimg = zarr.open(tiff.aszarr(series=0, level=level-1))
+        for c in range(num_channels):
+            if self.verbose:
+                sys.stdout.write(
+                    f"\r        processing channel {c + 1}/{num_channels}"
+                )
                 sys.stdout.flush()
-            img = skimage.io.imread(path, series=prev_level, key=i)
-            img = skimage.transform.pyramid_reduce(img, multichannel=False)
-            img = skimage.util.dtype.convert(img, dtype)
-            utils.imsave(
-                path, img, bigtiff=True, metadata=None, append=True,
-                tile=(tile_size, tile_size), photometric='minisblack'
+            th = tshape[0] * self.scale
+            tw = tshape[1] * self.scale
+            for y in range(0, zimg.shape[1], th):
+                for x in range(0, zimg.shape[2], tw):
+                    a = zimg[c, y:y+th, x:x+tw]
+                    a = skimage.transform.downscale_local_mean(
+                        a, (self.scale, self.scale)
+                    )
+                    if np.issubdtype(zimg.dtype, np.integer):
+                        a = np.around(a)
+                    a = a.astype(zimg.dtype)
+                    yield a
+
+    def run(self):
+        dtype = self.ref_mosaic.aligner.metadata.pixel_dtype
+        pixel_size = self.ref_mosaic.aligner.metadata.pixel_size
+        resolution_cm = round(10000 / pixel_size)
+        software = f"Ashlar v{_version}"
+        metadata = {
+            "Creator": software,
+            "Pixels": {
+                "PhysicalSizeX": pixel_size, "PhysicalSizeXUnit": "\u00b5m",
+                "PhysicalSizeY": pixel_size, "PhysicalSizeYUnit": "\u00b5m"
+            },
+        }
+        with tifffile.TiffWriter(self.path, ome=True, bigtiff=True) as tiff:
+            tiff.write(
+                data=self.base_tiles(),
+                metadata=metadata,
+                software=software.encode("utf-8"),
+                shape=self.level_full_shapes[0],
+                subifds=int(self.num_levels - 1),
+                dtype=dtype,
+                tile=self.tile_shapes[0],
+                resolution=(resolution_cm, resolution_cm, "centimeter"),
+                # FIXME Propagate this from input files (especially RGB).
+                photometric="minisblack",
             )
-        shapes.append(img.shape)
-        if verbose:
-            print()
-        shape = img.shape
-    # Now that we have the number and dimensions of all levels, we can generate
-    # the corresponding OME-XML and patch it into the Image Description tag of
-    # the first IFD.
-    filename = pathlib.Path(path).name
-    img_uuid = uuid.uuid4().urn
-    ome_dtype = BioformatsMetadata._ome_dtypes[dtype]
-    ifd = 0
-    xml = io.StringIO()
-    xml.write(u'<?xml version="1.0" encoding="UTF-8"?>')
-    xml.write(
-        (u'<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"'
-         ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
-         ' UUID="{uuid}"'
-         ' xsi:schemaLocation="http://www.openmicroscopy.org/Schemas/OME/2016-06'
-         ' http://www.openmicroscopy.org/Schemas/OME/2016-06/ome.xsd">')
-        .format(uuid=img_uuid)
-    )
-    for level in range(max_level + 1):
-        shape = shapes[level]
-        if level == 0:
-            psize_xml = (
-                u'PhysicalSizeX="{0}" PhysicalSizeXUnit="\u00b5m"'
-                u' PhysicalSizeY="{0}" PhysicalSizeYUnit="\u00b5m"'
-                .format(pixel_size)
-            )
-        else:
-            psize_xml = u''
-        xml.write(u'<Image ID="Image:{}">'.format(level))
-        xml.write(
-            (u'<Pixels BigEndian="false" DimensionOrder="XYZCT"'
-             ' ID="Pixels:{level}" {psize_xml} SizeC="{num_channels}" SizeT="1"'
-             ' SizeX="{sizex}" SizeY="{sizey}" SizeZ="1" Type="{ome_dtype}">')
-            .format(
-                level=level, psize_xml=psize_xml, num_channels=num_channels,
-                sizex=shape[1], sizey=shape[0], ome_dtype=ome_dtype
-            )
-        )
-        for channel in range(num_channels):
-            xml.write(
-                (u'<Channel ID="Channel:{level}:{channel}"'
-                 + (u' Name="Channel {channel}"' if level == 0 else u'')
-                 + u' SamplesPerPixel="1"><LightPath/></Channel>')
-                .format(level=level, channel=channel)
-            )
-        for channel in range(num_channels):
-            xml.write(
-                (u'<TiffData FirstC="{channel}" FirstT="0" FirstZ="0"'
-                 ' IFD="{ifd}" PlaneCount="1">'
-                 '<UUID FileName="{filename}">{uuid}</UUID>'
-                 '</TiffData>')
-                .format(
-                    channel=channel, ifd=ifd, filename=filename, uuid=img_uuid
+            if self.verbose:
+                print("Generating pyramid")
+            for level, (shape, tile_shape) in enumerate(
+                zip(self.level_full_shapes[1:], self.tile_shapes[1:]), 1
+            ):
+                if self.verbose:
+                    print(f"    Level {level} ({shape[2]} x {shape[1]})")
+                tiff.write(
+                    data=self.subres_tiles(level),
+                    shape=shape,
+                    subfiletype=1,
+                    dtype=dtype,
+                    tile=tile_shape,
                 )
-            )
-            ifd += 1
-        if level == 0:
-            for channel in range(num_channels):
-                xml.write(
-                    u'<Plane TheC="{channel}" TheT="0" TheZ="0"/>'
-                    .format(channel=channel)
-                )
-        xml.write(u'</Pixels>')
-        xml.write(u'</Image>')
-    xml.write(u'</OME>')
-    xml_bytes = xml.getvalue().encode('utf-8') + b'\x00'
-    # Append the XML and patch up the Image Description tag in the first IFD.
-    with open(path, 'rb+') as f:
-        f.seek(0, io.SEEK_END)
-        xml_offset = f.tell()
-        f.write(xml_bytes)
-        f.seek(0)
-        ifd_block = f.read(500)
-        match = re.search(b'!!xml!!\x00', ifd_block)
-        if match is None:
-            raise RuntimeError("Did not find placeholder string in IFD")
-        f.seek(match.start() - 8)
-        f.write(struct.pack('<Q', len(xml_bytes)))
-        f.write(struct.pack('<Q', xml_offset))
+                if self.verbose:
+                    print()
+
+
+class TiffListWriter:
+
+    def __init__(self, mosaics, path_format, verbose=False):
+        if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
+            raise ValueError("mosaics must all have the same shape")
+        self.mosaics = mosaics
+        self.path_format = path_format
+        self.verbose = verbose
+
+    def run(self):
+        pixel_size = self.mosaics[0].aligner.metadata.pixel_size
+        resolution_cm = round(10000 / pixel_size)
+        software = f"Ashlar v{_version}"
+        used_paths = set()
+        for mi, mosaic in enumerate(self.mosaics):
+            if self.verbose:
+                print(f"Cycle {mi}:")
+            for ci, channel in enumerate(mosaic.channels):
+                if self.verbose:
+                    print(f"    Channel {channel}:")
+                img = mosaic.assemble_channel(channel)
+                path = self.path_format.format(cycle=mi, channel=channel)
+                # FIXME: We would ideally report this and exit immediately
+                # rather than warn after all the alignment has been done, but
+                # that will require some refactoring to open each input file
+                # right away to discover channel counts.
+                if path in used_paths:
+                    warn_data(
+                        f"Output path collision -- overwriting {path} (please"
+                        " include both {cycle} and {channel} placeholders in"
+                        " the output path)"
+                    )
+                used_paths.add(path)
+                with tifffile.TiffWriter(path, bigtiff=True) as tiff:
+                    tiff.write(
+                        data=img,
+                        software=software.encode("utf-8"),
+                        resolution=(resolution_cm, resolution_cm, "centimeter"),
+                        # FIXME Propagate this from input files (especially RGB).
+                        photometric="minisblack",
+                    )
+                # Allow img to be freed.
+                img = None
 
 
 class DataWarning(UserWarning):

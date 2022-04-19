@@ -22,8 +22,14 @@ def main(argv=sys.argv):
         help='an image file to be processed (one file per cycle)'
     )
     parser.add_argument(
-        '-o', '--output', dest='output', default='.', metavar='DIR',
-        help='write output image files to DIR; default is the current directory'
+        '-o', '--output', dest='output', default='ashlar-output.ome.tif',
+        metavar='PATH',
+        help="write output to PATH; default is ashlar_output.ome.tif. If value"
+        " ends in .ome.tif an OME-TIFF with tiled image pyramid will be written."
+        " If value ends in just .tif and includes {cycle} and {channel}"
+        " placeholders a series of single-channel TIFF files will be written."
+        " Otherwise value will be interpreted as a directory and the '-f' and"
+        " '--pyramid' arguments will control the file names and format."
     )
     parser.add_argument(
         '-c', '--align-channel', dest='align_channel', type=int,
@@ -66,13 +72,14 @@ def main(argv=sys.argv):
     parser.add_argument(
         '-f', '--filename-format', dest='filename_format',
         default=arg_f_default, metavar='FORMAT',
-        help=('use FORMAT to generate output filenames, with {{cycle}} and'
-              ' {{channel}} as required placeholders for the cycle and channel'
-              ' numbers; default is {default}'.format(default=arg_f_default))
+        help="use FORMAT to generate output filenames, with {cycle} and"
+        " {channel} as required placeholders for the cycle and channel"
+        f" numbers; default is {arg_f_default} (DEPRECATED: Use the '-o'"
+        " argument to specify the output filename format.)"
     )
     parser.add_argument(
         '--pyramid', default=False, action='store_true',
-        help='write output as a single pyramidal TIFF'
+        help='write output as a single pyramidal OME-TIFF'
     )
     # Implement default-value logic ourselves so we can detect when the user
     # has explicitly set a value.
@@ -120,7 +127,19 @@ def main(argv=sys.argv):
     filepaths = args.filepaths
 
     output_path = pathlib.Path(args.output)
-    if not output_path.exists():
+    if re.search(r"\.tiff?$", output_path.name):
+        if args.filename_format != arg_f_default:
+            print_error(
+                "Filename may be appended to the output path specified by"
+                " -o/--output, or specified separately with"
+                " -f/--filename-format, but not both at the same time"
+            )
+            return 1
+        if re.search(r"\.ome\.tiff?$", output_path.name):
+            args.pyramid = True
+        args.filename_format = output_path.name
+        output_path = output_path.parent
+    if output_path.is_dir() and not output_path.exists():
         print_error("Output directory '{}' does not exist".format(output_path))
         return 1
 
@@ -189,24 +208,18 @@ def main(argv=sys.argv):
 
 
 def process_single(
-    filepaths, mosaic_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
+    filepaths, output_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
     aligner_args, mosaic_args, pyramid, quiet, plate_well=None
 ):
 
-    output_path_0 = format_cycle(mosaic_path_format, 0)
-    if pyramid:
-        if output_path_0 != mosaic_path_format:
-            raise ProcessingError(
-                "For pyramid output, please use -f to specify an output"
-                " filename without {cycle} or {channel} placeholders"
-            )
-
     mosaic_args = mosaic_args.copy()
+    writer_args = {}
     if pyramid:
-        mosaic_args['combined'] = True
-    num_channels = 0
+        writer_args["tile_size"] = mosaic_args.pop("tile_size", None)
+    mosaics = []
 
     if not quiet:
+        print("Stitching and registering input images")
         print('Cycle 0:')
         print('    reading %s' % filepaths[0])
     reader = build_reader(filepaths[0], plate_well=plate_well)
@@ -218,16 +231,11 @@ def process_single(
     edge_aligner.run()
     mshape = edge_aligner.mosaic_shape
     mosaic_args_final = mosaic_args.copy()
-    mosaic_args_final['first'] = True
     if ffp_paths:
         mosaic_args_final['ffp_path'] = ffp_paths[0]
     if dfp_paths:
         mosaic_args_final['dfp_path'] = dfp_paths[0]
-    mosaic = reg.Mosaic(
-        edge_aligner, mshape, output_path_0, **mosaic_args_final
-    )
-    mosaic.run()
-    num_channels += len(mosaic.channels)
+    mosaics.append(reg.Mosaic(edge_aligner, mshape, **mosaic_args_final))
 
     for cycle, filepath in enumerate(filepaths[1:], 1):
         if not quiet:
@@ -242,19 +250,19 @@ def process_single(
             mosaic_args_final['ffp_path'] = ffp_paths[cycle]
         if dfp_paths:
             mosaic_args_final['dfp_path'] = dfp_paths[cycle]
-        mosaic = reg.Mosaic(
-            layer_aligner, mshape, format_cycle(mosaic_path_format, cycle),
-            **mosaic_args_final
-        )
-        mosaic.run()
-        num_channels += len(mosaic.channels)
+        mosaics.append(reg.Mosaic(layer_aligner, mshape, **mosaic_args_final))
 
-    if pyramid:
-        print("Building pyramid")
-        reg.build_pyramid(
-            output_path_0, num_channels, mshape, reader.metadata.pixel_dtype,
-            reader.metadata.pixel_size, mosaic_args['tile_size'], not quiet
-        )
+    # Disable reader caching to save memory during mosaicing and writing.
+    edge_aligner.reader = edge_aligner.reader.reader
+
+    if not quiet:
+        print()
+        print(f"Merging tiles and writing to {output_path_format}")
+    writer_class = reg.PyramidWriter if pyramid else reg.TiffListWriter
+    writer = writer_class(
+        mosaics, output_path_format, verbose=not quiet, **writer_args
+    )
+    writer.run()
 
     return 0
 
@@ -290,10 +298,6 @@ def process_plates(
         print()
 
     return 0
-
-
-def format_cycle(f, cycle):
-    return f.format(cycle=cycle, channel='{channel}')
 
 
 def process_axis_flip(reader, flip_x, flip_y):
