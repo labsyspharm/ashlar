@@ -5,7 +5,7 @@ nav_order: 20
 parent: Home
 ---
 
-## This website is contains several types of documentation
+## This website contains several types of documentation
 
 1. [Overview](./overview/overview-land.html) provides relevant background information related to ASHLAR and more details about how ASHLAR works.  
 
