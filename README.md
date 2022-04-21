@@ -17,7 +17,8 @@ images.
 ## Usage
 
 ```
-ashlar [-h] [-o DIR] [-c CHANNEL] [--flip-x] [--flip-y]
+ashlar [-h] [-o PATH] [-c CHANNEL] [--flip-x] [--flip-y]
+       [--flip-mosaic-x] [--flip-mosaic-y]
        [--output-channels [CHANNEL [CHANNEL ...]]] [-m SHIFT]
        [--filter-sigma SIGMA] [-f FORMAT] [--pyramid]
        [--tile-size PIXELS] [--ffp [FILE [FILE ...]]]
@@ -31,8 +32,16 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  -o DIR, --output DIR  write output image files to DIR; default is the
-                        current directory
+  -o PATH, --output PATH
+                        write output to PATH; default is
+                        ashlar_output.ome.tif. If value ends in .ome.tif an
+                        OME-TIFF with tiled image pyramid will be written. If
+                        value ends in just .tif and includes {cycle} and
+                        {channel} placeholders a series of single-channel TIFF
+                        files will be written. Otherwise value will be
+                        interpreted as a directory and the '-f' and '--
+                        pyramid' arguments will control the file names and
+                        format.
   -c CHANNEL, --align-channel CHANNEL
                         align images using channel number CHANNEL; numbering
                         starts at 0
@@ -54,8 +63,10 @@ optional arguments:
                         use FORMAT to generate output filenames, with {cycle}
                         and {channel} as required placeholders for the cycle
                         and channel numbers; default is
-                        cycle_{cycle}_channel_{channel}.tif
-  --pyramid             write output as a single pyramidal TIFF
+                        cycle_{cycle}_channel_{channel}.tif (DEPRECATED: Use
+                        the '-o' argument to specify the output filename
+                        format.)
+  --pyramid             write output as a single pyramidal OME-TIFF
   --tile-size PIXELS    set tile width and height to PIXELS (pyramid output
                         only); default is 1024
   --ffp [FILE [FILE ...]]
