@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  # Don't trigger when only the docs are modified
+  push:
+    paths-ignore:
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build the Docker container
+        run: docker build -t ashlar:test .
+
+      # Cache test data to avoid repeated download
+      - uses: actions/cache@v2
+        with:
+          path: ~/data/
+          key: testdata-2022-04-25
+      
+      # Download exemplar-001 only if no cache is present
+      - name: Exemplar-001 download
+        run: |
+          if [ -d ~/data/ ]; then
+            echo "Using the following cache:"
+            ls -R ~/data
+          else
+            mkdir ~/data
+            cd ~/data
+            curl -f -o exemplar-001.zip https://mcmicro.s3.amazonaws.com/exemplars/exemplar-001.zip
+            unzip exemplar-001.zip
+            mv exemplar-001/raw/*.ome.tiff .
+            mv exemplar-001/illumination/*.tif .
+            rm -r exemplar-001
+            rm exemplar-001.zip
+          fi
+
+      - name: Test the container
+        run: |
+          cd ~/data/
+          rm -f exemplar-001.ome.tif
+          docker run -v "$PWD":/data ashlar:test cd /data; \
+            ashlar $imgs -m --dfp $dfp --ffp $ffp -o exemplar-001.ome.tif
+        env:
+          imgs: 'exemplar-001-cycle-06.ome.tiff exemplar-001-cycle-07.ome.tiff exemplar-001-cycle-08.ome.tiff'
+          dfp: 'exemplar-001-cycle-06-dfp.tif exemplar-001-cycle-07-dfp.tif exemplar-001-cycle-08-dfp.tif'
+          ffp: 'exemplar-001-cycle-06-ffp.tif exemplar-001-cycle-07-ffp.tif exemplar-001-cycle-08-ffp.tif'
