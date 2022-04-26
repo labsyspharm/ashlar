@@ -1204,7 +1204,7 @@ class PyramidWriter:
     def run(self):
         dtype = self.ref_mosaic.aligner.metadata.pixel_dtype
         pixel_size = self.ref_mosaic.aligner.metadata.pixel_size
-        resolution_cm = round(10000 / pixel_size)
+        resolution_cm = 10000 / pixel_size
         software = f"Ashlar v{_version}"
         metadata = {
             "Creator": software,
@@ -1255,7 +1255,7 @@ class TiffListWriter:
 
     def run(self):
         pixel_size = self.mosaics[0].aligner.metadata.pixel_size
-        resolution_cm = round(10000 / pixel_size)
+        resolution_cm = 10000 / pixel_size
         software = f"Ashlar v{_version}"
         used_paths = set()
         for mi, mosaic in enumerate(self.mosaics):
