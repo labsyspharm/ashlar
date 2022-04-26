@@ -16,33 +16,32 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Build the Docker container
         run: docker build -t ashlar:test .
 
       # Cache test data to avoid repeated download
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
+        id: cache-data
         with:
-          path: ~/data/
+          path: |
+            ~/data/
+            !~/data/exemplar-001.ome.tif
           key: testdata-2022-04-25
       
       # Download exemplar-001 only if no cache is present
       - name: Exemplar-001 download
+        if: steps.cache-data.outputs.cache-hit != 'true'
         run: |
-          if [ -d ~/data/ ]; then
-            echo "Using the following cache:"
-            ls -R ~/data
-          else
-            mkdir ~/data
-            cd ~/data
-            curl -f -o exemplar-001.zip https://mcmicro.s3.amazonaws.com/exemplars/exemplar-001.zip
-            unzip exemplar-001.zip
-            mv exemplar-001/raw/*.ome.tiff .
-            mv exemplar-001/illumination/*.tif .
-            rm -r exemplar-001
-            rm exemplar-001.zip
-          fi
+          mkdir ~/data
+          cd ~/data
+          curl -f -o exemplar-001.zip https://mcmicro.s3.amazonaws.com/exemplars/exemplar-001.zip
+          unzip exemplar-001.zip
+          mv exemplar-001/raw/*.ome.tiff .
+          mv exemplar-001/illumination/*.tif .
+          rm -r exemplar-001
+          rm exemplar-001.zip
 
       - name: Test the container
         run: |
