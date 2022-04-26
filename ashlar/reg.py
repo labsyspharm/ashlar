@@ -38,6 +38,7 @@ if not jnius_config.vm_running:
 
 import jnius
 
+JBoolean = jnius.autoclass('java.lang.Boolean')
 DebugTools = jnius.autoclass('loci.common.DebugTools')
 IFormatReader = jnius.autoclass('loci.formats.IFormatReader')
 MetadataRetrieve = jnius.autoclass('ome.xml.meta.MetadataRetrieve')
@@ -227,8 +228,8 @@ class BioformatsMetadata(PlateMetadata):
         # For multi-scene .CZI files, we need raw tiles instead of the
         # auto-stitched mosaic and we don't want labels or overview images
         options = DynamicMetadataOptions()
-        options.setBoolean('zeissczi.autostitch', False)
-        options.setBoolean('zeissczi.attachments', False)
+        options.setBoolean('zeissczi.autostitch', JBoolean(False))
+        options.setBoolean('zeissczi.attachments', JBoolean(False))
         self._reader.setMetadataOptions(options)
         self._reader.setId(self.path)
 
