@@ -1181,7 +1181,7 @@ class PyramidWriter:
         num_channels, h, w = self.level_full_shapes[level]
         tshape = self.tile_shapes[level] or (h, w)
         tiff = tifffile.TiffFile(self.path)
-        zimg = zarr.open(tiff.aszarr(series=0, level=level-1))
+        zimg = zarr.open(tiff.aszarr(series=0, level=level-1, squeeze=False))
         for c in range(num_channels):
             if self.verbose:
                 sys.stdout.write(
@@ -1192,7 +1192,7 @@ class PyramidWriter:
             tw = tshape[1] * self.scale
             for y in range(0, zimg.shape[1], th):
                 for x in range(0, zimg.shape[2], tw):
-                    a = zimg[c, y:y+th, x:x+tw]
+                    a = zimg[c, y:y+th, x:x+tw, 0]
                     a = skimage.transform.downscale_local_mean(
                         a, (self.scale, self.scale)
                     )
@@ -1204,7 +1204,7 @@ class PyramidWriter:
     def run(self):
         dtype = self.ref_mosaic.aligner.metadata.pixel_dtype
         pixel_size = self.ref_mosaic.aligner.metadata.pixel_size
-        resolution_cm = round(10000 / pixel_size)
+        resolution_cm = 10000 / pixel_size
         software = f"Ashlar v{_version}"
         metadata = {
             "Creator": software,
@@ -1255,7 +1255,7 @@ class TiffListWriter:
 
     def run(self):
         pixel_size = self.mosaics[0].aligner.metadata.pixel_size
-        resolution_cm = round(10000 / pixel_size)
+        resolution_cm = 10000 / pixel_size
         software = f"Ashlar v{_version}"
         used_paths = set()
         for mi, mosaic in enumerate(self.mosaics):
