@@ -290,10 +290,15 @@ class BioformatsMetadata(PlateMetadata):
             else:
                 value = v_units.value(UNITS.MICROMETER).doubleValue()
             values.append(value)
+        values = tuple(values)
+        if not np.isclose(values[0], values[1], rtol=1e-4, atol=0):
+            raise Exception(f"Can't handle non-square pixels {values[::-1]}")
         if values[0] != values[1]:
-            raise Exception("Can't handle non-square pixels (%f, %f)"
-                            % tuple(values))
-        return values[0]
+            warn_data(
+                f"Pixel size is slightly non-square {values[::-1]}. Using"
+                f" {values[1]} for both dimensions."
+            )
+        return values[1]
 
     @property
     def pixel_dtype(self):
