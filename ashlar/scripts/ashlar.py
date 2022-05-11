@@ -56,7 +56,7 @@ def main(argv=sys.argv):
         help=('flip output image vertically')
     )
     parser.add_argument(
-        '--output-channels', nargs='*', type=int, metavar='CHANNEL',
+        '--output-channels', nargs='+', type=int, metavar='CHANNEL',
         help=('output only channels listed in CHANNELS; numbering starts at 0')
     )
     parser.add_argument(
@@ -90,12 +90,12 @@ def main(argv=sys.argv):
               ' default is {default}'.format(default=tile_size_default))
     )
     parser.add_argument(
-        '--ffp', metavar='FILE', nargs='*',
+        '--ffp', metavar='FILE', nargs='+',
         help=('read flat field profile image from FILES; if specified must'
               ' be one common file for all cycles or one file for each cycle')
     )
     parser.add_argument(
-        '--dfp', metavar='FILE', nargs='*',
+        '--dfp', metavar='FILE', nargs='+',
         help=('read dark field profile image from FILES; if specified must'
               ' be one common file for all cycles or one file for each cycle')
     )
@@ -108,21 +108,12 @@ def main(argv=sys.argv):
         help='suppress progress display'
     )
     parser.add_argument(
-        '--version', dest='version', default=False, action='store_true',
-        help='print version'
+        '--version', action='version', version=f"ashlar {VERSION}"
     )
     args = parser.parse_args(argv[1:])
 
     configure_terminal()
     configure_warning_format()
-
-    if args.version:
-        print('ashlar {}'.format(VERSION))
-        return 0
-
-    if len(args.filepaths) == 0:
-        parser.print_usage()
-        return 1
 
     filepaths = args.filepaths
 
