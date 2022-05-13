@@ -110,7 +110,7 @@ def main(argv=sys.argv):
     filepaths = args.filepaths
 
     output_path = pathlib.Path(args.output)
-    op_tiff = bool(re.search(r"\.tiff?$", output_path.name))
+    op_tiff = bool(re.search(r"\.tiff?$", output_path.name, re.IGNORECASE))
     ff_default = args.filename_format == parser.get_default("filename_format")
     if op_tiff and ff_default:
         # Standard usage: -o includes a .tif filename, -f not included.
@@ -142,7 +142,7 @@ def main(argv=sys.argv):
                 " -f/--filename-format, but not both at the same time"
             )
             return 1
-        if not re.search(r"\.tiff?$", args.filename_format):
+        if not re.search(r"\.tiff?$", args.filename_format, re.IGNORECASE):
             print_error(
                 f"Filename format does not end in .tif: {args.filename_format}"
             )
@@ -153,7 +153,7 @@ def main(argv=sys.argv):
             f" {output_path}"
         )
         return 1
-    if re.search(r"\.ome\.tiff?$", args.filename_format):
+    if re.search(r"\.ome\.tiff?$", args.filename_format, re.IGNORECASE):
         args.pyramid = True
 
     if args.tile_size != parser.get_default("tile_size") and not args.pyramid:
