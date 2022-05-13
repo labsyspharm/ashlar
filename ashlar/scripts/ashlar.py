@@ -133,7 +133,9 @@ def main(argv=sys.argv):
                 " documentation for details.",
                 reg.Warning,
             )
-        if op_tiff:
+        if op_tiff and not output_path.is_dir():
+            # Checking is_dir() avoids erroring out in the strange but legal
+            # situation where output_path is a DIRECTORY that ends in .tif !
             print_error(
                 "Filename may be appended to the output path specified by"
                 " -o/--output, or specified separately with"
