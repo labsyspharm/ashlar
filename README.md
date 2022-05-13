@@ -98,9 +98,9 @@ or [Anaconda](https://www.anaconda.com/products/individual), download the python
 3.x version and install. Then, run the following commands from a terminal (Linux/Mac)
 or command prompt (Windows):
 
-Create a named conda environment with python 3.7:
+Create a named conda environment with python 3.10:
 ```bash
-conda create -y -n ashlar python=3.7
+conda create -y -n ashlar python=3.10
 ```
 
 Activate the conda environment:
@@ -110,7 +110,7 @@ conda activate ashlar
 
 In the activated environment, install dependencies and ashlar itself:
 ```bash
-conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.16.2 scikit-learn tifffile zarr pyjnius=1.2.1
+conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.19 scikit-learn "tifffile>=2022.4.8" zarr pyjnius blessed
 pip install ashlar
 ```
 

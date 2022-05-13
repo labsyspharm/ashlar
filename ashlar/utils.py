@@ -1,13 +1,7 @@
 import itertools
 import warnings
-import skimage.feature
-import skimage.io
-import skimage.restoration.uft
-import skimage.morphology
-import skimage.util
-import skimage.util.dtype
+import skimage
 import scipy.ndimage
-import scipy.fft
 import numpy as np
 
 
@@ -26,10 +20,8 @@ def whiten(img, sigma):
 def register(img1, img2, sigma, upsample=10):
     img1w = whiten(img1, sigma)
     img2w = whiten(img2, sigma)
-    img1_f = scipy.fft.fft2(img1w)
-    img2_f = scipy.fft.fft2(img2w)
-    shift, _error, _phasediff = skimage.feature.register_translation(
-        img1_f, img2_f, upsample, 'fourier'
+    shift = skimage.registration.phase_cross_correlation(
+        img1w, img2w, upsample_factor=upsample, return_error=False
     )
     # At this point we may have a shift in the wrong quadrant since the FFT
     # assumes the signal is periodic. We test all four possibilities and return
@@ -161,7 +153,10 @@ def paste(target, img, pos, func=None):
             return
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
-    img = skimage.util.dtype.convert(img, target.dtype)
+    # It's safe to silence this FutureWarning as we pinned the skimage version.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", r".*scikit-image 1\.0", FutureWarning)
+        img = skimage.util.dtype.convert(img, target.dtype)
     if func is None:
         target_slice[:] = img
     elif isinstance(func, np.ufunc):

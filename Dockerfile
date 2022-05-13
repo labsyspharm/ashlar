@@ -12,7 +12,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install -q -U \
-    cython \
     numpy \
     pip
 
