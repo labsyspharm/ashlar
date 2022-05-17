@@ -15,140 +15,150 @@ from ..zen import ZenReader
 def main(argv=sys.argv):
 
     parser = argparse.ArgumentParser(
-        description='Stitch and align one or more multi-series images'
+        description='Stitch and align multi-tile cyclic microscope images',
+        formatter_class=HelpFormatter,
     )
     parser.add_argument(
         'filepaths', metavar='FILE', nargs='+',
-        help='an image file to be processed (one file per cycle)'
+        help='Image file(s) to be processed, one per cycle',
     )
     parser.add_argument(
-        '-o', '--output', dest='output', default='ashlar-output.ome.tif',
+        '-o', '--output', dest='output', default='ashlar_output.ome.tif',
         metavar='PATH',
-        help="write output to PATH; default is ashlar_output.ome.tif. If value"
-        " ends in .ome.tif an OME-TIFF with tiled image pyramid will be written."
-        " If value ends in just .tif and includes {cycle} and {channel}"
-        " placeholders a series of single-channel TIFF files will be written."
-        " Otherwise value will be interpreted as a directory and the '-f' and"
-        " '--pyramid' arguments will control the file names and format."
+        help=("Output filename. If PATH ends in .ome.tif a pyramidal OME-TIFF"
+              " will be written. If PATH ends in just .tif and includes {cycle}"
+              " and {channel} placeholders, a series of single-channel plain"
+              " TIFF files will be written."),
     )
     parser.add_argument(
         '-c', '--align-channel', dest='align_channel', type=int,
         default='0', metavar='CHANNEL',
-        help=('align images using channel number CHANNEL; numbering starts'
-              ' at 0')
+        help=('Reference channel number for image alignment. Numbering starts'
+              ' at 0.'),
     )
     parser.add_argument(
         '--flip-x', default=False, action='store_true',
-        help=('flip tile positions left-to-right to account for unusual'
-              ' microscope configurations')
+        help='Flip tile positions left-to-right',
     )
     parser.add_argument(
         '--flip-y', default=False, action='store_true',
-        help=('flip tile positions top-to-bottom to account for unusual'
-              ' microscope configurations')
+        help='Flip tile positions top-to-bottom',
     )
     parser.add_argument(
         '--flip-mosaic-x', default=False, action='store_true',
-        help=('flip output image horizontally')
+        help='Flip output image left-to-right',
     )
     parser.add_argument(
         '--flip-mosaic-y', default=False, action='store_true',
-        help=('flip output image vertically')
+        help='Flip output image top-to-bottom',
     )
     parser.add_argument(
-        '--output-channels', nargs='*', type=int, metavar='CHANNEL',
-        help=('output only channels listed in CHANNELS; numbering starts at 0')
+        '--output-channels', nargs='+', type=int, metavar='CHANNEL',
+        help=('Output only specified channels for each cycle. Numbering starts'
+              ' at 0. (default: all channels)'),
     )
     parser.add_argument(
         '-m', '--maximum-shift', type=float, default=15, metavar='SHIFT',
-        help='maximum allowed per-tile corrective shift in microns'
+        help='Maximum allowed per-tile corrective shift in microns',
     )
     parser.add_argument(
-        '--filter-sigma', type=float, default=0.0, metavar='SIGMA',
-        help=('width in pixels of Gaussian filter to apply to images before'
-              ' alignment; default is 0 which disables filtering')
+        '--filter-sigma', type=float, default=0, metavar='SIGMA',
+        help=('Filter images before alignment using a Gaussian kernel with s.d.'
+              ' of SIGMA pixels (default: no filtering)'),
     )
-    arg_f_default = 'cycle_{cycle}_channel_{channel}.tif'
     parser.add_argument(
         '-f', '--filename-format', dest='filename_format',
-        default=arg_f_default, metavar='FORMAT',
-        help="use FORMAT to generate output filenames, with {cycle} and"
-        " {channel} as required placeholders for the cycle and channel"
-        f" numbers; default is {arg_f_default} (DEPRECATED: Use the '-o'"
-        " argument to specify the output filename format.)"
+        default='cycle_{cycle}_channel_{channel}.tif', help=argparse.SUPPRESS,
     )
     parser.add_argument(
-        '--pyramid', default=False, action='store_true',
-        help='write output as a single pyramidal OME-TIFF'
-    )
-    # Implement default-value logic ourselves so we can detect when the user
-    # has explicitly set a value.
-    tile_size_default = 1024
-    parser.add_argument(
-        '--tile-size', type=int, default=None, metavar='PIXELS',
-        help=('set tile width and height to PIXELS (pyramid output only);'
-              ' default is {default}'.format(default=tile_size_default))
+        '--pyramid', default=False, action='store_true', help=argparse.SUPPRESS
     )
     parser.add_argument(
-        '--ffp', metavar='FILE', nargs='*',
-        help=('read flat field profile image from FILES; if specified must'
-              ' be one common file for all cycles or one file for each cycle')
+        '--tile-size', type=int, default=1024, metavar='PIXELS',
+        help='Pyramid tile size for OME-TIFF output',
     )
     parser.add_argument(
-        '--dfp', metavar='FILE', nargs='*',
-        help=('read dark field profile image from FILES; if specified must'
-              ' be one common file for all cycles or one file for each cycle')
+        '--ffp', metavar='FILE', nargs='+',
+        help=("Perform flat field illumination correction using the given"
+              " profile image. Specify one common file for all cycles or one"
+              " file for every cycle. Channel counts must match input files."
+              " (default: no flat field correction)"),
+    )
+    parser.add_argument(
+        '--dfp', metavar='FILE', nargs='+',
+        help=("Perform dark field illumination correction using the given"
+              " profile image. Specify one common file for all cycles or one"
+              " file for every cycle. Channel counts must match input files."
+              " (default: no dark field correction)"),
     )
     parser.add_argument(
         '--plates', default=False, action='store_true',
-        help='enable plate mode for HTS data'
+        help='Enable plate mode for HTS data',
     )
     parser.add_argument(
-        '-q', '--quiet', dest='quiet', default=False, action='store_true',
-        help='suppress progress display'
+        '-q', '--quiet', dest='quiet', default=False,
+        action='store_true', help='Suppress progress display',
     )
     parser.add_argument(
-        '--version', dest='version', default=False, action='store_true',
-        help='print version'
+        '--version', action='version', version=f"ashlar {VERSION}"
     )
     args = parser.parse_args(argv[1:])
 
     configure_terminal()
     configure_warning_format()
 
-    if args.version:
-        print('ashlar {}'.format(VERSION))
-        return 0
-
-    if len(args.filepaths) == 0:
-        parser.print_usage()
-        return 1
-
     filepaths = args.filepaths
 
     output_path = pathlib.Path(args.output)
-    if re.search(r"\.tiff?$", output_path.name):
-        if args.filename_format != arg_f_default:
+    op_tiff = bool(re.search(r"\.tiff?$", output_path.name, re.IGNORECASE))
+    ff_default = args.filename_format == parser.get_default("filename_format")
+    if op_tiff and ff_default:
+        # Standard usage: -o includes a .tif filename, -f not included.
+        args.filename_format = output_path.name
+        output_path = output_path.parent
+    else:
+        # Old, deprecated usage: -o is a directory and/or -f was specified.
+        if ff_default:
+            warnings.warn(
+                "The output path must include a filename with a .tif or .tiff"
+                " suffix. Specifying only a directory path with -o/--output has"
+                " been deprecated and will be disabled in a future version. See"
+                " the -o documentation for details.",
+                reg.Warning,
+            )
+        else:
+            warnings.warn(
+                "The -f/--filename-format argument has been deprecated and its"
+                " functionality merged into the -o argument. See the -o"
+                " documentation for details.",
+                reg.Warning,
+            )
+        if op_tiff and not output_path.is_dir():
+            # Checking is_dir() avoids erroring out in the strange but legal
+            # situation where output_path is a DIRECTORY that ends in .tif !
             print_error(
                 "Filename may be appended to the output path specified by"
                 " -o/--output, or specified separately with"
                 " -f/--filename-format, but not both at the same time"
             )
             return 1
-        if re.search(r"\.ome\.tiff?$", output_path.name):
-            args.pyramid = True
-        args.filename_format = output_path.name
-        output_path = output_path.parent
-    if output_path.is_dir() and not output_path.exists():
-        print_error("Output directory '{}' does not exist".format(output_path))
+        if not re.search(r"\.tiff?$", args.filename_format, re.IGNORECASE):
+            print_error(
+                f"Filename format does not end in .tif: {args.filename_format}"
+            )
+            return 1
+    if not output_path.is_dir():
+        print_error(
+            "Output location does not exist or is not a directory:"
+            f" {output_path}"
+        )
         return 1
+    if re.search(r"\.ome\.tiff?$", args.filename_format, re.IGNORECASE):
+        args.pyramid = True
 
-    if args.tile_size and not args.pyramid:
-        print_error("--tile-size can only be used with --pyramid")
+    if args.tile_size != parser.get_default("tile_size") and not args.pyramid:
+        print_error("--tile-size can only be used with OME-TIFF output")
         return 1
-    if args.tile_size is None:
-        # Implement default value logic as mentioned in argparser setup above.
-        args.tile_size = tile_size_default
 
     ffp_paths = args.ffp
     if ffp_paths:
@@ -367,7 +377,7 @@ def print_error(message):
 
 
 def warning_formatter(message, category, filename, lineno, line=None):
-    if issubclass(category, reg.DataWarning):
+    if issubclass(category, reg.Warning):
         return terminal.bright_yellow("WARNING:") + f" {message}\n"
     else:
         return _old_formatwarning(message, category, filename, lineno, line)
@@ -377,6 +387,28 @@ def configure_warning_format():
     global _old_formatwarning
     _old_formatwarning = warnings.formatwarning
     warnings.formatwarning = warning_formatter
+
+
+class HelpFormatter(argparse.HelpFormatter):
+    """Help message formatter which adds default values to argument help.
+
+    Based on argparse.ArgumentDefaultsHelpFormatter.
+    """
+
+    def _get_help_string(self, action):
+        help = action.help
+        if isinstance(action, (argparse._HelpAction, argparse._VersionAction)):
+            help = help.capitalize()
+        elif (
+            not isinstance(action, argparse._StoreTrueAction)
+            and "%(default)" not in help
+            and "(default:" not in help
+            and action.default is not argparse.SUPPRESS
+        ):
+            defaulting_nargs = [argparse.OPTIONAL, argparse.ZERO_OR_MORE]
+            if action.option_strings or action.nargs in defaulting_nargs:
+                help += " (default: %(default)s)"
+        return help
 
 
 class ProcessingError(RuntimeError):

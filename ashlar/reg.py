@@ -1269,7 +1269,6 @@ class TiffListWriter:
             for ci, channel in enumerate(mosaic.channels):
                 if self.verbose:
                     print(f"    Channel {channel}:")
-                img = mosaic.assemble_channel(channel)
                 path = self.path_format.format(cycle=mi, channel=channel)
                 # FIXME: We would ideally report this and exit immediately
                 # rather than warn after all the alignment has been done, but
@@ -1279,9 +1278,11 @@ class TiffListWriter:
                     warn_data(
                         f"Output path collision -- overwriting {path} (please"
                         " include both {cycle} and {channel} placeholders in"
-                        " the output path)"
+                        " the output path, or use the .ome.tif extension to"
+                        " write all channels to one file)"
                     )
                 used_paths.add(path)
+                img = mosaic.assemble_channel(channel)
                 with tifffile.TiffWriter(path, bigtiff=True) as tiff:
                     tiff.write(
                         data=img,
@@ -1294,7 +1295,12 @@ class TiffListWriter:
                 img = None
 
 
-class DataWarning(UserWarning):
+class Warning(UserWarning):
+    """Warnings about ashlar operation."""
+    pass
+
+
+class DataWarning(Warning):
     """Warnings about the content of user-provided image data."""
     pass
 
