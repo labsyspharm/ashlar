@@ -3,7 +3,8 @@ import pathlib
 import numpy as np
 from . import utils
 from skimage.transform import rescale
-from skimage.feature import register_translation
+from skimage.registration import phase_cross_correlation
+import tifffile
 
 
 def make_thumbnail(reader, channel=0, scale=0.05):
@@ -20,7 +21,7 @@ def make_thumbnail(reader, channel=0, scale=0.05):
         # We don't need anti-aliasing as long as the coarse features in the
         # images are bigger than the scale factor. This speeds up the rescaling
         # dramatically.
-        img_s = rescale(img, scale, multichannel=False, anti_aliasing=False)
+        img_s = rescale(img, scale, anti_aliasing=False)
         utils.paste(mosaic, img_s, positions[i] * scale, np.maximum)
     print()
     return mosaic
@@ -29,7 +30,9 @@ def make_thumbnail(reader, channel=0, scale=0.05):
 def calculate_image_offset(img1, img2, upsample_factor=1):
     ref = utils.whiten(img1, 0)
     test = utils.whiten(img2, 0)
-    shift, error, _ = register_translation(ref, test, upsample_factor)
+    shift = phase_cross_correlation(
+        ref, test, upsample_factor=upsample_factor, return_error=False
+    )
     return shift
 
 
@@ -63,4 +66,4 @@ def _save_as_tif(img, file_path, post_fix=''):
     filename = input_path.name.replace('.', post_fix + '.', 1)
     out_path = input_path.parent / filename
     out_path = out_path.with_suffix('.tif')
-    utils.imsave(out_path, img)
+    tifffile.imwrite(out_path, img)

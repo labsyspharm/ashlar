@@ -9,16 +9,11 @@ import versioneer
 
 requires = [
     'numpy>=1.18.1',
-    'cython>=0.29.14',
     'pyjnius>=1.2.1',
     'matplotlib>=3.1.2',
     'networkx>=2.4',
     'scipy>=1.4.1',
-    # We require scikit-image's vendored old copy of tifffile -- see imsave in
-    # ashlar/utils.py for details. They are un-vendoring it soon, so we're
-    # pinning our dependency to the exact latest version.
-    # FIXME Release the pin once all the issues are resolved.
-    'scikit-image==0.16.2',
+    'scikit-image>=0.19.2,<0.20', # The v1.0 API promises breaking changes.
     'scikit-learn>=0.21.1',
     'tifffile>=2022.4.8',
     'zarr>=2.11.3',
