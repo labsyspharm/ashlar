@@ -25,10 +25,12 @@ def main(argv=sys.argv):
     parser.add_argument(
         '-o', '--output', dest='output', default='ashlar_output.ome.tif',
         metavar='PATH',
-        help=("Output filename. If PATH ends in .ome.tif a pyramidal OME-TIFF"
-              " will be written. If PATH ends in just .tif and includes {cycle}"
-              " and {channel} placeholders, a series of single-channel plain"
-              " TIFF files will be written."),
+        help=("Output file. If PATH ends in .ome.tif a pyramidal OME-TIFF will"
+              " be written. If PATH ends in just .tif and includes {cycle} and"
+              " {channel} placeholders, a series of single-channel plain TIFF"
+              " files will be written. If PATH starts with a relative or"
+              " absolute path to another directory, that directory must already"
+              " exist."),
     )
     parser.add_argument(
         '-c', '--align-channel', dest='align_channel', type=int,

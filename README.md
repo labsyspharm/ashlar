@@ -19,67 +19,58 @@ images.
 ```
 ashlar [-h] [-o PATH] [-c CHANNEL] [--flip-x] [--flip-y]
        [--flip-mosaic-x] [--flip-mosaic-y]
-       [--output-channels [CHANNEL [CHANNEL ...]]] [-m SHIFT]
-       [--filter-sigma SIGMA] [-f FORMAT] [--pyramid]
-       [--tile-size PIXELS] [--ffp [FILE [FILE ...]]]
-       [--dfp [FILE [FILE ...]]] [--plates] [-q] [--version]
+       [--output-channels CHANNEL [CHANNEL ...]] [-m SHIFT]
+       [--filter-sigma SIGMA] [--tile-size PIXELS]
+       [--ffp FILE [FILE ...]] [--dfp FILE [FILE ...]] [--plates] [-q]
+       [--version]
        FILE [FILE ...]
 
-Stitch and align one or more multi-series images
+Stitch and align multi-tile cyclic microscope images
 
 positional arguments:
-  FILE                  an image file to be processed (one file per cycle)
+  FILE                  Image file(s) to be processed, one per cycle
 
 optional arguments:
-  -h, --help            show this help message and exit
+  -h, --help            Show this help message and exit
   -o PATH, --output PATH
-                        write output to PATH; default is
-                        ashlar_output.ome.tif. If value ends in .ome.tif an
-                        OME-TIFF with tiled image pyramid will be written. If
-                        value ends in just .tif and includes {cycle} and
-                        {channel} placeholders a series of single-channel TIFF
-                        files will be written. Otherwise value will be
-                        interpreted as a directory and the '-f' and '--
-                        pyramid' arguments will control the file names and
-                        format.
+                        Output file. If PATH ends in .ome.tif a pyramidal OME-
+                        TIFF will be written. If PATH ends in just .tif and
+                        includes {cycle} and {channel} placeholders, a series
+                        of single-channel plain TIFF files will be written. If
+                        PATH starts with a relative or absolute path to
+                        another directory, that directory must already exist.
+                        (default: ashlar_output.ome.tif)
   -c CHANNEL, --align-channel CHANNEL
-                        align images using channel number CHANNEL; numbering
-                        starts at 0
-  --flip-x              flip tile positions left-to-right to account for
-                        unusual microscope configurations
-  --flip-y              flip tile positions top-to-bottom to account for
-                        unusual microscope configurations
-  --flip-mosaic-x       flip output image horizontally
-  --flip-mosaic-y       flip output image vertically
-  --output-channels [CHANNEL [CHANNEL ...]]
-                        output only channels listed in CHANNELS; numbering
-                        starts at 0
+                        Reference channel number for image alignment.
+                        Numbering starts at 0. (default: 0)
+  --flip-x              Flip tile positions left-to-right
+  --flip-y              Flip tile positions top-to-bottom
+  --flip-mosaic-x       Flip output image left-to-right
+  --flip-mosaic-y       Flip output image top-to-bottom
+  --output-channels CHANNEL [CHANNEL ...]
+                        Output only specified channels for each cycle.
+                        Numbering starts at 0. (default: all channels)
   -m SHIFT, --maximum-shift SHIFT
-                        maximum allowed per-tile corrective shift in microns
-  --filter-sigma SIGMA  width in pixels of Gaussian filter to apply to images
-                        before alignment; default is 0 which disables
-                        filtering
-  -f FORMAT, --filename-format FORMAT
-                        use FORMAT to generate output filenames, with {cycle}
-                        and {channel} as required placeholders for the cycle
-                        and channel numbers; default is
-                        cycle_{cycle}_channel_{channel}.tif (DEPRECATED: Use
-                        the '-o' argument to specify the output filename
-                        format.)
-  --pyramid             write output as a single pyramidal OME-TIFF
-  --tile-size PIXELS    set tile width and height to PIXELS (pyramid output
-                        only); default is 1024
-  --ffp [FILE [FILE ...]]
-                        read flat field profile image from FILES; if specified
-                        must be one common file for all cycles or one file for
-                        each cycle
-  --dfp [FILE [FILE ...]]
-                        read dark field profile image from FILES; if specified
-                        must be one common file for all cycles or one file for
-                        each cycle
-  --plates              enable plate mode for HTS data
-  -q, --quiet           suppress progress display
-  --version             print version
+                        Maximum allowed per-tile corrective shift in microns
+                        (default: 15)
+  --filter-sigma SIGMA  Filter images before alignment using a Gaussian kernel
+                        with s.d. of SIGMA pixels (default: no filtering)
+  --tile-size PIXELS    Pyramid tile size for OME-TIFF output (default: 1024)
+  --ffp FILE [FILE ...]
+                        Perform flat field illumination correction using the
+                        given profile image. Specify one common file for all
+                        cycles or one file for every cycle. Channel counts
+                        must match input files. (default: no flat field
+                        correction)
+  --dfp FILE [FILE ...]
+                        Perform dark field illumination correction using the
+                        given profile image. Specify one common file for all
+                        cycles or one file for every cycle. Channel counts
+                        must match input files. (default: no dark field
+                        correction)
+  --plates              Enable plate mode for HTS data
+  -q, --quiet           Suppress progress display
+  --version             Show program's version number and exit
 ```
 
 ## Installation
