@@ -1136,7 +1136,7 @@ class PyramidWriter:
     def num_levels(self):
         "Number of levels."
         factor = max(self.base_shape) / self.peak_size
-        return math.ceil(math.log(factor, self.scale)) + 1
+        return max(math.ceil(math.log(factor, self.scale)) + 1, 1)
 
     @property
     def level_shapes(self):
