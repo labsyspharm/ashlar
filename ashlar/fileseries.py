@@ -87,7 +87,7 @@ class FileSeriesMetadata(reg.PlateMetadata):
             raise Exception(f"Image must have 2 or 3 dimensions: {path}")
         # Undo skimage's "helpful" reordering of 3- and 4-channel images.
         if img.ndim == 3:
-            if img.shape[2] not in (3, 4) and img.shape[0] in (3, 4):
+            if img.shape[2] in (3, 4) and img.shape[0] not in (3, 4):
                 img = np.moveaxis(img, 2, 0)
         self._tile_size = np.array(img.shape[1:])
         self._dtype = img.dtype
@@ -187,11 +187,12 @@ class FileSeriesReader(reg.PlateReader):
         # TODO: Address tension between non-plate and plate-aware modes
         # here and in Metadata class.
         path = str(self.path / self.metadata.filename(series, c))
-        kwargs = {}
-        if self.metadata.multi_channel_tiles:
-            kwargs['key'] = c
+        channel = c if self.metadata.multi_channel_tiles else 0
+        if path.lower().endswith((".tiff", ".tif")):
+            img = skimage.io.imread(path, key=channel)
         else:
-            # In case of multi-plane images, only take the first plane. The
-            # processing code only handles 2D image arrays!
-            kwargs['key'] = 0
-        return skimage.io.imread(path, **kwargs)
+            # Assume all other image types have shape (M, N, C). Ideally we
+            # wouldn't read the whole file just to extract one channel, but
+            # these formats generally don't support that.
+            img = skimage.io.imread(path)[..., channel]
+        return img
