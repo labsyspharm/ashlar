@@ -858,7 +858,7 @@ class LayerAligner(object):
     def constrain_positions(self):
         # Discard camera background registration which will shift target
         # positions to reference aligner positions, due to strong
-        # self-correlation of the sensor dark current pattern which dominates in
+        # self-correlation of the sensor fixed-pattern noise which dominates in
         # low-signal images.
         position_diffs = np.absolute(
             self.positions - self.reference_aligner_positions
@@ -866,7 +866,15 @@ class LayerAligner(object):
         # Round the diffs to one decimal point because the subpixel shifts are
         # calculated by 10x upsampling.
         position_diffs = np.rint(position_diffs * 10) / 10
-        discard = (position_diffs == 0).all(axis=1)
+        # Identify which reference tiles are likely to be background-only by
+        # looking for nodes with degree=0 in the spanning tree.
+        ref_background = np.array([
+            self.reference_aligner.spanning_tree.degree[i] == 0
+            for i in self.reference_idx
+        ])
+        # Discard tile registrations that are due to camera fixed-pattern noise
+        # and whose reference tile is likely also background.
+        discard = (position_diffs == 0).all(axis=1) & ref_background
         # Discard any tile registration that error is infinite
         discard |= np.isinf(self.errors)
         # Take the median of registered shifts to determine the offset
