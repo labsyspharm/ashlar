@@ -1,9 +1,6 @@
 import re
 import itertools
-try:
-    import pathlib
-except ImportError:
-    import pathlib2 as pathlib
+import pathlib
 import numpy as np
 import skimage.io
 from . import reg
@@ -35,7 +32,10 @@ def f2r_repl(m):
 
 class FileSeriesMetadata(reg.PlateMetadata):
 
-    def __init__(self, path, pattern, overlap, width, height, pixel_size):
+    def __init__(
+        self, path, pattern, overlap, width, height, layout, direction,
+        pixel_size,
+    ):
         # The pattern argument uses the Python Format String syntax with
         # required "series" and optionally "channel" fields. A width
         # specification with leading zeros must be used for any fields that are
@@ -48,6 +48,8 @@ class FileSeriesMetadata(reg.PlateMetadata):
         self.overlap = overlap
         self.width = width
         self.height = height
+        self.layout = layout
+        self.direction = direction
         self._pixel_size = pixel_size
         self._enumerate_tiles()
 
@@ -81,12 +83,18 @@ class FileSeriesMetadata(reg.PlateMetadata):
         self.channel_map = dict(enumerate(sorted(channels)))
         path = self.path / self.filename(0, 0)
         img = skimage.io.imread(str(path))
-        self._tile_size = np.array(img.shape[:2])
+        if img.ndim not in (2, 3):
+            raise Exception(f"Image must have 2 or 3 dimensions: {path}")
+        # Undo skimage's "helpful" reordering of 3- and 4-channel images.
+        if img.ndim == 3:
+            if img.shape[2] not in (3, 4) and img.shape[0] in (3, 4):
+                img = np.moveaxis(img, 2, 0)
+        self._tile_size = np.array(img.shape[1:])
         self._dtype = img.dtype
         self.multi_channel_tiles = False
         # Handle multi-channel tiles (pattern must not include channel).
         if len(self.channel_map) == 1 and img.ndim == 3:
-            self.channel_map = {c: None for c in range(img.shape[2])}
+            self.channel_map = {c: None for c in range(img.shape[0])}
             self.multi_channel_tiles = True
         self._num_channels = len(self.channel_map)
 
@@ -137,8 +145,16 @@ class FileSeriesMetadata(reg.PlateMetadata):
         return self._tile_size
 
     def tile_rc(self, i):
-        row = i // self.width
-        col = i % self.width
+        if self.direction == "horizontal":
+            row = i // self.width
+            col = i % self.width
+            if self.layout == "snake" and row % 2 == 1:
+                col = self.width - 1 - col
+        else:
+            row = i % self.height
+            col = i // self.height
+            if self.layout == "snake" and col % 2 == 1:
+                row = self.height - 1 - row
         return row, col
 
     def filename(self, series, c):
@@ -151,14 +167,19 @@ class FileSeriesMetadata(reg.PlateMetadata):
 class FileSeriesReader(reg.PlateReader):
 
     def __init__(
-        self, path, pattern, overlap, width, height, pixel_size=1.0,
-        plate=None, well=None
+        self, path, pattern, overlap, width, height, layout="raster",
+        direction="horizontal", pixel_size=1.0, plate=None, well=None
     ):
         # See FileSeriesMetadata for an explanation of the pattern syntax.
+        if layout not in ("raster", "snake"):
+            raise ValueError("layout must be 'raster' or 'snake'")
+        if direction not in ("horizontal", "vertical"):
+            raise ValueError("direction must be 'horizontal' or 'vertical'")
         self.path = pathlib.Path(path)
         self.pattern = pattern
         self.metadata = FileSeriesMetadata(
-            self.path, self.pattern, overlap, width, height, pixel_size
+            self.path, self.pattern, overlap, width, height, layout, direction,
+            pixel_size
         )
         self.metadata.set_active_plate_well(plate, well)
 
@@ -169,4 +190,8 @@ class FileSeriesReader(reg.PlateReader):
         kwargs = {}
         if self.metadata.multi_channel_tiles:
             kwargs['key'] = c
+        else:
+            # In case of multi-plane images, only take the first plane. The
+            # processing code only handles 2D image arrays!
+            kwargs['key'] = 0
         return skimage.io.imread(path, **kwargs)

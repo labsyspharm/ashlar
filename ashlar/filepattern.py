@@ -1,8 +1,5 @@
 import re
-try:
-    import pathlib
-except ImportError:
-    import pathlib2 as pathlib
+import pathlib
 import numpy as np
 import skimage.io
 from . import reg
@@ -60,11 +57,17 @@ class FilePatternMetadata(reg.Metadata):
             channel=self.channel_map[0]
         )
         img = skimage.io.imread(str(path))
-        self._tile_size = np.array(img.shape[:2])
+        if img.ndim not in (2, 3):
+            raise Exception(f"Image must have 2 or 3 dimensions: {path}")
+        # Undo skimage's "helpful" reordering of 3- and 4-channel images.
+        if img.ndim == 3:
+            if img.shape[2] not in (3, 4) and img.shape[0] in (3, 4):
+                img = np.moveaxis(img, 2, 0)
+        self._tile_size = np.array(img.shape[1:])
         self.multi_channel_tiles = False
         # Handle multi-channel tiles (pattern must not include channel).
         if len(self.channel_map) == 1 and img.ndim == 3:
-            self.channel_map = {c: None for c in range(img.shape[2])}
+            self.channel_map = {c: None for c in range(img.shape[0])}
             self.multi_channel_tiles = True
         self._num_channels = len(self.channel_map)
 
@@ -113,9 +116,13 @@ class FilePatternReader(reg.Reader):
         kwargs = {}
         if self.metadata.multi_channel_tiles:
             kwargs['key'] = c
+        else:
+            # In case of multi-plane images, only take the first plane. The
+            # processing code only handles 2D image arrays!
+            kwargs['key'] = 0
         return skimage.io.imread(path, **kwargs)
 
     def filename(self, series, c):
         row, col = self.metadata.tile_rc(series)
+        c = self.metadata.channel_map[c]
         return self.pattern.format(row=row, col=col, channel=c)
-

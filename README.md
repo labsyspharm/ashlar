@@ -1,84 +1,111 @@
 # ASHLAR: Alignment by Simultaneous Harmonization of Layer/Adjacency Registration
 
+## Whole-slide microscopy image stitching and registration in Python
+
+**Ashlar** performs fast, high-quality stitching of microscopy images. It also
+co-registers multiple rounds of cyclic imaging for methods such as CyCIF and
+CODEX. Ashlar can read image data directly from BioFormats-supported microscope
+vendor file formats as well as a directory of plain TIFF files. Output is saved
+as pyramidal, tiled OME-TIFF.
+
+Note that Ashlar requires unstitched individual "tile" images as input, so it is
+not suitable for microscopes or slide scanners that only provide pre-stitched
+images.
+
+**Visit [labsyspharm.github.io/ashlar/](https://labsyspharm.github.io/ashlar/) for the most up-to-date information on ASHLAR.**
+
 ## Usage
 
 ```
-ashlar [-h] [-o DIR] [-c [CHANNEL]]
-       [--output-channels [CHANNEL [CHANNEL ...]]] [-m SHIFT]
-       [--filter-sigma SIGMA] [-f FORMAT] [--pyramid]
-       [--tile-size PIXELS] [--ffp [FILE [FILE ...]]]
-       [--dfp [FILE [FILE ...]]] [--plates] [-q] [--version]
-       [FILE [FILE ...]]
+ashlar [-h] [-o PATH] [-c CHANNEL] [--flip-x] [--flip-y]
+       [--flip-mosaic-x] [--flip-mosaic-y]
+       [--output-channels CHANNEL [CHANNEL ...]] [-m SHIFT]
+       [--filter-sigma SIGMA] [--tile-size PIXELS]
+       [--ffp FILE [FILE ...]] [--dfp FILE [FILE ...]] [--plates] [-q]
+       [--version]
+       FILE [FILE ...]
 
-Stitch and align one or more multi-series images
+Stitch and align multi-tile cyclic microscope images
 
 positional arguments:
-  FILE                  an image file to be processed (one file per cycle)
+  FILE                  Image file(s) to be processed, one per cycle
 
 optional arguments:
-  -h, --help            show this help message and exit
-  -o DIR, --output DIR  write output image files to DIR; default is the
-                        current directory
-  -c [CHANNEL], --align-channel [CHANNEL]
-                        align images using channel number CHANNEL; numbering
-                        starts at 0
-  --output-channels [CHANNEL [CHANNEL ...]]
-                        output only channels listed in CHANNELS; numbering
-                        starts at 0
+  -h, --help            Show this help message and exit
+  -o PATH, --output PATH
+                        Output file. If PATH ends in .ome.tif a pyramidal OME-
+                        TIFF will be written. If PATH ends in just .tif and
+                        includes {cycle} and {channel} placeholders, a series
+                        of single-channel plain TIFF files will be written. If
+                        PATH starts with a relative or absolute path to
+                        another directory, that directory must already exist.
+                        (default: ashlar_output.ome.tif)
+  -c CHANNEL, --align-channel CHANNEL
+                        Reference channel number for image alignment.
+                        Numbering starts at 0. (default: 0)
+  --flip-x              Flip tile positions left-to-right
+  --flip-y              Flip tile positions top-to-bottom
+  --flip-mosaic-x       Flip output image left-to-right
+  --flip-mosaic-y       Flip output image top-to-bottom
+  --output-channels CHANNEL [CHANNEL ...]
+                        Output only specified channels for each cycle.
+                        Numbering starts at 0. (default: all channels)
   -m SHIFT, --maximum-shift SHIFT
-                        maximum allowed per-tile corrective shift in microns
-  --filter-sigma SIGMA  width in pixels of Gaussian filter to apply to images
-                        before alignment; default is 0 which disables
-                        filtering
-  -f FORMAT, --filename-format FORMAT
-                        use FORMAT to generate output filenames, with {cycle}
-                        and {channel} as required placeholders for the cycle
-                        and channel numbers; default is
-                        cycle_{cycle}_channel_{channel}.tif
-  --pyramid             write output as a single pyramidal TIFF
-  --tile-size PIXELS    set tile width and height to PIXELS (pyramid output
-                        only); default is 1024
-  --ffp [FILE [FILE ...]]
-                        read flat field profile image from FILES; if specified
-                        must be one common file for all cycles or one file for
-                        each cycle
-  --dfp [FILE [FILE ...]]
-                        read dark field profile image from FILES; if specified
-                        must be one common file for all cycles or one file for
-                        each cycle
-  --plates              enable plate mode for HTS data
-  -q, --quiet           suppress progress display
-  --version             print version
+                        Maximum allowed per-tile corrective shift in microns
+                        (default: 15)
+  --filter-sigma SIGMA  Filter images before alignment using a Gaussian kernel
+                        with s.d. of SIGMA pixels (default: no filtering)
+  --tile-size PIXELS    Pyramid tile size for OME-TIFF output (default: 1024)
+  --ffp FILE [FILE ...]
+                        Perform flat field illumination correction using the
+                        given profile image. Specify one common file for all
+                        cycles or one file for every cycle. Channel counts
+                        must match input files. (default: no flat field
+                        correction)
+  --dfp FILE [FILE ...]
+                        Perform dark field illumination correction using the
+                        given profile image. Specify one common file for all
+                        cycles or one file for every cycle. Channel counts
+                        must match input files. (default: no dark field
+                        correction)
+  --plates              Enable plate mode for HTS data
+  -q, --quiet           Suppress progress display
+  --version             Show program's version number and exit
 ```
 
 ## Installation
 
-### Linux
+### Pip install
 
-On Linux, installation is fairly straightforward, but you must first install
-your distribution's development package for libfftw3 and a JDK (any one of
-versions 1.6, 1.7 or 1.8). You will also have to manually run `pip install
-numpy` before `pip install ashlar` due to a requirement of one of the required
-packages.
-
-### Using Anaconda Python for MacOS (or Linux)
-
-On MacOS, obtaining and configuring the necessary native libraries can be a bit
-challenging. For users on those platforms, or for Linux users having trouble
-with the instructions above, the Anaconda Python distribution can simplify the
-process.
-
-If you don't already have Anaconda, download it from
-https://www.anaconda.com/download/ and install. Then, run the following
-commands from a terminal:
-
-```bash
-conda install -q -y -c conda-forge pyfftw
-pip install -q -U ashlar
+Ashlar can be installed in most Python environments using `pip`:
+``` bash
+pip install ashlar
 ```
 
-### Windows
+### Using a conda environment
 
-The pyfftw dependency is not currently supported on Windows. We are currently
-investigating a workaround. There is an experimental Docker image on DockerHub
-at `sorgerlab/ashlar` which should be suitable for many use cases.
+If you don't already have [miniconda](https://docs.conda.io/en/latest/miniconda.html)
+or [Anaconda](https://www.anaconda.com/products/individual), download the python
+3.x version and install. Then, run the following commands from a terminal (Linux/Mac)
+or command prompt (Windows):
+
+Create a named conda environment with python 3.10:
+```bash
+conda create -y -n ashlar python=3.10
+```
+
+Activate the conda environment:
+```bash
+conda activate ashlar
+```
+
+In the activated environment, install dependencies and ashlar itself:
+```bash
+conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.19 scikit-learn "tifffile>=2022.4.8" zarr pyjnius blessed
+pip install ashlar
+```
+
+### Docker image
+
+The docker image of ashlar is on DockerHub at `labsyspharm/ashlar` which should be
+suitable for many use cases.

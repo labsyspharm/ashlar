@@ -1,11 +1,5 @@
-try:
-    import pathlib
-except ImportError:
-    import pathlib2 as pathlib
-try:
-    from urllib.parse import unquote as urllib_unquote
-except ImportError:
-    from urllib import unquote as urllib_unquote
+import pathlib
+from urllib.parse import unquote as urllib_unquote
 import xml.etree.ElementTree
 import numpy as np
 import skimage.io
@@ -72,7 +66,7 @@ class ZenMetadata(reg.Metadata):
 
     @property
     def pixel_dtype(self):
-        return np.uint16
+        return np.dtype(np.uint16)
 
     def tile_size(self, i):
         return self._tile_size
@@ -85,8 +79,9 @@ class ZenReader(reg.Reader):
 
     def __init__(self, path):
         self.metadata = ZenMetadata(path)
+        self.path = pathlib.Path(path)
 
     def read(self, series, c):
         path = self.metadata.image_path(series, c)
-        img = skimage.io.imread(str(path))
+        img = skimage.io.imread(str(path), key=0)
         return img

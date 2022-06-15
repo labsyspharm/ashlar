@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  # Don't trigger when only the docs are modified
+  push:
+    paths-ignore:
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build the Docker container
+        run: docker build -t ashlar:test .
+
+      # Cache test data to avoid repeated download
+      - uses: actions/cache@v3
+        id: cache-data
+        with:
+          path: |
+            ~/data/
+            !~/data/exemplar-001.ome.tif
+          key: testdata-2022-04-25
+      
+      # Download exemplar-001 only if no cache is present
+      - name: Exemplar-001 download
+        if: steps.cache-data.outputs.cache-hit != 'true'
+        run: |
+          mkdir ~/data
+          cd ~/data
+          curl -f -o exemplar-001.zip https://mcmicro.s3.amazonaws.com/exemplars/exemplar-001.zip
+          unzip exemplar-001.zip
+          mv exemplar-001/raw/*.ome.tiff .
+          mv exemplar-001/illumination/*.tif .
+          rm -r exemplar-001
+          rm exemplar-001.zip
+
+      - name: Test the container
+        run: |
+          cd ~/data/
+          rm -f exemplar-001.ome.tif
+          docker run -v "$PWD":/data ashlar:test /bin/bash -c "cd /data; \
+            ashlar $imgs -m 30 --dfp $dfp --ffp $ffp -o exemplar-001.ome.tif"
+        env:
+          imgs: 'exemplar-001-cycle-06.ome.tiff exemplar-001-cycle-07.ome.tiff exemplar-001-cycle-08.ome.tiff'
+          dfp: 'exemplar-001-cycle-06-dfp.tif exemplar-001-cycle-07-dfp.tif exemplar-001-cycle-08-dfp.tif'
+          ffp: 'exemplar-001-cycle-06-ffp.tif exemplar-001-cycle-07-ffp.tif exemplar-001-cycle-08-ffp.tif'
+
+      # If the action is successful, the output will be available as a downloadable artifact
+      - name: Upload processed result
+        uses: actions/upload-artifact@v2
+        with:
+          name: exemplar-001
+          path: |
+            ~/data/exemplar-001.ome.tif

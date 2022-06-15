@@ -1,40 +1,28 @@
-from __future__ import division, print_function
 import sys
+import math
 import warnings
-import re
-import itertools
 import xml.etree.ElementTree
-import io
-import uuid
-import struct
-try:
-    import pathlib
-except ImportError:
-    import pathlib2 as pathlib
+import pathlib
 import jnius_config
 import numpy as np
-import scipy.ndimage
+import scipy.spatial.distance
+import scipy.fft
 import skimage.util
-import skimage.feature
-import skimage.filters
-import skimage.restoration.uft
+import skimage.util.dtype
 import skimage.io
 import skimage.exposure
 import skimage.transform
 import sklearn.linear_model
-import pyfftw
 import networkx as nx
-import queue
+import tifffile
 import matplotlib.pyplot as plt
+import matplotlib.cm as mcm
 import matplotlib.patches as mpatches
-try:
-    import modest_image
-except ImportError:
-    modest_image = None
+import matplotlib.patheffects as mpatheffects
+import zarr
+from . import utils
+from . import thumbnail
 from . import __version__ as _version
-
-# Patch np.fft to use pyfftw so skimage utilities can benefit.
-np.fft = pyfftw.interfaces.numpy_fft
 
 
 if not jnius_config.vm_running:
@@ -44,20 +32,22 @@ if not jnius_config.vm_running:
         raise RuntimeError("loci_tools.jar missing from distribution"
                            " (expected it at %s)" % bf_jar_path)
     jnius_config.add_classpath(str(bf_jar_path))
+    # These settings constrain the memory used by BioFormats to near the minimum
+    # possible working set without requiring the choice of a max heap size.
+    jnius_config.add_options("-Xms10m", "-XX:+UseSerialGC")
 
 import jnius
 
-JString = jnius.autoclass('java.lang.String')
+JBoolean = jnius.autoclass('java.lang.Boolean')
 DebugTools = jnius.autoclass('loci.common.DebugTools')
 IFormatReader = jnius.autoclass('loci.formats.IFormatReader')
-MetadataStore = jnius.autoclass('loci.formats.meta.MetadataStore')
+MetadataRetrieve = jnius.autoclass('ome.xml.meta.MetadataRetrieve')
 ServiceFactory = jnius.autoclass('loci.common.services.ServiceFactory')
 OMEXMLService = jnius.autoclass('loci.formats.services.OMEXMLService')
 ChannelSeparator = jnius.autoclass('loci.formats.ChannelSeparator')
+DynamicMetadataOptions = jnius.autoclass('loci.formats.in.DynamicMetadataOptions')
 UNITS = jnius.autoclass('ome.units.UNITS')
-
-# Another workaround for pyjnius #300 (see below).
-DebugTools.enableLogging(JString("ERROR"))
+DebugTools.enableLogging("ERROR")
 
 
 # TODO:
@@ -235,14 +225,16 @@ class BioformatsMetadata(PlateMetadata):
         metadata = service.createOMEXMLMetadata()
         self._reader = ChannelSeparator()
         self._reader.setMetadataStore(metadata)
-        # FIXME Workaround for pyjnius #300 until there is a new release.
-        # Passing a python string directly here corrupts the value under Python
-        # 3, but explicitly converting it into a Java string works.
-        path_jstring = JString(self.path)
-        self._reader.setId(path_jstring)
+        # For multi-scene .CZI files, we need raw tiles instead of the
+        # auto-stitched mosaic and we don't want labels or overview images
+        options = DynamicMetadataOptions()
+        options.setBoolean('zeissczi.autostitch', JBoolean(False))
+        options.setBoolean('zeissczi.attachments', JBoolean(False))
+        self._reader.setMetadataOptions(options)
+        self._reader.setId(self.path)
 
-        xml_content = metadata.dumpXML()
-        self._metadata = metadata
+        xml_content = service.getOMEXML(metadata)
+        self._metadata = jnius.cast(MetadataRetrieve, metadata)
         self._omexml_root = xml.etree.ElementTree.fromstring(xml_content)
         self.format_name = self._reader.getFormat()
 
@@ -289,12 +281,24 @@ class BioformatsMetadata(PlateMetadata):
         values = []
         for dim in ('Y', 'X'):
             method = getattr(self._metadata, 'getPixelsPhysicalSize%s' % dim)
-            v = method(0).value(UNITS.MICROMETER).doubleValue()
-            values.append(v)
+            v_units = method(0)
+            if v_units is None:
+                warn_data(
+                    "Pixel size undefined; falling back to 1.0 \u03BCm."
+                )
+                value = 1.0
+            else:
+                value = v_units.value(UNITS.MICROMETER).doubleValue()
+            values.append(value)
+        values = tuple(values)
+        if not np.isclose(values[0], values[1], rtol=1e-4, atol=0):
+            raise Exception(f"Can't handle non-square pixels {values[::-1]}")
         if values[0] != values[1]:
-            raise Exception("Can't handle non-square pixels (%f, %f)"
-                            % tuple(values))
-        return values[0]
+            warn_data(
+                f"Pixel size is slightly non-square {values[::-1]}. Using"
+                f" {values[1]} for both dimensions."
+            )
+        return values[1]
 
     @property
     def pixel_dtype(self):
@@ -342,27 +346,40 @@ class BioformatsMetadata(PlateMetadata):
         return row_fmt + column_fmt
 
     def tile_position(self, i):
+        planeCount = self._metadata.getPlaneCount(i)
         values = []
         for dim in ('Y', 'X'):
             method = getattr(self._metadata, 'getPlanePosition%s' % dim)
             # FIXME verify all planes have the same X,Y position.
-            v_units = method(i, 0)
-            v = v_units.value(UNITS.MICROMETER)
-            if v is None:
-                # Conversion failed, which usually happens when the unit is
-                # "reference frame". Proceed as if it's actually microns but
-                # emit a warning.
-                warnings.warn(
-                    "Stage coordinates' measurement unit is undefined;"
-                    " assuming micrometers."
+            if planeCount > 0:
+                # Returns None if planePositionX/Y not defined.
+                v_units = method(i, 0)
+            else:
+                # Simple file formats don't have planes at all.
+                v_units = None
+            if v_units is None:
+                warn_data(
+                    "Stage coordinates undefined; falling back to (0, 0)."
                 )
-                v = v_units.value()
-            values.append(v.doubleValue())
+                values = [0.0, 0.0]
+                break
+            else:
+                v = v_units.value(UNITS.MICROMETER)
+                if v is None:
+                    # Conversion failed, which usually happens when the unit is
+                    # "reference frame". Proceed as if it's actually microns but
+                    # emit a warning.
+                    warn_data(
+                        "Stage coordinates' measurement unit is undefined;"
+                        " assuming \u03BCm."
+                    )
+                    v = v_units.value()
+                value = v.doubleValue()
+            values.append(value)
         position_microns = np.array(values, dtype=float)
-        if self.format_name != 'Metamorph STK':
-            # Invert Y so that stage position coordinates and image pixel
-            # coordinates are aligned.
-            position_microns *= [-1, 1]
+        # Invert Y so that stage position coordinates and image pixel
+        # coordinates are aligned (most formats seem to work this way).
+        position_microns *= [-1, 1]
         position_pixels = position_microns / self.pixel_size
         return position_pixels
 
@@ -392,6 +409,28 @@ class BioformatsReader(PlateReader):
         return img
 
 
+class CachingReader(Reader):
+    """Wraps a reader to provide tile image caching."""
+
+    def __init__(self, reader, channel):
+        self.reader = reader
+        self.channel = channel
+        self._cache = {}
+
+    @property
+    def metadata(self):
+        return self.reader.metadata
+
+    def read(self, series, c):
+        if c == self.channel and series in self._cache:
+            img = self._cache[series]
+        else:
+            img = self.reader.read(series, c)
+        if c == self.channel and series not in self._cache:
+            self._cache[series] = img
+        return img
+
+
 # TileStatistics = collections.namedtuple(
 #     'TileStatistics',
 #     'scan tile x_original y_original x y shift_x shift_y error'
@@ -415,6 +454,7 @@ def neighbors_graph(aligner):
         max_distance = aligner.metadata.size.max() + 1
         edges = zip(*np.nonzero((sp > 0) & (sp < max_distance)))
         graph = nx.from_edgelist(edges)
+        graph.add_nodes_from(range(aligner.metadata.num_images))
         aligner._neighbors_graph = graph
     return aligner._neighbors_graph
 
@@ -423,27 +463,37 @@ class EdgeAligner(object):
 
     def __init__(
         self, reader, channel=0, max_shift=15, false_positive_ratio=0.01,
-        filter_sigma=0.0, verbose=False
+        randomize=False, filter_sigma=0.0, do_make_thumbnail=True, verbose=False
     ):
-        self.reader = reader
         self.channel = channel
+        self.reader = CachingReader(reader, self.channel)
         self.verbose = verbose
         # Unit is micrometers.
         self.max_shift = max_shift
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
         self.false_positive_ratio = false_positive_ratio
+        self.randomize = randomize
         self.filter_sigma = filter_sigma
+        self.do_make_thumbnail = do_make_thumbnail
         self._cache = {}
 
     neighbors_graph = neighbors_graph
 
     def run(self):
+        self.make_thumbnail()
         self.check_overlaps()
         self.compute_threshold()
         self.register_all()
         self.build_spanning_tree()
         self.calculate_positions()
         self.fit_model()
+
+    def make_thumbnail(self):
+        if not self.do_make_thumbnail:
+            return
+        self.reader.thumbnail = thumbnail.make_thumbnail(
+            self.reader, channel=self.channel
+        )
 
     def check_overlaps(self):
         # This might be better addressed by removing the +1 from the
@@ -454,44 +504,75 @@ class EdgeAligner(object):
             self.metadata.size - abs(pos[t1] - pos[t2])
             for t1, t2 in self.neighbors_graph.edges
         ])
-        failures = np.any(overlaps < 1, axis=1)
-        if all(failures):
-            warnings.warn("No tiles overlap, attempting alignment anyway.")
+        failures = np.any(overlaps < 1, axis=1) if len(overlaps) else []
+        if len(failures) and all(failures):
+            warn_data("No tiles overlap, attempting alignment anyway.")
         elif any(failures):
-            warnings.warn("Some neighboring tiles have zero overlap.")
+            warn_data("Some neighboring tiles have zero overlap.")
 
     def compute_threshold(self):
         # Compute error threshold for rejecting aligments. We generate a
         # distribution of error scores for many known non-overlapping image
         # regions and take a certain percentile as the maximum allowable error.
         # The percentile becomes our accepted false-positive ratio.
-        edges = self.neighbors_graph.edges()
-        min_size = np.repeat(self.max_shift_pixels * 2, 2)
+        edges = self.neighbors_graph.edges
+        num_tiles = self.metadata.num_images
+        # If not enough tiles overlap to matter, skip this whole thing.
+        if len(edges) <= 1:
+            self.errors_negative_sampled = np.empty(0)
+            self.max_error = np.inf
+            return
         widths = np.array([
-            self.intersection(t1, t2, min_size).shape.min()
+            self.intersection(t1, t2).shape.min()
             for t1, t2 in edges
         ])
         w = widths.max()
         max_offset = self.metadata.size[0] - w
-        n = 1000
+        # Number of possible pairs minus number of actual neighbor pairs.
+        num_distant_pairs = num_tiles * (num_tiles - 1) // 2 - len(edges)
+        # Reduce permutation count for small datasets -- there are fewer
+        # possible truly distinct strips with fewer tiles. The calculation here
+        # is just a heuristic, not rigorously derived.
+        n = 1000 if num_distant_pairs > 8 else (num_distant_pairs + 1) * 10
         pairs = np.empty((n, 2), dtype=int)
         offsets = np.empty((n, 2), dtype=int)
-        # Generate n random image pairs and strip offsets for alignment. Even
-        # with a small number of tiles, we can easily get 1000 non-repeating
-        # strips due to also varying the offset.
-        i = 0
+        # Generate n random non-overlapping image strips. Strips are always
+        # horizontal, across the entire image width.
+        max_tries = 100
+        if self.randomize is False:
+            random_state = np.random.RandomState(0)
+        else:
+            random_state = np.random.RandomState()
         for i in range(n):
-            # Ensure pair is two different tiles and tiles are not neighbors.
-            # This is more conservative than necessary -- we could admit
-            # neighbors as long as the chosen offsets don't correspond to the
-            # actual overlap region.
-            while True:
-                t1, t2 = np.random.randint(self.metadata.num_images, size=2)
+            # Limit tries to avoid infinite loop in pathological cases.
+            for current_try in range(max_tries):
+                t1, t2 = random_state.randint(self.metadata.num_images, size=2)
+                o1, o2 = random_state.randint(max_offset, size=2)
+                # Check for non-overlapping strips and abort the retry loop.
                 if t1 != t2 and (t1, t2) not in edges:
+                    # Different, non-neighboring tiles -- always OK.
                     break
+                elif t1 == t2 and abs(o1 - o2) > w:
+                    # Same tile OK if strips don't overlap within the image.
+                    break
+                elif (t1, t2) in edges:
+                    # Neighbors OK if either strip is entirely outside the
+                    # expected overlap region (based on nominal positions).
+                    its = self.intersection(t1, t2, np.repeat(w, 2))
+                    ioff1, ioff2 = its.offsets[:, 0]
+                    if (
+                        its.shape[0] > its.shape[1]
+                        or o1 < ioff1 - w or o1 > ioff1 + w
+                        or o2 < ioff2 - w or o2 > ioff2 + w
+                    ):
+                        break
+            else:
+                # Retries exhausted. This should be very rare.
+                warn_data(
+                    "Could not find non-overlapping strips in {max_tries} tries"
+                )
             pairs[i] = t1, t2
-            offsets[i] = np.random.randint(max_offset, size=2)
-            i += 1
+            offsets[i] = o1, o2
         errors = np.empty(n)
         for i, ((t1, t2), (offset1, offset2)) in enumerate(zip(pairs, offsets)):
             if self.verbose and (i % 10 == 9 or i == n - 1):
@@ -501,7 +582,7 @@ class EdgeAligner(object):
                 sys.stdout.flush()
             img1 = self.reader.read(t1, self.channel)[offset1:offset1+w, :]
             img2 = self.reader.read(t2, self.channel)[offset2:offset2+w, :]
-            _, errors[i] = register(img1, img2, self.filter_sigma)
+            _, errors[i] = utils.register(img1, img2, self.filter_sigma, upsample=1)
         if self.verbose:
             print()
         self.errors_negative_sampled = errors
@@ -509,7 +590,7 @@ class EdgeAligner(object):
 
     def register_all(self):
         n = self.neighbors_graph.size()
-        for i, (t1, t2) in enumerate(self.neighbors_graph.edges(), 1):
+        for i, (t1, t2) in enumerate(self.neighbors_graph.edges, 1):
             if self.verbose:
                 sys.stdout.write('\r    aligning edge %d/%d' % (i, n))
                 sys.stdout.flush()
@@ -533,16 +614,18 @@ class EdgeAligner(object):
         )
         spanning_tree = nx.Graph()
         spanning_tree.add_nodes_from(g)
-        for cc in nx.connected_component_subgraphs(g):
+        for c in nx.connected_components(g):
+            cc = g.subgraph(c)
             center = nx.center(cc)[0]
             paths = nx.single_source_dijkstra_path(cc, center).values()
             for path in paths:
-                spanning_tree.add_path(path)
+                nx.add_path(spanning_tree, path)
         self.spanning_tree = spanning_tree
 
     def calculate_positions(self):
         shifts = {}
-        for cc in nx.connected_component_subgraphs(self.spanning_tree):
+        for c in nx.connected_components(self.spanning_tree):
+            cc = self.spanning_tree.subgraph(c)
             center = nx.center(cc)[0]
             shifts[center] = np.array([0, 0])
             for edge in nx.traversal.bfs_edges(cc, center):
@@ -560,13 +643,16 @@ class EdgeAligner(object):
 
     def fit_model(self):
         components = sorted(
-            nx.connected_component_subgraphs(self.spanning_tree),
+            nx.connected_components(self.spanning_tree),
             key=len, reverse=True
         )
         # Fit LR model on positions of largest connected component.
         cc0 = list(components[0])
         self.lr = sklearn.linear_model.LinearRegression()
         self.lr.fit(self.metadata.positions[cc0], self.positions[cc0])
+        # Fix up degenerate transform matrix (e.g. when we have only one tile).
+        if (self.lr.coef_ == 0).all():
+            self.lr.coef_ = np.diag(np.ones(2))
         # Adjust position of remaining components so their centroids match
         # the predictions of the model.
         for cc in components[1:]:
@@ -588,19 +674,35 @@ class EdgeAligner(object):
         try:
             shift, error = self._cache[key]
         except KeyError:
-            # Phase correlation can only report a shift of up to half of the
-            # image size in any given direction. Here we calculate the tile
-            # overlap image size that will support observing the maximum allowed
-            # shift.
-            max_its_size = np.repeat(self.max_shift_pixels * 2, 2)
-            shift, error = self._register(t1, t2, max_its_size)
+            # We test a series of increasing overlap window sizes to help avoid
+            # missing alignments when the stage position error is large relative
+            # to the tile overlap. Simply using a large overlap in all cases
+            # limits the maximum achievable correlation thus increasing the
+            # error metric, leading to worse overall results. The window size
+            # starts at the nominal size and doubles until it's at least 10% of
+            # the tile size. If the nominal overlap is already 10% or greater,
+            # we only use that one size.
+            smin = self.intersection(key[0], key[1]).shape
+            smax = np.round(self.metadata.size * 0.1)
+            sizes = [smin]
+            while any(sizes[-1] < smax):
+                sizes.append(sizes[-1] * 2)
+            results = [self._register(key[0], key[1], s) for s in sizes]
+            # Use the shift from the window size that gave the lowest error.
+            shift, _ = min(results, key=lambda r: r[1])
+            # Extract the images from the nominal overlap window but with the
+            # shift applied to the second tile's position, and compute the error
+            # metric on these images. This should be even lower than the error
+            # computed above.
+            _, o1, o2 = self.overlap(key[0], key[1], shift=shift)
+            error = utils.nccw(o1, o2, self.filter_sigma)
             self._cache[key] = (shift, error)
         if t1 > t2:
             shift = -shift
         # Return copy of shift to prevent corruption of cached values.
         return shift.copy(), error
 
-    def _register(self, t1, t2, min_size):
+    def _register(self, t1, t2, min_size=0):
         its, img1, img2 = self.overlap(t1, t2, min_size)
         # Account for padding, flipping the sign depending on the direction
         # between the tiles.
@@ -608,22 +710,23 @@ class EdgeAligner(object):
         sx = 1 if p1[1] >= p2[1] else -1
         sy = 1 if p1[0] >= p2[0] else -1
         padding = its.padding * [sy, sx]
-        shift, error = register(img1, img2, self.filter_sigma)
+        shift, error = utils.register(img1, img2, self.filter_sigma)
         shift += padding
         return shift, error
 
-
-    def intersection(self, t1, t2, min_size):
+    def intersection(self, t1, t2, min_size=0, shift=None):
         corners1 = self.metadata.positions[[t1, t2]]
+        if shift is not None:
+            corners1[1] += shift
         corners2 = corners1 + self.metadata.size
         return Intersection(corners1, corners2, min_size)
 
     def crop(self, tile, offset, shape):
         img = self.reader.read(series=tile, c=self.channel)
-        return crop(img, offset, shape)
+        return utils.crop(img, offset, shape)
 
-    def overlap(self, t1, t2, min_size):
-        its = self.intersection(t1, t2, min_size)
+    def overlap(self, t1, t2, min_size=0, shift=None):
+        its = self.intersection(t1, t2, min_size, shift)
         img1 = self.crop(t1, its.offsets[0], its.shape)
         img2 = self.crop(t2, its.offsets[1], its.shape)
         return its, img1, img2
@@ -641,16 +744,17 @@ class EdgeAligner(object):
     def mosaic_shape(self):
         upper_corners = self.positions + self.metadata.size
         max_dimensions = upper_corners.max(axis=0)
-        return np.ceil(max_dimensions).astype(int)
+        return tuple(map(int, np.ceil(max_dimensions)))
 
-    def debug(self, t1, t2, min_size=None):
+    def debug(self, t1, t2, min_size=0):
         shift, _ = self._register(t1, t2, min_size)
         its, o1, o2 = self.overlap(t1, t2, min_size)
-        w1 = whiten(o1, self.filter_sigma)
-        w2 = whiten(o2, self.filter_sigma)
-        corr = np.fft.fftshift(np.abs(np.fft.ifft2(
-            np.fft.fft2(w1) * np.fft.fft2(w2).conj()
+        w1 = utils.whiten(o1, self.filter_sigma)
+        w2 = utils.whiten(o2, self.filter_sigma)
+        corr = scipy.fft.fftshift(np.abs(scipy.fft.ifft2(
+            scipy.fft.fft2(w1) * scipy.fft.fft2(w2).conj()
         )))
+        corr /= (np.linalg.norm(w1) * np.linalg.norm(w2))
         stack = np.vstack
         rows, cols = 3, 1
         if corr.shape[0] > corr.shape[1]:
@@ -666,14 +770,20 @@ class EdgeAligner(object):
         ax = plt.subplot(rows, cols, 3)
         ax.set_xticks([])
         ax.set_yticks([])
-        plt.imshow(corr)
+        plt.imshow(corr, vmin=np.exp(-10))
+        cbar = plt.colorbar()
+        cbar.ax.yaxis.set_major_locator(
+            plt.FixedLocator(cbar.mappable.get_clim())
+        )
+        cbar.ax.yaxis.set_major_formatter(
+            plt.FuncFormatter(lambda x, pos: "{:.2f}".format(-np.log(x)))
+        )
         origin = np.array(corr.shape) // 2
         plt.plot(origin[1], origin[0], 'r+')
         # FIXME This is wrong when t1 > t2.
         shift += origin + its.padding
         plt.plot(shift[1], shift[0], 'rx')
-        plt.colorbar()
-        plt.tight_layout(0, 0, 0)
+        plt.tight_layout()
 
 
 class LayerAligner(object):
@@ -695,18 +805,31 @@ class LayerAligner(object):
         # use metadata positions to find the cycle-to-cycle tile
         # correspondences, but the corrected positions for computing our
         # corrected positions.
-        self.tile_positions = self.metadata.positions - reference_aligner.origin
-        reference_positions = reference_aligner.positions
-        dist = scipy.spatial.distance.cdist(reference_positions,
-                                            self.tile_positions)
-        self.reference_idx = np.argmin(dist, 0)
-        self.reference_positions = reference_positions[self.reference_idx]
 
     neighbors_graph = neighbors_graph
 
     def run(self):
+        self.make_thumbnail()
+        self.coarse_align()
         self.register_all()
         self.calculate_positions()
+
+    def make_thumbnail(self):
+        self.reader.thumbnail = thumbnail.make_thumbnail(
+            self.reader, channel=self.channel
+        )
+
+    def coarse_align(self):
+        self.cycle_offset = thumbnail.calculate_cycle_offset(
+            self.reference_aligner.reader, self.reader
+        )
+        self.corrected_nominal_positions = self.metadata.positions + self.cycle_offset
+        reference_positions = self.reference_aligner.metadata.positions
+        dist = scipy.spatial.distance.cdist(reference_positions,
+                                            self.corrected_nominal_positions)
+        self.reference_idx = np.argmin(dist, 0)
+        self.reference_positions = reference_positions[self.reference_idx]
+        self.reference_aligner_positions = self.reference_aligner.positions[self.reference_idx]
 
     def register_all(self):
         n = self.metadata.num_images
@@ -723,20 +846,38 @@ class LayerAligner(object):
             print()
 
     def calculate_positions(self):
-        self.positions = self.tile_positions + self.shifts
+        self.positions = (
+            self.corrected_nominal_positions
+            + self.shifts
+            + self.reference_aligner_positions
+            - self.reference_positions
+        )
         self.constrain_positions()
         self.centers = self.positions + self.metadata.size / 2
 
     def constrain_positions(self):
-        # Computed shifts of exactly 0,0 seem to result from failed
-        # registration. We need to throw those out for this purpose.
-        discard = (self.shifts == 0).all(axis=1)
+        # Discard camera background registration which will shift target
+        # positions to reference aligner positions, due to strong
+        # self-correlation of the sensor dark current pattern which dominates in
+        # low-signal images.
+        position_diffs = np.absolute(
+            self.positions - self.reference_aligner_positions
+        )
+        # Round the diffs to one decimal point because the subpixel shifts are
+        # calculated by 10x upsampling.
+        position_diffs = np.rint(position_diffs * 10) / 10
+        discard = (position_diffs == 0).all(axis=1)
+        # Discard any tile registration that error is infinite
+        discard |= np.isinf(self.errors)
         # Take the median of registered shifts to determine the offset
         # (translation) from the reference image to this one.
-        offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
+        if discard.all():
+            offset = 0
+        else:
+            offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
         # Here we assume the fitted linear model from the reference image is
         # still appropriate, apart from the extra offset we just computed.
-        predictions = self.reference_aligner.lr.predict(self.metadata.positions)
+        predictions = self.reference_aligner.lr.predict(self.corrected_nominal_positions)
         # Discard any tile registration that's too far from the linear model,
         # replacing it with the relevant model prediction.
         distance = np.linalg.norm(self.positions - predictions - offset, axis=1)
@@ -744,21 +885,27 @@ class LayerAligner(object):
         extremes = distance > max_dist
         # Recalculate the mean shift, also ignoring the extreme values.
         discard |= extremes
-        self.offset = np.nan_to_num(np.mean(self.shifts[~discard], axis=0))
+        self.discard = discard
+        if discard.all():
+            self.offset = 0
+        else:
+            self.offset = np.nan_to_num(np.mean(self.shifts[~discard], axis=0))
         # Fill in discarded shifts from the predictions.
         self.positions[discard] = predictions[discard] + self.offset
 
     def register(self, t):
         """Return relative shift between images and the alignment error."""
         its, ref_img, img = self.overlap(t)
-        shift, error = register(ref_img, img, self.filter_sigma)
+        if np.any(np.array(its.shape) == 0):
+            return (0, 0), np.inf
+        shift, error = utils.register(ref_img, img, self.filter_sigma)
         # We don't use padding and thus can skip the math to account for it.
         assert (its.padding == 0).all(), "Unexpected non-zero padding"
         return shift, error
 
     def intersection(self, t):
         corners1 = np.vstack([self.reference_positions[t],
-                              self.tile_positions[t]])
+                              self.corrected_nominal_positions[t]])
         corners2 = corners1 + self.reader.metadata.size
         its = Intersection(corners1, corners2)
         its.shape = its.shape // 32 * 32
@@ -771,8 +918,8 @@ class LayerAligner(object):
             series=ref_t, c=self.reference_aligner.channel
         )
         img2 = self.reader.read(series=t, c=self.channel)
-        ov1 = crop(img1, its.offsets[0], its.shape)
-        ov2 = crop(img2, its.offsets[1], its.shape)
+        ov1 = utils.crop(img1, its.offsets[0], its.shape)
+        ov2 = utils.crop(img2, its.offsets[1], its.shape)
         return its, ov1, ov2
 
     @property
@@ -782,10 +929,10 @@ class LayerAligner(object):
     def debug(self, t):
         shift, _ = self.register(t)
         its, o1, o2 = self.overlap(t)
-        w1 = whiten(o1, self.filter_sigma)
-        w2 = whiten(o2, self.filter_sigma)
-        corr = np.fft.fftshift(np.abs(np.fft.ifft2(
-            np.fft.fft2(w1) * np.fft.fft2(w2).conj()
+        w1 = utils.whiten(o1, self.filter_sigma)
+        w2 = utils.whiten(o2, self.filter_sigma)
+        corr = scipy.fft.fftshift(np.abs(scipy.fft.ifft2(
+            scipy.fft.fft2(w1) * scipy.fft.fft2(w2).conj()
         )))
         plt.figure()
         plt.subplot(1, 3, 1)
@@ -807,16 +954,16 @@ class LayerAligner(object):
 
 class Intersection(object):
 
-    def __init__(self, corners1, corners2, min_size=None):
-        if min_size is None:
-            min_size = np.zeros(2)
+    def __init__(self, corners1, corners2, min_size=0):
+        if np.isscalar(min_size):
+            min_size = np.repeat(min_size, 2)
         self._calculate(corners1, corners2, min_size)
 
     def _calculate(self, corners1, corners2, min_size):
         max_shape = (corners2 - corners1).max(axis=0)
         min_size = min_size.clip(1, max_shape)
         position = corners1.max(axis=0)
-        initial_shape = np.ceil(corners2.min(axis=0) - position).astype(int)
+        initial_shape = np.floor(corners2.min(axis=0) - position).astype(int)
         clipped_shape = np.maximum(initial_shape, min_size)
         self.shape = np.ceil(clipped_shape).astype(int)
         self.padding = self.shape - initial_shape
@@ -830,17 +977,14 @@ class Intersection(object):
 class Mosaic(object):
 
     def __init__(
-            self, aligner, shape, filename_format, channels=None,
-            ffp_path=None, dfp_path=None, combined=False, tile_size=None,
-            first=False, verbose=False
+        self, aligner, shape, channels=None, ffp_path=None, dfp_path=None,
+        flip_mosaic_x=False, flip_mosaic_y=False, verbose=False
     ):
         self.aligner = aligner
         self.shape = tuple(shape)
-        self.filename_format = filename_format
         self.channels = self._sanitize_channels(channels)
-        self.combined = combined
-        self.tile_size = tile_size
-        self.first = first
+        self.flip_mosaic_x = flip_mosaic_x
+        self.flip_mosaic_y = flip_mosaic_y
         self.dtype = aligner.metadata.pixel_dtype
         self._load_correction_profiles(dfp_path, ffp_path)
         self.verbose = verbose
@@ -856,7 +1000,7 @@ class Mosaic(object):
 
     def _load_single_profile(self, path, num_channels, img_size, profile_type):
         """Load, normalize, and validate illumination profile.
-        
+
         Parameters
         ----------
         path : str
@@ -866,12 +1010,12 @@ class Mosaic(object):
         img_size : tuple
             Shape of a 2D image in (row, column).
         profile_type : str
-            Type of profile, only accepts 'dark' and 'flat'. 
-    
+            Type of profile, only accepts 'dark' and 'flat'.
+
         Returns
         ----------
         ndarray
-            Image as numpy array in the (channel, row, column) arrangement. 
+            Image as numpy array in the (channel, row, column) arrangement.
             If ``path`` is ``None``, return an array in (channel, 1, 1) shape.
             The values in the array are 0 and 1 for dark- and flat-field profile, respectively.
         """
@@ -879,12 +1023,12 @@ class Mosaic(object):
         if path is None:
             profile_shape = (num_channels, 1, 1)
             return (
-                np.zeros(profile_shape) 
-                    if profile_type is 'dark' 
+                np.zeros(profile_shape)
+                    if profile_type == 'dark'
                     else np.ones(profile_shape)
             )
 
-        expected_ndim = 2 if num_channels is 1 else 3
+        expected_ndim = 2 if num_channels == 1 else 3
         profile = skimage.io.imread(path)
         if profile.ndim != expected_ndim:
             raise ValueError(
@@ -894,8 +1038,8 @@ class Mosaic(object):
             )
 
         profile = np.atleast_3d(profile)
-        # skimage.io.imread convert images with 3 and 4 channels into (Y, X, C) shape, 
-        # but as (C, Y, X) for images with other channel numbers. We normalize 
+        # skimage.io.imread convert images with 3 and 4 channels into (Y, X, C) shape,
+        # but as (C, Y, X) for images with other channel numbers. We normalize
         # image-shape to (C, Y, X) regardless of the number of channels in the image.
         if num_channels in (1, 3, 4):
             profile = np.moveaxis(profile, 2, 0)
@@ -905,7 +1049,7 @@ class Mosaic(object):
                     profile_type.capitalize(), profile.shape, img_size
                 )
             )
-            
+
         return profile
 
     def _load_correction_profiles(self, dfp_path, ffp_path):
@@ -916,416 +1060,261 @@ class Mosaic(object):
             img_size = tuple(self.aligner.metadata.size)
             self.dfp = self._load_single_profile(dfp_path, num_channels, img_size, 'dark')
             self.ffp = self._load_single_profile(ffp_path, num_channels, img_size, 'flat')
-            
+
             # FIXME This assumes integer dtypes. Do we need to support floats?
             self.dfp /= np.iinfo(self.dtype).max
             self.do_correction = True
 
-    def run(self, mode='write', debug=False):
-        if mode not in ('write', 'return'):
-            raise ValueError('Invalid mode')
+    def assemble_channel(self, channel, out=None):
         num_tiles = len(self.aligner.positions)
-        all_images = []
-        if debug:
-            node_colors = nx.greedy_color(self.aligner.neighbors_graph)
-            num_colors = max(node_colors.values()) + 1
-            if num_colors > 3:
-                raise ValueError("neighbor graph requires more than 3 colors")
-        for ci, channel in enumerate(self.channels):
+        if out is None:
+            out = np.zeros(self.shape, self.dtype)
+        else:
+            if out.shape != self.shape:
+                raise ValueError(
+                    f"out array shape {out.shape} does not match Mosaic"
+                    f" shape {self.shape}"
+                )
+        for si, position in enumerate(self.aligner.positions):
             if self.verbose:
-                print('    Channel %d:' % channel)
-            if not debug:
-                mosaic_image = np.zeros(self.shape, self.dtype)
-            else:
-                mosaic_image = np.zeros(self.shape + (3,), np.float32)
-            for tile, position in enumerate(self.aligner.positions):
-                if self.verbose:
-                    sys.stdout.write('\r        merging tile %d/%d'
-                                     % (tile + 1, num_tiles))
-                    sys.stdout.flush()
-                tile_image = self.aligner.reader.read(c=channel, series=tile)
-                tile_image = self.correct_illumination(tile_image, channel)
-                if debug:
-                    color_channel = node_colors[tile]
-                    rgb_image = np.zeros(tile_image.shape + (3,),
-                                         tile_image.dtype)
-                    rgb_image[:,:,color_channel] = tile_image
-                    tile_image = rgb_image
-                func = pastefunc_blend if not debug else np.add
-                paste(mosaic_image, tile_image, position, func=func)
-            if debug:
-                np.clip(mosaic_image, 0, 1, out=mosaic_image)
-                w = int(1e6)
-                mi_flat = mosaic_image.reshape(-1, 3)
-                for p in np.arange(0, mi_flat.shape[0], w, dtype=int):
-                    mi_flat[p:p+w] = skimage.exposure.adjust_gamma(
-                        mi_flat[p:p+w], 1/2.2
-                    )
-            if self.verbose:
-                print()
-            if mode == 'write':
-                filename = self.filename_format.format(channel=channel)
-                kwargs = {}
-                if self.combined:
-                    kwargs['bigtiff'] = True
-                    # FIXME Propagate this from input files (esp. RGB).
-                    kwargs['photometric'] = 'minisblack'
-                    resolution = np.round(10000 / self.aligner.reader.metadata.pixel_size)
-                    kwargs['resolution'] = (resolution, resolution, 'cm')
-                    kwargs['metadata'] = None
-                    if self.first and ci == 0:
-                        # Set description to a short placeholder that will fit
-                        # within the IFD. We'll check for this string later.
-                        kwargs['description'] = '!!xml!!'
-                        kwargs['software'] = (
-                            'Ashlar v{} (Glencoe/Faas pyramid output)'
-                            .format(_version)
-                        )
-                    else:
-                        # Overwite if first channel of first cycle.
-                        kwargs['append'] = True
-                if self.tile_size:
-                    kwargs['tile'] = (self.tile_size, self.tile_size)
-                if self.verbose:
-                    print("        writing to %s" % filename)
-                imsave(filename, mosaic_image, **kwargs)
-            elif mode == 'return':
-                all_images.append(mosaic_image)
-        if mode == 'return':
-            return all_images
+                sys.stdout.write(f"\r        merging tile {si + 1}/{num_tiles}")
+                sys.stdout.flush()
+            img = self.aligner.reader.read(c=channel, series=si)
+            img = self.correct_illumination(img, channel)
+            utils.paste(out, img, position, func=utils.pastefunc_blend)
+        # Memory-conserving axis flips.
+        if self.flip_mosaic_x:
+            for i in range(len(out)):
+                out[i] = out[i, ::-1]
+        if self.flip_mosaic_y:
+            for i in range(len(out) // 2):
+                out[[i, -i-1]] = out[[-i-1, i]]
+        if self.verbose:
+            print()
+        return out
 
     def correct_illumination(self, img, channel):
         if self.do_correction:
-            img = skimage.img_as_float(img, force_copy=True)
+            img = skimage.util.img_as_float(img, force_copy=True)
             img -= self.dfp[channel, ...]
             img /= self.ffp[channel, ...]
             img.clip(0, 1, out=img)
         return img
 
 
-def build_pyramid(
-        path, num_channels, shape, dtype, pixel_size, tile_size, verbose=False
-):
-    max_level = 0
-    shapes = [shape]
-    while any(s > tile_size for s in shape):
-        prev_level = max_level
-        max_level += 1
-        if verbose:
-            print("    Level %d:" % max_level)
-        for i in range(num_channels):
-            if verbose:
-                sys.stdout.write('\r        processing channel %d/%d'
-                                 % (i + 1, num_channels))
+class PyramidWriter:
+
+    def __init__(
+        self, mosaics, path, scale=2, tile_size=1024, peak_size=1024, verbose=False
+    ):
+        if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
+            raise ValueError("mosaics must all have the same shape")
+        if tile_size % 16 != 0:
+            raise ValueError("tile_size must be a multiple of 16")
+        self.mosaics = mosaics
+        self.path = path
+        self.scale = scale
+        self.tile_size = tile_size
+        self.peak_size = peak_size
+        self.verbose = verbose
+
+    @property
+    def ref_mosaic(self):
+        "The reference mosaic."
+        return self.mosaics[0]
+
+    @property
+    def base_shape(self):
+        "Shape of the base level."
+        return self.ref_mosaic.shape
+
+    @property
+    def num_channels(self):
+        return sum(len(m.channels) for m in self.mosaics)
+
+    @property
+    def num_levels(self):
+        "Number of levels."
+        factor = max(self.base_shape) / self.peak_size
+        return max(math.ceil(math.log(factor, self.scale)) + 1, 1)
+
+    @property
+    def level_shapes(self):
+        "Shape of all levels."
+        factors = self.scale ** np.arange(self.num_levels)
+        shapes = np.ceil(np.array(self.base_shape) / factors[:, None])
+        return [tuple(map(int, s)) for s in shapes]
+
+    @property
+    def level_full_shapes(self):
+        "Shape of all levels, including channel dimension."
+        return [(self.num_channels, *shape) for shape in self.level_shapes]
+
+    @property
+    def tile_shapes(self):
+        "Tile shape of all levels."
+        level_shapes = np.array(self.level_shapes)
+        # The last level where we want to use the standard square tile size.
+        tip_level = np.argmax(np.all(level_shapes < self.tile_size, axis=1))
+        tile_shapes = [
+            (self.tile_size, self.tile_size) if i <= tip_level else None
+            for i in range(len(level_shapes))
+        ]
+        return tile_shapes
+
+    def base_tiles(self):
+        h, w = self.base_shape
+        th, tw = self.tile_shapes[0]
+        for mi, mosaic in enumerate(self.mosaics):
+            if self.verbose:
+                print(f"Cycle {mi}:")
+            for ci, channel in enumerate(mosaic.channels):
+                if self.verbose:
+                    print(f"    Channel {channel}:")
+                img = mosaic.assemble_channel(channel)
+                for y in range(0, h, th):
+                    for x in range(0, w, tw):
+                        # Returning a copy makes the array contiguous, avoiding
+                        # a severely unoptimized code path in ndarray.tofile.
+                        yield img[y:y+th, x:x+tw].copy()
+                # Allow img to be freed immediately to avoid keeping it in
+                # memory while the next loop iteration calls assemble_channel.
+                img = None
+
+    def subres_tiles(self, level):
+        assert level >= 1
+        num_channels, h, w = self.level_full_shapes[level]
+        tshape = self.tile_shapes[level] or (h, w)
+        tiff = tifffile.TiffFile(self.path)
+        zimg = zarr.open(tiff.aszarr(series=0, level=level-1, squeeze=False))
+        for c in range(num_channels):
+            if self.verbose:
+                sys.stdout.write(
+                    f"\r        processing channel {c + 1}/{num_channels}"
+                )
                 sys.stdout.flush()
-            img = skimage.io.imread(path, series=prev_level, key=i)
-            img = skimage.transform.pyramid_reduce(img, multichannel=False)
-            img = convert(img, dtype)
-            imsave(
-                path, img, bigtiff=True, metadata=None, append=True,
-                tile=(tile_size, tile_size), photometric='minisblack'
+            th = tshape[0] * self.scale
+            tw = tshape[1] * self.scale
+            for y in range(0, zimg.shape[1], th):
+                for x in range(0, zimg.shape[2], tw):
+                    a = zimg[c, y:y+th, x:x+tw, 0]
+                    a = skimage.transform.downscale_local_mean(
+                        a, (self.scale, self.scale)
+                    )
+                    if np.issubdtype(zimg.dtype, np.integer):
+                        a = np.around(a)
+                    a = a.astype(zimg.dtype)
+                    yield a
+
+    def run(self):
+        dtype = self.ref_mosaic.aligner.metadata.pixel_dtype
+        pixel_size = self.ref_mosaic.aligner.metadata.pixel_size
+        resolution_cm = 10000 / pixel_size
+        software = f"Ashlar v{_version}"
+        metadata = {
+            "Creator": software,
+            "Pixels": {
+                "PhysicalSizeX": pixel_size, "PhysicalSizeXUnit": "\u00b5m",
+                "PhysicalSizeY": pixel_size, "PhysicalSizeYUnit": "\u00b5m"
+            },
+        }
+        with tifffile.TiffWriter(self.path, ome=True, bigtiff=True) as tiff:
+            tiff.write(
+                data=self.base_tiles(),
+                metadata=metadata,
+                software=software.encode("utf-8"),
+                shape=self.level_full_shapes[0],
+                subifds=int(self.num_levels - 1),
+                dtype=dtype,
+                tile=self.tile_shapes[0],
+                resolution=(resolution_cm, resolution_cm, "centimeter"),
+                # FIXME Propagate this from input files (especially RGB).
+                photometric="minisblack",
             )
-        shapes.append(img.shape)
-        if verbose:
-            print()
-        shape = img.shape
-    # Now that we have the number and dimensions of all levels, we can generate
-    # the corresponding OME-XML and patch it into the Image Description tag of
-    # the first IFD.
-    filename = pathlib.Path(path).name
-    img_uuid = uuid.uuid4().urn
-    ome_dtype = BioformatsMetadata._ome_dtypes[dtype]
-    ifd = 0
-    xml = io.StringIO()
-    xml.write(u'<?xml version="1.0" encoding="UTF-8"?>')
-    xml.write(
-        (u'<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"'
-         ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
-         ' UUID="{uuid}"'
-         ' xsi:schemaLocation="http://www.openmicroscopy.org/Schemas/OME/2016-06'
-         ' http://www.openmicroscopy.org/Schemas/OME/2016-06/ome.xsd">')
-        .format(uuid=img_uuid)
-    )
-    for level in range(max_level + 1):
-        shape = shapes[level]
-        if level == 0:
-            psize_xml = (
-                u'PhysicalSizeX="{0}" PhysicalSizeXUnit="\u00b5m"'
-                u' PhysicalSizeY="{0}" PhysicalSizeYUnit="\u00b5m"'
-                .format(pixel_size)
-            )
-        else:
-            psize_xml = u''
-        xml.write(u'<Image ID="Image:{}">'.format(level))
-        xml.write(
-            (u'<Pixels BigEndian="false" DimensionOrder="XYZCT"'
-             ' ID="Pixels:{level}" {psize_xml} SizeC="{num_channels}" SizeT="1"'
-             ' SizeX="{sizex}" SizeY="{sizey}" SizeZ="1" Type="{ome_dtype}">')
-            .format(
-                level=level, psize_xml=psize_xml, num_channels=num_channels,
-                sizex=shape[1], sizey=shape[0], ome_dtype=ome_dtype
-            )
-        )
-        for channel in range(num_channels):
-            xml.write(
-                (u'<Channel ID="Channel:{level}:{channel}"'
-                 + (u' Name="Channel {channel}"' if level == 0 else u'')
-                 + u' SamplesPerPixel="1"><LightPath/></Channel>')
-                .format(level=level, channel=channel)
-            )
-        for channel in range(num_channels):
-            xml.write(
-                (u'<TiffData FirstC="{channel}" FirstT="0" FirstZ="0"'
-                 ' IFD="{ifd}" PlaneCount="1">'
-                 '<UUID FileName="{filename}">{uuid}</UUID>'
-                 '</TiffData>')
-                .format(
-                    channel=channel, ifd=ifd, filename=filename, uuid=img_uuid
+            if self.verbose:
+                print("Generating pyramid")
+            for level, (shape, tile_shape) in enumerate(
+                zip(self.level_full_shapes[1:], self.tile_shapes[1:]), 1
+            ):
+                if self.verbose:
+                    print(f"    Level {level} ({shape[2]} x {shape[1]})")
+                tiff.write(
+                    data=self.subres_tiles(level),
+                    shape=shape,
+                    subfiletype=1,
+                    dtype=dtype,
+                    tile=tile_shape,
                 )
-            )
-            ifd += 1
-        if level == 0:
-            for channel in range(num_channels):
-                xml.write(
-                    u'<Plane TheC="{channel}" TheT="0" TheZ="0"/>'
-                    .format(channel=channel)
-                )
-        xml.write(u'</Pixels>')
-        xml.write(u'</Image>')
-    xml.write(u'</OME>')
-    xml_bytes = xml.getvalue().encode('utf-8') + b'\x00'
-    # Append the XML and patch up the Image Description tag in the first IFD.
-    with open(path, 'rb+') as f:
-        f.seek(0, io.SEEK_END)
-        xml_offset = f.tell()
-        f.write(xml_bytes)
-        f.seek(0)
-        ifd_block = f.read(500)
-        match = re.search(b'!!xml!!\x00', ifd_block)
-        if match is None:
-            raise RuntimeError("Did not find placeholder string in IFD")
-        f.seek(match.start() - 8)
-        f.write(struct.pack('<Q', len(xml_bytes)))
-        f.write(struct.pack('<Q', xml_offset))
+                if self.verbose:
+                    print()
 
 
-def fft2(img):
-    return pyfftw.builders.fft2(img, planner_effort='FFTW_ESTIMATE',
-                                avoid_copy=True, auto_align_input=True,
-                                auto_contiguous=True)()
+class TiffListWriter:
+
+    def __init__(self, mosaics, path_format, verbose=False):
+        if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
+            raise ValueError("mosaics must all have the same shape")
+        self.mosaics = mosaics
+        self.path_format = path_format
+        self.verbose = verbose
+
+    def run(self):
+        pixel_size = self.mosaics[0].aligner.metadata.pixel_size
+        resolution_cm = 10000 / pixel_size
+        software = f"Ashlar v{_version}"
+        used_paths = set()
+        for mi, mosaic in enumerate(self.mosaics):
+            if self.verbose:
+                print(f"Cycle {mi}:")
+            for ci, channel in enumerate(mosaic.channels):
+                if self.verbose:
+                    print(f"    Channel {channel}:")
+                path = self.path_format.format(cycle=mi, channel=channel)
+                # FIXME: We would ideally report this and exit immediately
+                # rather than warn after all the alignment has been done, but
+                # that will require some refactoring to open each input file
+                # right away to discover channel counts.
+                if path in used_paths:
+                    warn_data(
+                        f"Output path collision -- overwriting {path} (please"
+                        " include both {cycle} and {channel} placeholders in"
+                        " the output path, or use the .ome.tif extension to"
+                        " write all channels to one file)"
+                    )
+                used_paths.add(path)
+                img = mosaic.assemble_channel(channel)
+                with tifffile.TiffWriter(path, bigtiff=True) as tiff:
+                    tiff.write(
+                        data=img,
+                        software=software.encode("utf-8"),
+                        resolution=(resolution_cm, resolution_cm, "centimeter"),
+                        # FIXME Propagate this from input files (especially RGB).
+                        photometric="minisblack",
+                    )
+                # Allow img to be freed.
+                img = None
 
 
-# Pre-calculate the Laplacian operator kernel. We'll always be using 2D images.
-_laplace_kernel = skimage.restoration.uft.laplacian(2, (3, 3))[1]
-
-def whiten(img, sigma):
-    # Copied from skimage.filters.edges, with explicit aligned output from
-    # convolve. Also the mask option was dropped.
-    img = skimage.img_as_float(img)
-    output = pyfftw.empty_aligned(img.shape, 'complex64')
-    output.imag[:] = 0
-    if sigma == 0:
-        scipy.ndimage.convolve(img, _laplace_kernel, output.real)
-    else:
-        scipy.ndimage.gaussian_laplace(img, sigma, output=output.real)
-    return output
-
-    # Other possible whitening functions:
-    #img = skimage.filters.roberts(img)
-    #img = skimage.filters.scharr(img)
-    #img = skimage.filters.sobel(img)
-    #img = np.log(img)
-    #img = img - scipy.ndimage.filters.gaussian_filter(img, 2) + 0.5
+class Warning(UserWarning):
+    """Warnings about ashlar operation."""
+    pass
 
 
-def register(img1, img2, sigma):
-    img1w = whiten(img1, sigma)
-    img2w = whiten(img2, sigma)
-    img1_f = fft2(img1w)
-    img2_f = fft2(img2w)
-    img1w = img1w.real
-    img2w = img2w.real
-    shift, _, _ = skimage.feature.register_translation(
-        img1_f, img2_f, 10, 'fourier'
-    )
-    # At this point we may have a shift in the wrong quadrant since the FFT
-    # assumes the signal is periodic. We test all four possibilities and return
-    # the shift that gives the highest direct correlation (sum of products).
-    shape = np.array(img1.shape)
-    shift_pos = (shift + shape) % shape
-    shift_neg = shift_pos - shape
-    shifts = list(itertools.product(*zip(shift_pos, shift_neg)))
-    correlations = [
-        np.sum(img1w * scipy.ndimage.shift(img2w, s))
-        for s in shifts
-    ]
-    idx = np.argmax(correlations)
-    shift = shifts[idx]
-    correlation = correlations[idx]
-    total_amplitude = np.linalg.norm(img1w) * np.linalg.norm(img2w)
-    if correlation > 0 and total_amplitude > 0:
-        error = -np.log(correlation / total_amplitude)
-    else:
-        error = np.inf
-    return shift, error
+class DataWarning(Warning):
+    """Warnings about the content of user-provided image data."""
+    pass
 
 
-def crop(img, offset, shape):
-    # Note that this only crops to the nearest whole-pixel offset.
-    start = offset.astype(int)
-    end = start + shape
-    img = img[start[0]:end[0], start[1]:end[1]]
-    return img
+def warn_data(message):
+    warnings.warn(message, DataWarning)
 
 
-# TODO:
-# - Deal with ringing from high-frequency elements. The wrapped edges of the
-#   image are especially bad, where the wrapping introduces sharp
-#   discontinuities. The edge artifacts could be dealt with in several ways
-#   (extend the trailing image edge via mirroring, throw away some of the
-#   trailing edge of the shifted result) but edges in the "true" image content
-#   would require proper pre-filtering. What filter to use, and how to apply it
-#   quickly?
-# - Can we use real FFT for a ~50% overall speedup? Fourier-space matrices will
-#   all be half-size in the last dimension, so FFT is around 50% faster and our
-#   fshift calculations will be too.
-# - Trailing edge pixels should be zeroed to match the behavior of
-#   scipy.ndimage.shift, which we rely on in our maximum-intensity projection.
-def fourier_shift(img, shift):
-    # Ensure properly aligned complex64 data (fft requires complex to avoid
-    # reallocation and copying).
-    img = convert(img, np.float32)
-    img = pyfftw.byte_align(img, dtype=np.complex64)
-    # Compute per-axis frequency values according to the Fourier shift theorem.
-    # (Read "w" here as "omega".) We pre-multiply as many scalar values as
-    # possible on these vectors to avoid operations on the full w matrix below.
-    v = np.fft.fftfreq(img.shape[0])
-    wy = (2 * np.pi * v * shift[0]).astype(np.float32).reshape(-1, 1)
-    u = np.fft.fftfreq(img.shape[1])
-    wx = (2 * np.pi * u * shift[1]).astype(np.float32)
-    # Add column and row vector to get full expanded matrix of frequencies.
-    w = wy + wx
-    # We perform an explicit application of Euler's formula with careful
-    # management of output arrays to avoid extra memory allocations and copies,
-    # squeezing out some speed over the obvious np.exp(-1j*w).
-    fshift = np.empty_like(img, dtype=np.complex64)
-    np.cos(w, out=fshift.real)
-    np.sin(w, out=fshift.imag)
-    np.negative(fshift.imag, out=fshift.imag)
-    # Perform the FFT, multiply in-place by the shift matrix, then IFFT.
-    freq = pyfftw.builders.fft2(img, planner_effort='FFTW_ESTIMATE',
-                                avoid_copy=True, auto_align_input=True,
-                                auto_contiguous=True)()
-    freq *= fshift
-    img_s = pyfftw.builders.ifft2(freq, planner_effort='FFTW_ESTIMATE',
-                                  avoid_copy=True, auto_align_input=True,
-                                  auto_contiguous=True)()
-    # Any non-zero imaginary component of the resulting array is due to
-    # numerical error, so we can just return the real part.
-    # FIXME need to zero out row(s) and column(s) we shifted away from,
-    # since at this point we have a cyclic rotation rather than a shift.
-    return img_s.real
-
-
-def paste(target, img, pos, func=None):
-    """Composite img into target."""
-    pos = np.array(pos)
-    # Bail out if destination region is out of bounds.
-    if np.any(pos >= target.shape) or np.any(pos + img.shape < 0):
-        return
-    pos_f, pos_i = np.modf(pos)
-    yi, xi = pos_i.astype('i8')
-    # Clip img to the edges of the mosaic.
-    if yi < 0:
-        img = img[-yi:]
-        yi = 0
-    if xi < 0:
-        img = img[:, -xi:]
-        xi = 0
-    target_slice = target[yi:yi+img.shape[0], xi:xi+img.shape[1]]
-    img = crop_like(img, target_slice)
-    if img.ndim == 2:
-        img = scipy.ndimage.shift(img, pos_f)
-    else:
-        for c in range(img.shape[2]):
-            img[...,c] = scipy.ndimage.shift(img[...,c], pos_f)
-    # For any axis where there is a non-zero subpixel shift, crop out the last
-    # row or column of pixels on the "losing" side. These pixels will be darker
-    # than normal and will introduce artifacts in most blending modes.
-    y1 = None if pos_f[0] <= 0 else 1
-    y2 = None if pos_f[0] >= 0 else -1
-    x1 = None if pos_f[1] <= 0 else 1
-    x2 = None if pos_f[1] >= 0 else -1
-    img = img[y1:y2, x1:x2]
-    target_slice = target_slice[y1:y2, x1:x2]
-    if np.issubdtype(img.dtype, np.floating):
-        np.clip(img, 0, 1, img)
-    img = convert(img, target.dtype)
-    if func is None:
-        target_slice[:] = img
-    elif isinstance(func, np.ufunc):
-        func(target_slice, img, out=target_slice)
-    else:
-        target_slice[:] = func(target_slice, img)
-
-
-def pastefunc_blend(target, img):
-    # Linear blend based on distance to unfilled space in target.
-    dist = scipy.ndimage.distance_transform_cdt(target)
-    dmax = dist.max()
-    if dmax == 0:
-        alpha = 0
-    else:
-        alpha = dist / dist.max()
-    return target * alpha + img * (1 - alpha)
-
-
-def crop_like(img, target):
-    if (img.shape[0] > target.shape[0]):
-        img = img[:target.shape[0], :]
-    if (img.shape[1] > target.shape[1]):
-        img = img[:, :target.shape[1]]
-    return img
-
-
-def convert(image, dtype, **kwargs):
-    """
-    Convert an image to the requested data-type.
-
-    This is just a wrapper around skimage's convert function to suppress the
-    precision loss warning.
-
-    """
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            'ignore', 'Possible precision loss', UserWarning,
-            '^skimage\.util\.dtype'
-        )
-        return skimage.util.dtype.convert(image, dtype, **kwargs)
-
-
-def imsave(fname, arr, **kwargs):
-    """Save an image to file.
-
-    This is a wrapper around skimage.io.imsave to handle the lack of the
-    check_contrast argument on v0.14, which is the last version to support
-    Python 2.7.
-
-    """
-    if skimage.__version__.startswith('0.14.'):
-        warnings.warn(
-            "Please upgrade to Python 3 and scikit-image v0.15+ to make image"
-            " saving much less resource-intensive."
-        )
-    else:
-        kwargs['check_contrast'] = False
-    return skimage.io.imsave(fname, arr, **kwargs)
-
-
-def plot_edge_shifts(aligner, img=None, bounds=True):
+def plot_edge_shifts(aligner, img=None, bounds=True, im_kwargs=None):
+    if im_kwargs is None:
+        im_kwargs = {}
     fig = plt.figure()
     ax = plt.gca()
-    draw_mosaic_image(ax, aligner, img)
+    draw_mosaic_image(ax, aligner, img, **im_kwargs)
     h, w = aligner.reader.metadata.size
     if bounds:
         # Bounding boxes denoting new tile positions.
@@ -1334,7 +1323,7 @@ def plot_edge_shifts(aligner, img=None, bounds=True):
                                       lw=0.5)
             ax.add_patch(rect)
     # Compute per-edge relative shifts from tile positions.
-    edges = np.array(aligner.spanning_tree.edges())
+    edges = np.array(list(aligner.spanning_tree.edges))
     dist = aligner.metadata.positions - aligner.positions
     shifts = dist[edges[:, 0]] - dist[edges[:, 1]]
     shift_distances = np.linalg.norm(shifts, axis=1)
@@ -1349,8 +1338,7 @@ def plot_edge_shifts(aligner, img=None, bounds=True):
 
 
 def plot_edge_quality(
-    aligner, img=None, show_tree=True, pos='metadata', use_mi=True,
-    nx_kwargs=None
+    aligner, img=None, show_tree=True, pos='metadata', im_kwargs=None, nx_kwargs=None
 ):
     if pos == 'metadata':
         centers = aligner.metadata.centers - aligner.metadata.origin
@@ -1358,31 +1346,40 @@ def plot_edge_quality(
         centers = aligner.centers
     else:
         raise ValueError("pos must be either 'metadata' or 'aligner'")
+    if im_kwargs is None:
+        im_kwargs = {}
     if nx_kwargs is None:
         nx_kwargs = {}
     final_nx_kwargs = dict(width=2, node_size=100, font_size=6)
     final_nx_kwargs.update(nx_kwargs)
     if show_tree:
         nrows, ncols = 1, 2
-        if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] > 4 / 3:
+        if aligner.mosaic_shape[1] * 2 / aligner.mosaic_shape[0] > 2 * 4 / 3:
             nrows, ncols = ncols, nrows
     else:
         nrows, ncols = 1, 1
     fig = plt.figure()
     ax = plt.subplot(nrows, ncols, 1)
-    draw_mosaic_image(ax, aligner, img, use_mi)
+    draw_mosaic_image(ax, aligner, img, **im_kwargs)
     error = np.array([aligner._cache[tuple(sorted(e))][1]
-                      for e in aligner.neighbors_graph.edges()])
+                      for e in aligner.neighbors_graph.edges])
     # Manually center and scale data to 0-1, except infinity which is set to -1.
     # This lets us use the purple-green diverging color map to color the graph
     # edges and cause the "infinity" edges to disappear into the background
     # (which is itself purple).
     infs = error == np.inf
     error[infs] = -1
-    error_f = error[~infs]
-    emin = np.min(error_f)
-    emax = np.max(error_f)
-    error[~infs] = (error_f - emin) / (emax - emin)
+    if not infs.all():
+        error_f = error[~infs]
+        emin = np.min(error_f)
+        emax = np.max(error_f)
+        if emin == emax:
+            # Always true when there's only one edge. Otherwise it's unlikely
+            # but theoretically possible.
+            erange = 1
+        else:
+            erange = emax - emin
+        error[~infs] = (error_f - emin) / erange
     # Neighbor graph colored by edge alignment quality (brighter = better).
     nx.draw(
         aligner.neighbors_graph, ax=ax, with_labels=True,
@@ -1391,7 +1388,7 @@ def plot_edge_quality(
     )
     if show_tree:
         ax = plt.subplot(nrows, ncols, 2)
-        draw_mosaic_image(ax, aligner, img, use_mi)
+        draw_mosaic_image(ax, aligner, img, **im_kwargs)
         # Spanning tree with nodes at original tile positions.
         nx.draw(
             aligner.spanning_tree, ax=ax, with_labels=True,
@@ -1401,10 +1398,39 @@ def plot_edge_quality(
     fig.set_facecolor('black')
 
 
-def plot_layer_shifts(aligner, img=None):
+def plot_edge_scatter(aligner, annotate=True):
+    import seaborn as sns
+    xdata = aligner.all_errors
+    ydata = np.clip(
+        [np.linalg.norm(v[0]) for v in aligner._cache.values()], 0.01, np.inf
+    )
+    pdata = np.clip(aligner.errors_negative_sampled, 0, 10)
+    g = sns.JointGrid(xdata, ydata)
+    g.plot_joint(sns.scatterplot, alpha=0.5)
+    _, xbins = np.histogram(np.hstack([xdata, pdata]), bins=40)
+    sns.distplot(
+        xdata, ax=g.ax_marg_x, kde=False, bins=xbins, norm_hist=True
+    )
+    sns.distplot(
+        pdata, ax=g.ax_marg_x, kde=False, bins=xbins, norm_hist=True,
+        hist_kws=dict(histtype='step')
+    )
+    g.ax_joint.axvline(aligner.max_error, c='k', ls=':')
+    g.ax_joint.axhline(aligner.max_shift_pixels, c='k', ls=':')
+    g.ax_joint.set_yscale('log')
+    g.set_axis_labels('error', 'shift')
+    if annotate:
+        for pair, x, y in zip(aligner.neighbors_graph.edges, xdata, ydata):
+            plt.annotate(str(pair), (x, y), alpha=0.1)
+    plt.tight_layout()
+
+
+def plot_layer_shifts(aligner, img=None, im_kwargs=None):
+    if im_kwargs is None:
+        im_kwargs = {}
     fig = plt.figure()
     ax = plt.gca()
-    draw_mosaic_image(ax, aligner, img)
+    draw_mosaic_image(ax, aligner, img, **im_kwargs)
     h, w = aligner.metadata.size
     # Bounding boxes denoting new tile positions.
     for xy in np.fliplr(aligner.positions):
@@ -1419,23 +1445,65 @@ def plot_layer_shifts(aligner, img=None):
     fig.set_facecolor('black')
 
 
-def draw_mosaic_image(ax, aligner, img, use_mi=True):
-    if use_mi and img is not None:
-        if sys.version_info[0] != 2:
-            warnings.warn('ModestImage module (required for image display)'
-                          ' is only compatible with Python 2')
-            img = None
-        elif modest_image is None:
-            warnings.warn('Please install ModestImage for image display')
-            img = None
-    if img is not None:
-        if use_mi:
-            modest_image.imshow(ax, img)
-        else:
-            ax.imshow(img)
-    else:
-        h, w = aligner.mosaic_shape
-        # Draw a single-pixel image in the lowest color in the colormap,
-        # stretched across the same extent that the real image would be.
-        # This makes the graph edge colors visible even if there's no image.
-        ax.imshow([[0]], extent=(-0.5, w-0.5, h-0.5, -0.5))
+def plot_layer_quality(
+    aligner, img=None, scale=1.0, artist='patches', annotate=True, im_kwargs=None
+):
+    if im_kwargs is None:
+        im_kwargs = {}
+    fig = plt.figure()
+    ax = plt.gca()
+    draw_mosaic_image(ax, aligner, img, **im_kwargs)
+
+    h, w = aligner.metadata.size
+    positions, centers, shifts = aligner.positions, aligner.centers, aligner.shifts
+
+    if scale != 1.0:
+        h, w, positions, centers, shifts = [
+            scale * i for i in [h, w, positions, centers, shifts]
+        ]
+
+    # Bounding boxes denoting new tile positions.
+    color_index = skimage.exposure.rescale_intensity(
+        aligner.errors, out_range=np.uint8
+    ).astype(np.uint8)
+    color_map = mcm.magma_r
+    for xy, c_idx in zip(np.fliplr(positions), color_index):
+        rect = mpatches.Rectangle(
+            xy, w, h, color=color_map(c_idx), fill=False, lw=0.5
+        )
+        ax.add_patch(rect)
+    
+    # Annotate tile numbering.
+    if annotate:
+        for idx, (x, y) in enumerate(np.fliplr(positions)):
+            text = plt.annotate(str(idx), (x+0.1*w, y+0.9*h), alpha=0.7)
+            # Add outline to text for better contrast in different background color.
+            text_outline = mpatheffects.Stroke(linewidth=1, foreground='#AAA')
+            text.set_path_effects(
+                [text_outline, mpatheffects.Normal()]
+            )
+
+    if artist == 'quiver':
+        ax.quiver(
+            *centers.T[::-1], *shifts.T[::-1], aligner.discard,
+            units='dots', width=2, scale=1, scale_units='xy', angles='xy',
+            cmap='Greys'
+        )
+    if artist == 'patches':
+        for xy, dxy, is_discarded in zip(
+            np.fliplr(centers), np.fliplr(shifts), aligner.discard
+        ):
+            arrow = mpatches.FancyArrowPatch(
+                xy, np.array(xy) + np.array(dxy), 
+                arrowstyle='->', color='0' if is_discarded else '1',
+                mutation_scale=8,
+                )
+            ax.add_patch(arrow)
+    ax.axis('off')
+
+
+def draw_mosaic_image(ax, aligner, img, **kwargs):
+    if img is None:
+        img = [[0]]
+    h, w = aligner.mosaic_shape
+    ax.imshow(img, extent=(-0.5, w-0.5, h-0.5, -0.5), **kwargs)

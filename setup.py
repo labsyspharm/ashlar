@@ -1,9 +1,5 @@
-from __future__ import print_function
 import os
-try:
-    from urllib.request import urlopen
-except ImportError:
-    from urllib2 import urlopen
+from urllib.request import urlopen
 import hashlib
 from setuptools import setup, find_packages
 from setuptools.command.develop import develop
@@ -12,16 +8,16 @@ from setuptools.command.build_py import build_py
 import versioneer
 
 requires = [
-    'numpy>=1.13.0',
-    'future>=0.16.0',
-    'cython>=0.27.3',
-    'pyjnius==1.2.0',
-    'matplotlib>=2.1.0',
-    'networkx>=2.0',
-    'pyfftw>=0.10.4',
-    'scipy>=0.19.1',
-    'scikit-image>=0.14.0',
-    'scikit-learn>=0.19.1'
+    'numpy>=1.18.1',
+    'pyjnius>=1.2.1',
+    'matplotlib>=3.1.2',
+    'networkx>=2.4',
+    'scipy>=1.4.1',
+    'scikit-image>=0.19.2,<0.20', # The v1.0 API promises breaking changes.
+    'scikit-learn>=0.21.1',
+    'tifffile>=2022.4.8',
+    'zarr>=2.11.3',
+    'blessed>=1.17',
 ]
 
 
@@ -47,8 +43,8 @@ AUTHOR_EMAIL = 'jeremy_muhlich@hms.harvard.edu'
 LICENSE = 'MIT License'
 HOMEPAGE = 'https://github.com/sorgerlab/ashlar'
 
-LOCI_TOOLS_URL = 'http://downloads.openmicroscopy.org/bio-formats/5.9.2/artifacts/loci_tools.jar'
-LOCI_TOOLS_SHA1 = 'fbe2635b5580a5abd312979f5f3a70c953d4e613'
+LOCI_TOOLS_URL = 'https://downloads.openmicroscopy.org/bio-formats/6.3.1/artifacts/loci_tools.jar'
+LOCI_TOOLS_SHA1 = 'bdf1a37b561fea02fd8d1c747bd34db3fc49667b'
 
 def download_bioformats():
     print("Ensuring latest bioformats is present:")
@@ -103,13 +99,11 @@ setup(
     version=VERSION,
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
+    long_description_content_type='text/x-rst',
     cmdclass=versioneer.get_cmdclass(cmdclass),
     packages=find_packages(),
     include_package_data=True,
     install_requires=requires,
-    extras_require={
-        ':python_version <= "3.3"': ['pathlib2'],
-    },
     entry_points={
         'console_scripts': [
             'ashlar=ashlar.scripts.ashlar:main',
@@ -124,7 +118,6 @@ setup(
         'License :: OSI Approved :: %s' % LICENSE,
         'Natural Language :: English',
         'Operating System :: OS Independent',
-        'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 3',
         'Topic :: Scientific/Engineering :: Visualization'
     ],
