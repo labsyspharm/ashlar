@@ -1065,10 +1065,12 @@ class Mosaic(object):
             self.dfp /= np.iinfo(self.dtype).max
             self.do_correction = True
 
-    def assemble_channel(self, channel, out=None):
+    def assemble_channel(self, channel, out=None, fill_blank_value=None):
         num_tiles = len(self.aligner.positions)
         if out is None:
             out = np.zeros(self.shape, self.dtype)
+        if fill_blank_value is not None:
+            mask = np.ones(self.shape, bool)
         else:
             if out.shape != self.shape:
                 raise ValueError(
@@ -1082,6 +1084,10 @@ class Mosaic(object):
             img = self.aligner.reader.read(c=channel, series=si)
             img = self.correct_illumination(img, channel)
             utils.paste(out, img, position, func=utils.pastefunc_blend)
+            if fill_blank_value is not None:
+                utils.paste(mask, np.zeros_like(img, bool), position)
+        if fill_blank_value is not None:
+            out[mask] = fill_blank_value
         # Memory-conserving axis flips.
         if self.flip_mosaic_x:
             for i in range(len(out)):
