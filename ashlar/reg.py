@@ -856,16 +856,16 @@ class LayerAligner(object):
         self.centers = self.positions + self.metadata.size / 2
 
     def constrain_positions(self):
-        # Discard camera background registration which will shift target
-        # positions to reference aligner positions, due to strong
-        # self-correlation of the sensor dark current pattern which dominates in
-        # low-signal images.
         position_diffs = np.absolute(
             self.positions - self.reference_aligner_positions
         )
         # Round the diffs to one decimal point because the subpixel shifts are
-        # calculated by 10x upsampling.
+        # calculated by 10x upsampling and thus only accurate to that level.
         position_diffs = np.rint(position_diffs * 10) / 10
+        # Discard camera background registration which will shift target
+        # positions to reference aligner positions, due to strong
+        # self-correlation of the sensor dark current pattern which dominates in
+        # low-signal images.
         discard = (position_diffs == 0).all(axis=1)
         # Discard any tile registration that error is infinite
         discard |= np.isinf(self.errors)
@@ -899,6 +899,8 @@ class LayerAligner(object):
         if np.any(np.array(its.shape) == 0):
             return (0, 0), np.inf
         shift, error = utils.register(ref_img, img, self.filter_sigma)
+        # Add back in the fractional position difference that overlap() loses.
+        shift = tuple(shift + its.offset_diff_frac)
         # We don't use padding and thus can skip the math to account for it.
         assert (its.padding == 0).all(), "Unexpected non-zero padding"
         return shift, error
@@ -918,6 +920,9 @@ class LayerAligner(object):
             series=ref_t, c=self.reference_aligner.channel
         )
         img2 = self.reader.read(series=t, c=self.channel)
+        # crop rounds the offsets to the nearest pixel, so the returned images
+        # are not located at these precise locations.
+        # Intersection.offset_diff_frac contains the difference.
         ov1 = utils.crop(img1, its.offsets[0], its.shape)
         ov2 = utils.crop(img2, its.offsets[1], its.shape)
         return its, ov1, ov2
@@ -947,7 +952,7 @@ class LayerAligner(object):
         plt.imshow(corr)
         origin = np.array(corr.shape) // 2
         plt.plot(origin[1], origin[0], 'r+')
-        shift += origin
+        shift += origin - its.offset_diff_frac
         plt.plot(shift[1], shift[0], 'rx')
         plt.tight_layout(0, 0, 0)
 
@@ -968,6 +973,8 @@ class Intersection(object):
         self.shape = np.ceil(clipped_shape).astype(int)
         self.padding = self.shape - initial_shape
         self.offsets = np.maximum(position - corners1 - self.padding, 0)
+        offset_diff = self.offsets[1] - self.offsets[0]
+        self.offset_diff_frac = offset_diff - offset_diff.round()
 
     def __repr__(self):
         s = 'shape: {0.shape}\npadding: {0.padding}\noffsets:\n{0.offsets}'
