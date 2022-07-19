@@ -31,7 +31,11 @@ def calculate_image_offset(img1, img2, upsample_factor=1):
     ref = utils.whiten(img1, 0)
     test = utils.whiten(img2, 0)
     shift = phase_cross_correlation(
-        ref, test, upsample_factor=upsample_factor, return_error=False
+        ref,
+        test,
+        upsample_factor=upsample_factor,
+        normalization=None,
+        return_error=False,
     )
     return shift
 

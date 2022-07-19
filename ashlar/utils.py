@@ -21,7 +21,11 @@ def register(img1, img2, sigma, upsample=10):
     img1w = whiten(img1, sigma)
     img2w = whiten(img2, sigma)
     shift = skimage.registration.phase_cross_correlation(
-        img1w, img2w, upsample_factor=upsample, return_error=False
+        img1w,
+        img2w,
+        upsample_factor=upsample,
+        normalization=None,
+        return_error=False,
     )
     # At this point we may have a shift in the wrong quadrant since the FFT
     # assumes the signal is periodic. We test all four possibilities and return
