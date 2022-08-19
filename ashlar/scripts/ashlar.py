@@ -296,9 +296,13 @@ def process_plates(
         for w, well_name in enumerate(metadata.well_names[p]):
             print("Well {}\n-----".format(well_name))
             if len(metadata.plate_well_series[p][w]) > 0:
-                well_path = output_path / plate_name / well_name
-                well_path.mkdir(parents=True, exist_ok=True)
-                mosaic_path_format = str(well_path / filename_format)
+                plate_path = output_path / plate_name
+                if pyramid:
+                    out_file_path = plate_path / f"{well_name}_{filename_format}"
+                else:
+                    out_file_path = plate_path / well_name / filename_format
+                out_file_path.parent.mkdir(parents=True, exist_ok=True)
+                mosaic_path_format = str(out_file_path)
                 process_single(
                     filepaths, mosaic_path_format, flip_x, flip_y,
                     ffp_paths, dfp_paths, aligner_args, mosaic_args, pyramid,

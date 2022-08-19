@@ -261,20 +261,19 @@ class BioformatsMetadata(PlateMetadata):
 
     @property
     def plate_well_series(self):
-        if hasattr(self, '_plate_well_series'):
-            return self._plate_well_series
-        # FIXME Store slice objects to save resources where possible.
-        series = [
-            [
-                np.array([
-                    self._metadata.getWellSampleIndex(p, w, s).value
-                    for s in range(self._metadata.getWellSampleCount(p, w))
-                ], dtype=int)
-                for w in range(num_wells)
+        if not hasattr(self, '_plate_well_series'):
+            # FIXME Store slice objects to save resources where possible.
+            self._plate_well_series = [
+                [
+                    [
+                        self._metadata.getWellSampleIndex(p, w, s).value
+                        for s in range(self._metadata.getWellSampleCount(p, w))
+                    ]
+                    for w in range(num_wells)
+                ]
+                for p, num_wells in enumerate(self.num_wells)
             ]
-            for p, num_wells in enumerate(self.num_wells)
-        ]
-        return series
+        return self._plate_well_series
 
     @property
     def pixel_size(self):
