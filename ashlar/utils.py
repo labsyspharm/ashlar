@@ -118,7 +118,7 @@ def fourier_shift(img, shift):
     return img_s.real
 
 
-def paste(target, img, pos, func=None):
+def _paste(target, img, pos, func=None):
     """Composite img into target."""
     pos = np.array(pos)
     # Bail out if destination region is out of bounds.
@@ -167,6 +167,67 @@ def paste(target, img, pos, func=None):
         func(target_slice, img, out=target_slice)
     else:
         target_slice[:] = func(target_slice, img)
+
+
+def calculate_mosaic_position(position, img_shape, mosaic_shape):
+    position = np.array(position)
+    position_int = np.floor(position)
+    img_shape = np.array(img_shape)
+    mosaic_shape = np.array(mosaic_shape)
+    _row_start, _col_start = np.ceil(position).astype(int)
+    _row_end, _col_end = np.floor(position + img_shape).astype(int)
+    # mosaic relevant
+    row_start, col_start = np.clip(
+        (_row_start, _col_start), (0, 0), mosaic_shape
+    ).astype(int)
+    row_end, col_end = np.clip(
+        (_row_end, _col_end), (0, 0), mosaic_shape
+    ).astype(int)
+    if (row_start == row_end) or (col_start == col_end):
+        return dict(mosaic=None, img=None, translation=None)
+    # img relevant
+    translation = position - position_int
+    row_start_img = row_start - _row_start
+    row_end_img = img_shape[0] + row_end - _row_end
+    col_start_img = col_start - _col_start
+    col_end_img = img_shape[1] + col_end - _col_end
+    return {
+        'mosaic': [(row_start, row_end), (col_start, col_end)],
+        'img': [(row_start_img, row_end_img), (col_start_img, col_end_img)],
+        'translation': translation
+    }
+
+
+def paste(target, img, pos, func=None):
+    positions = calculate_mosaic_position(
+        pos, img.shape, target.shape
+    )
+    pos_mosaic = positions['mosaic']
+    pos_img = positions['img']
+    translation = positions['translation']
+    if pos_mosaic is None:
+        return
+    img = img[slice(*pos_img[0]), slice(*pos_img[1])]
+    if not np.all(translation == 0):
+        img = scipy.ndimage.shift(img, translation)
+        if translation[0] != 0: img = img[1:]
+        if translation[1] != 0: img = img[:, 1:]
+    target_slice = target[slice(*pos_mosaic[0]), slice(*pos_mosaic[1])]
+    assert target_slice.shape == img.shape
+
+    if np.issubdtype(img.dtype, np.floating):
+        np.clip(img, 0, 1, img)
+    
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", r".*scikit-image 1\.0", FutureWarning)
+        img = skimage.util.dtype.convert(img, target.dtype)
+    if func is None:
+        target_slice[:] = img
+    elif isinstance(func, np.ufunc):
+        func(target_slice, img, out=target_slice)
+    else:
+        target_slice[:] = func(target_slice, img)
+    target[slice(*pos_mosaic[0]), slice(*pos_mosaic[1])] = target_slice
 
 
 def pastefunc_blend(target, img):
