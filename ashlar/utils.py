@@ -198,9 +198,11 @@ def calculate_mosaic_position(position, img_shape, mosaic_shape):
     }
 
 
-def paste(target, img, pos, func=None):
+def paste(target, img, pos, func=None, decimals=1):
     positions = calculate_mosaic_position(
-        pos, img.shape, target.shape
+        # Round the pos to one decimal point because the subpixel shifts are
+        # calculated by 10x upsampling and thus only accurate to that level.
+        np.around(pos, decimals=decimals), img.shape, target.shape
     )
     pos_mosaic = positions['mosaic']
     pos_img = positions['img']
