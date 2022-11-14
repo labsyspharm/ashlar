@@ -89,7 +89,7 @@ class FileSeriesMetadata(reg.PlateMetadata):
         if img.ndim == 3:
             if img.shape[2] not in (3, 4) and img.shape[0] in (3, 4):
                 img = np.moveaxis(img, 2, 0)
-        self._tile_size = np.array(img.shape[1:])
+        self._tile_size = np.array(img.shape[img.ndim-2:])
         self._dtype = img.dtype
         self.multi_channel_tiles = False
         # Handle multi-channel tiles (pattern must not include channel).
