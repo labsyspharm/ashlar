@@ -1,8 +1,10 @@
+import functools
 import itertools
 import warnings
 import skimage
 import scipy.ndimage
 import numpy as np
+from . import transform
 
 
 # Pre-calculate the Laplacian operator kernel. We'll always be using 2D images.
@@ -47,6 +49,42 @@ def register(img1, img2, sigma, upsample=10):
     else:
         error = np.inf
     return shift, error
+
+
+def register_angle(img1, img2, sigma, upsample=10):
+    img1w = whiten(img1, sigma)
+    img2w = whiten(img2, sigma)
+    p1w = reg_transform_polar(img1w)
+    p2w = reg_transform_polar(img2w)
+    shift, _, _ = skimage.registration.phase_cross_correlation(
+        p1w, p2w, upsample_factor=upsample
+    )
+    angles = np.array(shift[0] / p1w.shape[0] * 360 % 180) + [0, -180]
+    correlations = [
+        np.abs(np.sum(img1w * scipy.ndimage.rotate(img2w, a, reshape=False)))
+        for a in angles
+    ]
+    idx = np.argmax(correlations)
+    angle = angles[idx]
+    return angle
+
+
+@functools.lru_cache
+def hanning(shape):
+    window_y = np.hanning(shape[0])[..., None]
+    window_x = np.hanning(shape[1])[..., None]
+    window = window_y * window_x.T
+    return window
+
+
+def reg_transform_polar(img):
+    window = hanning(img.shape)
+    freq_mag = np.abs(np.fft.fft2(img * window))
+    trans_inv_img = np.fft.fftshift(np.fft.ifft2(freq_mag).real)
+    pshape = (360 * 3, round(np.linalg.norm(img.shape) / 2))
+    polar_img = transform.polar2cart(trans_inv_img * window, output_shape=pshape)
+    polar_img = np.clip(polar_img, 0, None)
+    return polar_img
 
 
 def nccw(img1, img2, sigma):
