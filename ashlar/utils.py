@@ -52,20 +52,16 @@ def register(img1, img2, sigma, upsample=10):
 
 
 def register_angle(img1, img2, sigma, upsample=10):
-    img1w = whiten(img1, sigma)
-    img2w = whiten(img2, sigma)
-    p1w = reg_transform_polar(img1w)
-    p2w = reg_transform_polar(img2w)
+    p1w = whiten(reg_transform_polar(img1), sigma)
+    p2w = whiten(reg_transform_polar(img2), sigma)
     shift, _, _ = skimage.registration.phase_cross_correlation(
         p1w, p2w, upsample_factor=upsample
     )
-    angles = np.array(shift[0] / p1w.shape[0] * 360 % 180) + [0, -180]
-    correlations = [
-        np.abs(np.sum(img1w * scipy.ndimage.rotate(img2w, a, reshape=False)))
-        for a in angles
-    ]
-    idx = np.argmax(correlations)
-    angle = angles[idx]
+    # The output of reg_transform_polar has ambiguous phase (+/- 180 degrees) in
+    # the polar axis due to the way it produces a shift-invariant image.  We
+    # expect the true angle to be close to zero, so we'll invert anything beyond
+    # +/-90 degrees.
+    angle = (shift[0] / p1w.shape[0] * 360 + 90) % 180 - 90
     return angle
 
 
@@ -83,7 +79,7 @@ def reg_transform_polar(img):
     trans_inv_img = np.fft.fftshift(np.fft.ifft2(freq_mag).real)
     pshape = (360 * 3, round(np.linalg.norm(img.shape) / 2))
     polar_img = transform.polar2cart(trans_inv_img * window, output_shape=pshape)
-    polar_img = np.clip(polar_img, 0, None)
+    polar_img = np.clip(polar_img, 0, None) * np.hanning(polar_img.shape[1])
     return polar_img
 
 
