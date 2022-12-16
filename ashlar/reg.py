@@ -819,10 +819,18 @@ class LayerAligner(object):
         )
 
     def coarse_align(self):
-        self.cycle_offset = thumbnail.calculate_cycle_offset(
+        self.cycle_offset, self.cycle_angle = thumbnail.align_cycles(
             self.reference_aligner.reader, self.reader
         )
-        self.corrected_nominal_positions = self.metadata.positions + self.cycle_offset
+        sa = np.sin(np.deg2rad(self.cycle_angle))
+        ca = np.cos(np.deg2rad(self.cycle_angle))
+        # Transformation matrix for rotation about cycle_angle, transposed because
+        # our coordinates are (y, x) rather than (x, y).
+        tmat = np.array([[ca, -sa], [sa, ca]]).T
+        mcenter = np.mean(self.metadata.positions, axis=0)
+        self.corrected_nominal_positions = (
+            (self.metadata.positions - mcenter) @ tmat + mcenter + self.cycle_offset
+        )
         reference_positions = self.reference_aligner.metadata.positions
         dist = scipy.spatial.distance.cdist(reference_positions,
                                             self.corrected_nominal_positions)
