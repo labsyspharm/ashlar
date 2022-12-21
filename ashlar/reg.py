@@ -5,6 +5,7 @@ import xml.etree.ElementTree
 import pathlib
 import jnius_config
 import numpy as np
+import scipy.ndimage
 import scipy.spatial.distance
 import scipy.fft
 import skimage.util
@@ -826,7 +827,10 @@ class LayerAligner(object):
         ca = np.cos(np.deg2rad(self.cycle_angle))
         # Transformation matrix for rotation about cycle_angle, transposed because
         # our coordinates are (y, x) rather than (x, y).
-        tmat = np.array([[ca, -sa], [sa, ca]]).T
+        tmat = np.array([
+            [ca, -sa],
+            [sa, ca]
+        ]).T
         mcenter = np.mean(self.metadata.positions, axis=0)
         self.corrected_nominal_positions = (
             (self.metadata.positions - mcenter) @ tmat + mcenter + self.cycle_offset
@@ -839,6 +843,8 @@ class LayerAligner(object):
         self.reference_aligner_positions = self.reference_aligner.positions[self.reference_idx]
 
     def register_all(self):
+        if self.cycle_angle != 0:
+            self.refine_cycle_angle()
         n = self.metadata.num_images
         self.shifts = np.empty((n, 2))
         self.errors = np.empty(n)
@@ -905,12 +911,40 @@ class LayerAligner(object):
         its, ref_img, img = self.overlap(t)
         if np.any(np.array(its.shape) == 0):
             return (0, 0), np.inf
+        if self.cycle_angle_fine != 0:
+            ref_img = scipy.ndimage.rotate(
+                ref_img, self.cycle_angle_fine, reshape=False
+            )
         shift, error = utils.register(ref_img, img, self.filter_sigma)
         # Add back in the fractional position difference that overlap() loses.
+        # TODO How does rotation affect this?
         shift = tuple(shift + its.offset_diff_frac)
         # We don't use padding and thus can skip the math to account for it.
         assert (its.padding == 0).all(), "Unexpected non-zero padding"
         return shift, error
+
+    def register_angle(self, t):
+        """Return relative rotation angle between images."""
+        its, ref_img, img = self.overlap(t)
+        if np.any(np.array(its.shape) == 0):
+            return np.nan
+        angle = utils.register_angle(ref_img, img, 0)
+        return angle
+
+    def refine_cycle_angle(self):
+        n = self.metadata.num_images
+        angles = np.empty(n)
+        for i in range(n):
+            if self.verbose:
+                sys.stdout.write("\r    aligning tile angle %d/%d" % (i + 1, n))
+                sys.stdout.flush()
+            angles[i] = self.register_angle(i)
+        if self.verbose:
+            print()
+        angle = np.nanmedian(angles)
+        if self.verbose:
+            print(f"    refined cycle rotation = {angle:.2} degrees")
+        self.cycle_angle_fine = angle
 
     def intersection(self, t):
         corners1 = np.vstack([self.reference_positions[t],
@@ -941,6 +975,8 @@ class LayerAligner(object):
     def debug(self, t):
         shift, _ = self.register(t)
         its, o1, o2 = self.overlap(t)
+        if self.cycle_angle_fine != 0:
+            o2 = scipy.ndimage.rotate(o2, self.cycle_angle_fine, reshape=False)
         w1 = utils.whiten(o1, self.filter_sigma)
         w2 = utils.whiten(o2, self.filter_sigma)
         corr = scipy.fft.fftshift(np.abs(scipy.fft.ifft2(
@@ -961,7 +997,7 @@ class LayerAligner(object):
         plt.plot(origin[1], origin[0], 'r+')
         shift += origin - its.offset_diff_frac
         plt.plot(shift[1], shift[0], 'rx')
-        plt.tight_layout(0, 0, 0)
+        plt.tight_layout()
 
 
 class Intersection(object):
@@ -1089,13 +1125,17 @@ class Mosaic(object):
                     f"out array shape {out.shape} does not match Mosaic"
                     f" shape {self.shape}"
                 )
+        try:
+            angle = self.aligner.cycle_angle_fine
+        except AttributeError:
+            angle = 0
         for si, position in enumerate(self.aligner.positions):
             if self.verbose:
                 sys.stdout.write(f"\r        merging tile {si + 1}/{num_tiles}")
                 sys.stdout.flush()
             img = self.aligner.reader.read(c=channel, series=si)
             img = self.correct_illumination(img, channel)
-            utils.paste(out, img, position, func=utils.pastefunc_blend)
+            utils.paste(out, img, position, angle, func=utils.pastefunc_blend)
         # Memory-conserving axis flips.
         if self.flip_mosaic_x:
             for i in range(len(out)):

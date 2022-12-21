@@ -152,7 +152,7 @@ def fourier_shift(img, shift):
     return img_s.real
 
 
-def paste(target, img, pos, func=None):
+def paste(target, img, pos, angle, func=None):
     """Composite img into target."""
     pos = np.array(pos)
     # Bail out if destination region is out of bounds.
@@ -189,6 +189,10 @@ def paste(target, img, pos, func=None):
         # Exit if image area is zero after subpixel shift.
         if not np.all(img.shape):
             return
+    # FIXME Should allow reshape and use a proper mask for compositing to avoid
+    # issues with the zero pixels in the corners after rotation.
+    if angle != 0:
+        img = scipy.ndimage.rotate(img, angle, reshape=False)
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     # It's safe to silence this FutureWarning as we pinned the skimage version.
