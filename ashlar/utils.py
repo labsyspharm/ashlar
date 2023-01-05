@@ -83,6 +83,18 @@ def reg_transform_polar(img):
     return polar_img
 
 
+def rotation_matrix(angle):
+    """Return transformation matrix for rotation about angle (degrees)."""
+    sina = np.sin(np.deg2rad(angle))
+    cosa = np.cos(np.deg2rad(angle))
+    transform = np.array([
+        [cosa, -sina],
+        [sina, cosa],
+    ])
+    # Transpose matrix because our coordinates are (y, x) rather than (x, y).
+    return transform.T
+
+
 def nccw(img1, img2, sigma):
     img1w = whiten(img1, sigma)
     img2w = whiten(img2, sigma)
@@ -158,6 +170,11 @@ def paste(target, img, pos, angle, func=None):
     # Bail out if destination region is out of bounds.
     if np.any(pos >= target.shape[:2]) or np.any(pos + img.shape[:2] < 0):
         return
+    if angle != 0:
+        orig_shape = img.shape
+        img = scipy.ndimage.rotate(img, angle)
+        shape_diff = np.subtract(img.shape, orig_shape)[:2]
+        pos -= shape_diff / 2
     pos_f, pos_i = np.modf(pos)
     yi, xi = pos_i.astype('i8')
     # Clip img to the edges of the mosaic.
@@ -189,10 +206,6 @@ def paste(target, img, pos, angle, func=None):
         # Exit if image area is zero after subpixel shift.
         if not np.all(img.shape):
             return
-    # FIXME Should allow reshape and use a proper mask for compositing to avoid
-    # issues with the zero pixels in the corners after rotation.
-    if angle != 0:
-        img = scipy.ndimage.rotate(img, angle, reshape=False)
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
     # It's safe to silence this FutureWarning as we pinned the skimage version.
@@ -219,6 +232,13 @@ def pastefunc_blend(target, img):
         alpha = 0
     else:
         alpha = dist / dist.max()
+        # Keep target pixel values where img has value 0 (with a 1-pixel
+        # dilation to clean up the edge). This is a workaround to support
+        # rotation correction, which leaves large triangular regions of 0 pixels
+        # around the edge of img. We should handle this more robustly if/when
+        # the rotation support is merged. What should happen if a normal image
+        # happens to have some zeros, or even a large region of zeros?
+        alpha[skimage.morphology.binary_dilation(img == 0)] = 1
     return target * alpha + img * (1 - alpha)
 
 
