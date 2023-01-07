@@ -800,6 +800,7 @@ class LayerAligner(object):
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
         self.filter_sigma = filter_sigma
         self.verbose = verbose
+        self.cycle_angle_fine = 0
         # FIXME Still a bit muddled here on the use of metadata positions vs.
         # corrected positions from the reference aligner. We probably want to
         # use metadata positions to find the cycle-to-cycle tile
@@ -823,17 +824,25 @@ class LayerAligner(object):
         self.cycle_offset, self.cycle_angle = thumbnail.align_cycles(
             self.reference_aligner.reader, self.reader
         )
-        tmat = utils.rotation_matrix(self.cycle_angle).T
-        mcenter = np.mean(self.metadata.positions, axis=0)
-        self.corrected_nominal_positions = (
-            (self.metadata.positions - mcenter) @ tmat + mcenter + self.cycle_offset
+        mcorners = [
+            np.min(self.metadata.centers, axis=0),
+            np.max(self.metadata.centers, axis=0),
+        ]
+        mcenter = np.mean(mcorners, axis=0)
+        tform = skimage.transform.AffineTransform(
+            rotation=np.deg2rad(self.cycle_angle),
         )
-        reference_positions = self.reference_aligner.metadata.positions
-        dist = scipy.spatial.distance.cdist(reference_positions,
-                                            self.corrected_nominal_positions)
-        self.reference_idx = np.argmin(dist, 0)
-        self.reference_positions = reference_positions[self.reference_idx]
-        self.reference_aligner_positions = self.reference_aligner.positions[self.reference_idx]
+        self.corrected_nominal_centers = (
+            tform(self.metadata.centers - mcenter) + mcenter + self.cycle_offset
+        )
+        reference_centers = self.reference_aligner.metadata.centers
+        # For small rotation angles we can use the distance between tile centers
+        # instead of computing the actual overlap between rotated rectangles.
+        dist = scipy.spatial.distance.cdist(reference_centers,
+                                            self.corrected_nominal_centers)
+        self.reference_idx = np.argmin(dist, axis=0)
+        self.reference_centers = reference_centers[self.reference_idx]
+        self.reference_aligner_centers = self.reference_aligner.centers[self.reference_idx]
 
     def register_all(self):
         if self.cycle_angle != 0:
@@ -852,27 +861,27 @@ class LayerAligner(object):
             print()
 
     def calculate_positions(self):
-        self.positions = (
-            self.corrected_nominal_positions
+        self.centers = (
+            self.corrected_nominal_centers
             + self.shifts
-            + self.reference_aligner_positions
-            - self.reference_positions
+            + self.reference_aligner_centers
+            - self.reference_centers
         )
-        self.constrain_positions()
-        self.centers = self.positions + self.metadata.size / 2
+        self.constrain_centers()
+        self.positions = self.centers - self.metadata.size / 2
 
-    def constrain_positions(self):
-        position_diffs = np.absolute(
-            self.positions - self.reference_aligner_positions
+    def constrain_centers(self):
+        diffs = np.absolute(
+            self.centers - self.reference_aligner_centers
         )
         # Round the diffs to one decimal point because the subpixel shifts are
         # calculated by 10x upsampling and thus only accurate to that level.
-        position_diffs = np.rint(position_diffs * 10) / 10
+        diffs = np.rint(diffs * 10) / 10
         # Discard camera background registration which will shift target
         # positions to reference aligner positions, due to strong
         # self-correlation of the sensor dark current pattern which dominates in
         # low-signal images.
-        discard = (position_diffs == 0).all(axis=1)
+        discard = (diffs == 0).all(axis=1)
         # Discard any tile registration that error is infinite
         discard |= np.isinf(self.errors)
         # Take the median of registered shifts to determine the offset
@@ -882,11 +891,14 @@ class LayerAligner(object):
         else:
             offset = np.nan_to_num(np.median(self.shifts[~discard], axis=0))
         # Here we assume the fitted linear model from the reference image is
-        # still appropriate, apart from the extra offset we just computed.
-        predictions = self.reference_aligner.lr.predict(self.corrected_nominal_positions)
+        # still appropriate, apart from the rotation and the extra offset we
+        # just computed.
+        predictions = self.reference_aligner.lr.predict(
+            self.corrected_nominal_centers
+        )
         # Discard any tile registration that's too far from the linear model,
         # replacing it with the relevant model prediction.
-        distance = np.linalg.norm(self.positions - predictions - offset, axis=1)
+        distance = np.linalg.norm(self.centers - predictions - offset, axis=1)
         max_dist = self.max_shift_pixels
         extremes = distance > max_dist
         # Recalculate the mean shift, also ignoring the extreme values.
@@ -897,17 +909,13 @@ class LayerAligner(object):
         else:
             self.offset = np.nan_to_num(np.mean(self.shifts[~discard], axis=0))
         # Fill in discarded shifts from the predictions.
-        self.positions[discard] = predictions[discard] + self.offset
+        self.centers[discard] = predictions[discard] + self.offset
 
     def register(self, t):
         """Return relative shift between images and the alignment error."""
         its, ref_img, img = self.overlap(t)
         if np.any(np.array(its.shape) == 0):
             return (0, 0), np.inf
-        if self.cycle_angle_fine != 0:
-            ref_img = scipy.ndimage.rotate(
-                ref_img, self.cycle_angle_fine, reshape=False
-            )
         shift, error = utils.register(ref_img, img, self.filter_sigma)
         # Add back in the fractional position difference that overlap() loses.
         # TODO How does rotation affect this?
@@ -938,10 +946,12 @@ class LayerAligner(object):
         if self.verbose:
             print(f"    refined cycle rotation = {angle:.2} degrees")
         self.cycle_angle_fine = angle
+        self.tform_rotation = skimage.transform.AffineTransform(rotation=angle)
 
     def intersection(self, t):
-        corners1 = np.vstack([self.reference_positions[t],
-                              self.corrected_nominal_positions[t]])
+        center_a = self.reference_centers[t]
+        center_b = self.corrected_nominal_centers[t]
+        corners1 = np.vstack([center_a, center_b]) - self.reader.metadata.size / 2
         corners2 = corners1 + self.reader.metadata.size
         its = Intersection(corners1, corners2)
         its.shape = its.shape // 32 * 32
@@ -954,6 +964,10 @@ class LayerAligner(object):
             series=ref_t, c=self.reference_aligner.channel
         )
         img2 = self.reader.read(series=t, c=self.channel)
+        if self.cycle_angle_fine != 0:
+            img2 = scipy.ndimage.rotate(
+                img2, self.cycle_angle_fine, reshape=False
+            )
         # crop rounds the offsets to the nearest pixel, so the returned images
         # are not located at these precise locations.
         # Intersection.offset_diff_frac contains the difference.

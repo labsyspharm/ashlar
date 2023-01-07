@@ -83,18 +83,6 @@ def reg_transform_polar(img):
     return polar_img
 
 
-def rotation_matrix(angle):
-    """Return transformation matrix for rotation about angle (degrees)."""
-    sina = np.sin(np.deg2rad(angle))
-    cosa = np.cos(np.deg2rad(angle))
-    transform = np.array([
-        [cosa, -sina],
-        [sina, cosa],
-    ])
-    # Transpose matrix because our coordinates are (y, x) rather than (x, y).
-    return transform.T
-
-
 def nccw(img1, img2, sigma):
     img1w = whiten(img1, sigma)
     img2w = whiten(img2, sigma)
