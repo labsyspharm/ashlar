@@ -7,14 +7,27 @@ from skimage.registration import phase_cross_correlation
 import tifffile
 
 
+def calculate_scale(reader, default_scale=0.05, min_size=1000):
+    """Return scaling factor for a thumbnail with a minimum size constraint."""
+    positions = reader.metadata.positions - reader.metadata.origin
+    full_shape = (positions + reader.metadata.size).max(axis=0)
+    thumbnail_shape = full_shape * default_scale
+    if any(thumbnail_shape >= min_size):
+        scale = default_scale
+    else:
+        # Compute the scale needed to make the thumbnail min_size on the longest
+        # side, but don't scale smaller images up.
+        scale = min(min_size / max(full_shape), 1)
+    return scale
+
+
 def make_thumbnail(reader, channel=0, scale=0.05):
-    metadata = reader.metadata
-    positions = metadata.positions - metadata.origin
-    coordinate_max = (positions + metadata.size).max(axis=0)
-    mshape = ((coordinate_max + 1) * scale).astype(int)
+    positions = reader.metadata.positions - reader.metadata.origin
+    full_shape = (positions + reader.metadata.size).max(axis=0)
+    mshape = np.ceil(full_shape * scale).astype(int)
     mosaic = np.zeros(mshape, dtype=np.uint16)
     total = reader.metadata.num_images
-    for i in range(total):
+    for i, pos_s in enumerate(positions * scale):
         sys.stdout.write("\r    assembling thumbnail %d/%d" % (i + 1, total))
         sys.stdout.flush()
         img = reader.read(c=channel, series=i)
@@ -22,7 +35,7 @@ def make_thumbnail(reader, channel=0, scale=0.05):
         # images are bigger than the scale factor. This speeds up the rescaling
         # dramatically.
         img_s = rescale(img, scale, anti_aliasing=False)
-        utils.paste(mosaic, img_s, positions[i] * scale, np.maximum)
+        utils.paste(mosaic, img_s, pos_s, utils.pastefunc_blend)
     print()
     return mosaic
 
