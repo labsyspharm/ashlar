@@ -54,8 +54,12 @@ def register(img1, img2, sigma, upsample=10):
 def register_angle(img1, img2, sigma, upsample=10):
     p1w = whiten(reg_transform_polar(img1), sigma)
     p2w = whiten(reg_transform_polar(img2), sigma)
-    shift, _, _ = skimage.registration.phase_cross_correlation(
-        p1w, p2w, upsample_factor=upsample
+    shift = skimage.registration.phase_cross_correlation(
+        p1w,
+        p2w,
+        upsample_factor=upsample,
+        normalization=None,
+        return_error=False,
     )
     # The output of reg_transform_polar has ambiguous phase (+/- 180 degrees) in
     # the polar axis due to the way it produces a shift-invariant image.  We
