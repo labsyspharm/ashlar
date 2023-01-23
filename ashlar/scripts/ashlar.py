@@ -94,6 +94,9 @@ def main(argv=sys.argv):
               " (default: no dark field correction)"),
     )
     parser.add_argument(
+        "--barrel-correction", type=float, default=0, help=argparse.SUPPRESS
+    )
+    parser.add_argument(
         '--plates', default=False, action='store_true',
         help='Enable plate mode for HTS data',
     )
@@ -204,15 +207,15 @@ def main(argv=sys.argv):
         if args.plates:
             return process_plates(
                 filepaths, output_path, args.filename_format, args.flip_x,
-                args.flip_y, ffp_paths, dfp_paths, aligner_args, mosaic_args,
-                args.pyramid, args.quiet
+                args.flip_y, ffp_paths, dfp_paths, args.barrel_correction,
+                aligner_args, mosaic_args, args.pyramid, args.quiet
             )
         else:
             mosaic_path_format = str(output_path / args.filename_format)
             return process_single(
                 filepaths, mosaic_path_format, args.flip_x, args.flip_y,
-                ffp_paths, dfp_paths, aligner_args, mosaic_args, args.pyramid,
-                args.quiet
+                ffp_paths, dfp_paths, args.barrel_correction, aligner_args,
+                mosaic_args, args.pyramid, args.quiet
             )
     except ProcessingError as e:
         print_error(str(e))
@@ -221,7 +224,8 @@ def main(argv=sys.argv):
 
 def process_single(
     filepaths, output_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
-    aligner_args, mosaic_args, pyramid, quiet, plate_well=None
+    barrel_correction, aligner_args, mosaic_args, pyramid, quiet,
+    plate_well=None
 ):
 
     mosaic_args = mosaic_args.copy()
@@ -234,7 +238,7 @@ def process_single(
         print("Stitching and registering input images")
         print('Cycle 0:')
         print('    reading %s' % filepaths[0])
-    reader = build_reader(filepaths[0], plate_well=plate_well)
+    reader = build_reader(filepaths[0], barrel_correction, plate_well=plate_well)
     process_axis_flip(reader, flip_x, flip_y)
     ea_args = aligner_args.copy()
     if len(filepaths) == 1:
@@ -253,7 +257,7 @@ def process_single(
         if not quiet:
             print('Cycle %d:' % cycle)
             print('    reading %s' % filepath)
-        reader = build_reader(filepath, plate_well=plate_well)
+        reader = build_reader(filepath, barrel_correction, plate_well=plate_well)
         process_axis_flip(reader, flip_x, flip_y)
         layer_aligner = reg.LayerAligner(reader, edge_aligner, **aligner_args)
         layer_aligner.run()
@@ -281,7 +285,7 @@ def process_single(
 
 def process_plates(
     filepaths, output_path, filename_format, flip_x, flip_y, ffp_paths,
-    dfp_paths, aligner_args, mosaic_args, pyramid, quiet
+    dfp_paths, barrel_correction, aligner_args, mosaic_args, pyramid, quiet
 ):
 
     temp_reader = build_reader(filepaths[0])
@@ -305,8 +309,8 @@ def process_plates(
                 mosaic_path_format = str(out_file_path)
                 process_single(
                     filepaths, mosaic_path_format, flip_x, flip_y,
-                    ffp_paths, dfp_paths, aligner_args, mosaic_args, pyramid,
-                    quiet, plate_well=(p, w)
+                    ffp_paths, dfp_paths, barrel_correction, aligner_args,
+                    mosaic_args, pyramid, quiet, plate_well=(p, w)
                 )
             else:
                 print("Skipping -- No images found.")
@@ -334,7 +338,7 @@ readers = {
 
 # This is a short-term hack to provide a way to specify alternate reader
 # classes and pass specific args to them.
-def build_reader(path, plate_well=None):
+def build_reader(path, barrel_correction=0, plate_well=None):
     # Default to BioformatsReader if name not specified.
     reader_class = BioformatsReader
     kwargs = {}
@@ -356,6 +360,8 @@ def build_reader(path, plate_well=None):
             )
         kwargs.update(plate=plate_well[0], well=plate_well[1])
     reader = reader_class(path, **kwargs)
+    if barrel_correction != 0:
+        reader = reg.BarrelCorrectionReader(reader, barrel_correction)
     return reader
 
 
