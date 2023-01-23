@@ -22,6 +22,7 @@ import matplotlib.patheffects as mpatheffects
 import zarr
 from . import utils
 from . import thumbnail
+from . import transform
 from . import __version__ as _version
 
 
@@ -405,6 +406,24 @@ class BioformatsReader(PlateReader):
         dtype = self.metadata.pixel_dtype
         shape = self.metadata.tile_size(series)
         img = np.frombuffer(byte_array.tostring(), dtype=dtype).reshape(shape)
+        return img
+
+
+class BarrelCorrectionReader(Reader):
+    """Wraps a reader to correct barrel/pincushion image distortion."""
+
+    def __init__(self, reader, k):
+        self.reader = reader
+        self.k = k
+
+    @property
+    def metadata(self):
+        return self.reader.metadata
+
+    def read(self, series, c):
+        img = self.reader.read(series, c)
+        img = transform.barrel_correction(img, self.k)
+        img = skimage.util.img_as_uint(img)
         return img
 
 
