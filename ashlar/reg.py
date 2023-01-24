@@ -771,8 +771,9 @@ class EdgeAligner(object):
         its, o1, o2 = self.overlap(t1, t2, min_size)
         w1 = utils.whiten(o1, self.filter_sigma)
         w2 = utils.whiten(o2, self.filter_sigma)
+        window = utils.hanning(w1.shape)
         corr = scipy.fft.fftshift(np.abs(scipy.fft.ifft2(
-            scipy.fft.fft2(w1) * scipy.fft.fft2(w2).conj()
+            scipy.fft.fft2(w1 * window) * scipy.fft.fft2(w2 * window).conj()
         )))
         corr /= (np.linalg.norm(w1) * np.linalg.norm(w2))
         stack = np.vstack

@@ -20,8 +20,9 @@ def whiten(img, sigma):
 
 
 def register(img1, img2, sigma, upsample=10):
-    img1w = whiten(img1, sigma)
-    img2w = whiten(img2, sigma)
+    window = hanning(img1.shape)
+    img1w = whiten(img1 * window, sigma)
+    img2w = whiten(img2 * window, sigma)
     shift = skimage.registration.phase_cross_correlation(
         img1w,
         img2w,
