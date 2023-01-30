@@ -244,6 +244,8 @@ def process_single(
     if pyramid:
         writer_args["tile_size"] = mosaic_args.pop("tile_size", None)
     mosaics = []
+    if barrel_correction:
+        mosaic_args["barrel_correction"] = barrel_correction
 
     if not quiet:
         print("Stitching and registering input images")
