@@ -1,3 +1,4 @@
+import functools
 import itertools
 import warnings
 import skimage
@@ -17,9 +18,23 @@ def whiten(img, sigma):
     return output
 
 
+@functools.lru_cache
+def get_window(shape):
+    # Build a 2D Hann window by taking the outer product of two 1-D windows.
+    wy = np.hanning(shape[0]).astype(np.float32)
+    wx = np.hanning(shape[1]).astype(np.float32)
+    window = np.outer(wy, wx)
+    return window
+
+
+def window(img):
+    assert img.ndim == 2
+    return img * get_window(img.shape)
+
+
 def register(img1, img2, sigma, upsample=10):
-    img1w = whiten(img1, sigma)
-    img2w = whiten(img2, sigma)
+    img1w = window(whiten(img1, sigma))
+    img2w = window(whiten(img2, sigma))
     shift = skimage.registration.phase_cross_correlation(
         img1w,
         img2w,
