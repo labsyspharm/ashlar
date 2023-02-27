@@ -1406,7 +1406,7 @@ def plot_edge_quality(
 
 def plot_edge_scatter(aligner, annotate=True):
     import seaborn as sns
-    xdata = aligner.all_errors
+    xdata = np.clip(aligner.all_errors, 0, 10)
     ydata = np.clip(
         [np.linalg.norm(v[0]) for v in aligner._cache.values()], 0.01, np.inf
     )
