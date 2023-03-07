@@ -1236,6 +1236,7 @@ class PyramidWriter:
                 resolution=(resolution_cm, resolution_cm, "centimeter"),
                 # FIXME Propagate this from input files (especially RGB).
                 photometric="minisblack",
+                compression="adobe_deflate",
             )
             if self.verbose:
                 print("Generating pyramid")
@@ -1250,6 +1251,7 @@ class PyramidWriter:
                     subfiletype=1,
                     dtype=dtype,
                     tile=tile_shape,
+                    compression="adobe_deflate",
                 )
                 if self.verbose:
                     print()
