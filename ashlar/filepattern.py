@@ -63,7 +63,8 @@ class FilePatternMetadata(reg.Metadata):
         if img.ndim == 3:
             if img.shape[2] in (3, 4) and img.shape[0] not in (3, 4):
                 img = np.moveaxis(img, 2, 0)
-        self._tile_size = np.array(img.shape[1:])
+        self._tile_size = np.array(img.shape[-2:])
+        self._dtype = img.dtype
         self.multi_channel_tiles = False
         # Handle multi-channel tiles (pattern must not include channel).
         if len(self.channel_map) == 1 and img.ndim == 3:
@@ -85,7 +86,7 @@ class FilePatternMetadata(reg.Metadata):
 
     @property
     def pixel_dtype(self):
-        return np.uint16
+        return self._dtype
 
     def tile_position(self, i):
         row, col = self.tile_rc(i)
