@@ -3,7 +3,7 @@ import numpy as np
 import networkx as nx
 
 
-_colormaps = ['red', 'green', 'blue']
+_colormaps = ['red', 'green', 'blue', 'magenta', 'cyan', 'yellow']
 
 
 def view_edges(
@@ -51,8 +51,8 @@ def view_edges(
 
     node_colors = nx.greedy_color(aligner.neighbors_graph)
     num_colors = max(node_colors.values()) + 1
-    if num_colors > 3:
-        raise ValueError(f"neighbors_graph requires more than 3 colors")
+    if num_colors > len(_colormaps):
+        raise ValueError(f"neighbors_graph requires more than {len(_colormaps)} colors")
 
     dtype = aligner.metadata.pixel_dtype
     if np.issubdtype(dtype, np.integer):

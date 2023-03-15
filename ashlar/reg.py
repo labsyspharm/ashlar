@@ -1406,7 +1406,7 @@ def plot_edge_quality(
 
 def plot_edge_scatter(aligner, annotate=True):
     import seaborn as sns
-    xdata = aligner.all_errors
+    xdata = np.clip(aligner.all_errors, 0, 10)
     ydata = np.clip(
         [np.linalg.norm(v[0]) for v in aligner._cache.values()], 0.01, np.inf
     )
@@ -1427,7 +1427,7 @@ def plot_edge_scatter(aligner, annotate=True):
     g.set_axis_labels('error', 'shift')
     if annotate:
         for pair, x, y in zip(aligner.neighbors_graph.edges, xdata, ydata):
-            plt.annotate(str(pair), (x, y), alpha=0.1)
+            g.ax_joint.annotate(str(pair), (x, y), alpha=0.1)
     plt.tight_layout()
 
 
