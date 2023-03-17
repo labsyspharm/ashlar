@@ -1237,6 +1237,7 @@ class PyramidWriter:
                 # FIXME Propagate this from input files (especially RGB).
                 photometric="minisblack",
                 compression="adobe_deflate",
+                predictor=True,
             )
             if self.verbose:
                 print("Generating pyramid")
@@ -1252,6 +1253,7 @@ class PyramidWriter:
                     dtype=dtype,
                     tile=tile_shape,
                     compression="adobe_deflate",
+                    predictor=True,
                 )
                 if self.verbose:
                     print()

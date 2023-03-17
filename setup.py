@@ -15,7 +15,7 @@ requires = [
     'scipy>=1.4.1',
     'scikit-image>=0.19.2,<0.20', # The v1.0 API promises breaking changes.
     'scikit-learn>=0.21.1',
-    'tifffile>=2022.4.8',
+    'tifffile>=2023.3.15',
     'zarr>=2.11.3',
     'blessed>=1.17',
 ]
