@@ -101,7 +101,7 @@ conda activate ashlar
 
 In the activated environment, install dependencies and ashlar itself:
 ```bash
-conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.19 scikit-learn "tifffile>=2022.4.8" zarr pyjnius blessed
+conda install -y -c conda-forge numpy scipy matplotlib networkx scikit-image=0.19 scikit-learn "tifffile>=2023.3.15" zarr pyjnius blessed
 pip install ashlar
 ```
 
