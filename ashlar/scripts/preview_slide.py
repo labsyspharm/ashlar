@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.text as mtext
 from .. import reg, utils
+from ..scripts import ashlar as ascript
 
 
 def main(argv=sys.argv):
@@ -40,9 +41,18 @@ def main(argv=sys.argv):
         "-l", "--log", action="store_true", help="Log-transform pixel intensities"
         " (helps visualize dim images)",
     )
+    parser.add_argument(
+        '--flip-x', default=False, action='store_true',
+        help='Flip tile positions left-to-right',
+    )
+    parser.add_argument(
+        '--flip-y', default=False, action='store_true',
+        help='Flip tile positions top-to-bottom',
+    )
     args = parser.parse_args()
 
-    reader = reg.BioformatsReader(args.input)
+    reader = ascript.build_reader(args.input)
+    ascript.process_axis_flip(reader, args.flip_x, args.flip_y)
     metadata = reader.metadata
 
     resolution_scale = 1 / args.downsample
