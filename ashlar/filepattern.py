@@ -3,6 +3,7 @@ import pathlib
 import numpy as np
 import skimage.io
 from . import reg
+from .fileseries import _read
 
 
 # Classes for reading datasets consisting of TIFF files with a naming pattern.
@@ -56,13 +57,9 @@ class FilePatternMetadata(reg.Metadata):
             row=self.row_offset, col=self.col_offset,
             channel=self.channel_map[0]
         )
-        img = skimage.io.imread(str(path))
+        img = _read(path)
         if img.ndim not in (2, 3):
             raise Exception(f"Image must have 2 or 3 dimensions: {path}")
-        # Undo skimage's "helpful" reordering of 3- and 4-channel images.
-        if img.ndim == 3:
-            if img.shape[2] in (3, 4) and img.shape[0] not in (3, 4):
-                img = np.moveaxis(img, 2, 0)
         self._tile_size = np.array(img.shape[-2:])
         self._dtype = img.dtype
         self.multi_channel_tiles = False
@@ -113,15 +110,9 @@ class FilePatternReader(reg.Reader):
         )
 
     def read(self, series, c):
-        path = str(self.path / self.filename(series, c))
+        path = self.path / self.filename(series, c)
         channel = c if self.metadata.multi_channel_tiles else 0
-        if path.lower().endswith((".tiff", ".tif")):
-            img = skimage.io.imread(path, key=channel)
-        else:
-            # Assume all other image types have shape (M, N, C). Ideally we
-            # wouldn't read the whole file just to extract one channel, but
-            # these formats generally don't support that.
-            img = skimage.io.imread(path)[..., channel]
+        img = _read(path, channel)
         return img
 
     def filename(self, series, c):

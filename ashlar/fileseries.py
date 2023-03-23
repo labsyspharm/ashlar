@@ -29,6 +29,38 @@ def f2r_repl(m):
     r += ')'
     return r
 
+rgb_suffixes = "jpg jpeg gif png".split()
+
+def _read(path, channel=None):
+    suffix = path.suffix[1:]
+    path = str(path)
+    try:
+        if suffix in rgb_suffixes and channel is not None:
+            # RGB image types with shape (M, N, 3) or (M, N, 4) that don't
+            # support reading a single plane in isolation. Ideally we wouldn't
+            # read the whole file just to extract one channel!
+            img = skimage.io.imread(path)[..., channel]
+        else:
+            kwargs = {}
+            if channel is not None:
+                kwargs["key"] = channel
+            img = skimage.io.imread(path, **kwargs)
+    except:
+        reader = reg.BioformatsReader(path)
+        if channel is None:
+            channels = range(reader.metadata.num_channels)
+            img = np.stack([reader.read(0, c) for c in channels])
+        else:
+            img = reader.read(0, channel)
+    # Undo skimage's "helpful" reordering of 3- and 4-channel images.
+    if (
+        img.ndim == 3
+        and img.shape[2] in (3, 4)
+        and img.shape[0] not in (3, 4)
+    ):
+        img = np.moveaxis(img, 2, 0)
+    return img
+
 
 class FileSeriesMetadata(reg.PlateMetadata):
 
@@ -82,13 +114,9 @@ class FileSeriesMetadata(reg.PlateMetadata):
         self._actual_num_images = len(series) * len(wells)
         self.channel_map = dict(enumerate(sorted(channels)))
         path = self.path / self.filename(0, 0)
-        img = skimage.io.imread(str(path))
+        img = _read(path)
         if img.ndim not in (2, 3):
             raise Exception(f"Image must have 2 or 3 dimensions: {path}")
-        # Undo skimage's "helpful" reordering of 3- and 4-channel images.
-        if img.ndim == 3:
-            if img.shape[2] in (3, 4) and img.shape[0] not in (3, 4):
-                img = np.moveaxis(img, 2, 0)
         self._tile_size = np.array(img.shape[-2:])
         self._dtype = img.dtype
         self.multi_channel_tiles = False
@@ -186,13 +214,7 @@ class FileSeriesReader(reg.PlateReader):
     def read(self, series, c):
         # TODO: Address tension between non-plate and plate-aware modes
         # here and in Metadata class.
-        path = str(self.path / self.metadata.filename(series, c))
+        path = self.path / self.metadata.filename(series, c)
         channel = c if self.metadata.multi_channel_tiles else 0
-        if path.lower().endswith((".tiff", ".tif")):
-            img = skimage.io.imread(path, key=channel)
-        else:
-            # Assume all other image types have shape (M, N, C). Ideally we
-            # wouldn't read the whole file just to extract one channel, but
-            # these formats generally don't support that.
-            img = skimage.io.imread(path)[..., channel]
+        img = _read(path, channel)
         return img
