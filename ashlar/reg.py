@@ -1415,7 +1415,7 @@ def plot_edge_scatter(aligner, annotate=True):
         [np.linalg.norm(v[0]) for v in aligner._cache.values()], 0.01, np.inf
     )
     pdata = np.clip(aligner.errors_negative_sampled, 0, 10)
-    g = sns.JointGrid(xdata, ydata)
+    g = sns.JointGrid(x=xdata, y=ydata)
     g.plot_joint(sns.scatterplot, alpha=0.5)
     _, xbins = np.histogram(np.hstack([xdata, pdata]), bins=40)
     sns.distplot(
