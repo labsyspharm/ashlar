@@ -490,8 +490,9 @@ class EdgeAligner(object):
     def make_thumbnail(self):
         if not self.do_make_thumbnail:
             return
+        self.reader.thumbnail_scale = thumbnail.calculate_scale(self.reader)
         self.reader.thumbnail = thumbnail.make_thumbnail(
-            self.reader, channel=self.channel
+            self.reader, channel=self.channel, scale=self.reader.thumbnail_scale
         )
 
     def check_overlaps(self):
@@ -815,12 +816,16 @@ class LayerAligner(object):
 
     def make_thumbnail(self):
         self.reader.thumbnail = thumbnail.make_thumbnail(
-            self.reader, channel=self.channel
+            self.reader,
+            channel=self.channel,
+            scale=self.reference_aligner.reader.thumbnail_scale,
         )
 
     def coarse_align(self):
         self.cycle_offset = thumbnail.calculate_cycle_offset(
-            self.reference_aligner.reader, self.reader
+            self.reference_aligner.reader,
+            self.reader,
+            scale=self.reference_aligner.reader.thumbnail_scale,
         )
         self.corrected_nominal_positions = self.metadata.positions + self.cycle_offset
         reference_positions = self.reference_aligner.metadata.positions
