@@ -64,6 +64,15 @@ def main(argv=sys.argv):
         help='Maximum allowed per-tile corrective shift in microns',
     )
     parser.add_argument(
+        "--stitch-alpha", type=float, default=0.01, metavar="ALPHA",
+        help="Significance level for permutation testing during alignment error"
+        " quantification. Larger values include more tile pairs in the spanning"
+        " tree at the cost of increased false positives."
+    )
+    parser.add_argument(
+        "--maximum-error", type=float, default=None, help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         '--filter-sigma', type=float, default=0, metavar='SIGMA',
         help=('Filter images before alignment using a Gaussian kernel with s.d.'
               ' of SIGMA pixels (default: no filtering)'),
@@ -188,6 +197,8 @@ def main(argv=sys.argv):
     aligner_args['channel'] = args.align_channel
     aligner_args['verbose'] = not args.quiet
     aligner_args['max_shift'] = args.maximum_shift
+    aligner_args["alpha"] = args.stitch_alpha
+    aligner_args["max_error"] = args.maximum_error
     aligner_args['filter_sigma'] = args.filter_sigma
 
     mosaic_args = {}
@@ -237,6 +248,8 @@ def process_single(
     reader = build_reader(filepaths[0], plate_well=plate_well)
     process_axis_flip(reader, flip_x, flip_y)
     ea_args = aligner_args.copy()
+    for arg in ("alpha", "max_error"):
+        aligner_args.pop(arg, None)
     if len(filepaths) == 1:
         ea_args['do_make_thumbnail'] = False
     edge_aligner = reg.EdgeAligner(reader, **ea_args)

@@ -20,9 +20,9 @@ images.
 ashlar [-h] [-o PATH] [-c CHANNEL] [--flip-x] [--flip-y]
        [--flip-mosaic-x] [--flip-mosaic-y]
        [--output-channels CHANNEL [CHANNEL ...]] [-m SHIFT]
-       [--filter-sigma SIGMA] [--tile-size PIXELS]
-       [--ffp FILE [FILE ...]] [--dfp FILE [FILE ...]] [--plates] [-q]
-       [--version]
+       [--stitch-alpha ALPHA] [--filter-sigma SIGMA]
+       [--tile-size PIXELS] [--ffp FILE [FILE ...]]
+       [--dfp FILE [FILE ...]] [--plates] [-q] [--version]
        FILE [FILE ...]
 
 Stitch and align multi-tile cyclic microscope images
@@ -53,6 +53,10 @@ optional arguments:
   -m SHIFT, --maximum-shift SHIFT
                         Maximum allowed per-tile corrective shift in microns
                         (default: 15)
+  --stitch-alpha ALPHA  Significance level for permutation testing during
+                        alignment error quantification. Larger values include
+                        more tile pairs in the spanning tree at the cost of
+                        increased false positives. (default: 0.01)
   --filter-sigma SIGMA  Filter images before alignment using a Gaussian kernel
                         with s.d. of SIGMA pixels (default: no filtering)
   --tile-size PIXELS    Pyramid tile size for OME-TIFF output (default: 1024)

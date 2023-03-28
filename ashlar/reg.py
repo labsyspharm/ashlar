@@ -461,7 +461,7 @@ def neighbors_graph(aligner):
 class EdgeAligner(object):
 
     def __init__(
-        self, reader, channel=0, max_shift=15, false_positive_ratio=0.01,
+        self, reader, channel=0, max_shift=15, alpha=0.01, max_error=None,
         randomize=False, filter_sigma=0.0, do_make_thumbnail=True, verbose=False
     ):
         self.channel = channel
@@ -470,11 +470,13 @@ class EdgeAligner(object):
         # Unit is micrometers.
         self.max_shift = max_shift
         self.max_shift_pixels = self.max_shift / self.metadata.pixel_size
-        self.false_positive_ratio = false_positive_ratio
+        self.alpha = alpha
+        self.max_error = max_error
         self.randomize = randomize
         self.filter_sigma = filter_sigma
         self.do_make_thumbnail = do_make_thumbnail
         self._cache = {}
+        self.errors_negative_sampled = np.empty(0)
 
     neighbors_graph = neighbors_graph
 
@@ -511,6 +513,10 @@ class EdgeAligner(object):
             warn_data("Some neighboring tiles have zero overlap.")
 
     def compute_threshold(self):
+        if self.max_error:
+            if self.verbose:
+                print("    using explicit error threshold")
+            return
         # Compute error threshold for rejecting aligments. We generate a
         # distribution of error scores for many known non-overlapping image
         # regions and take a certain percentile as the maximum allowable error.
@@ -519,7 +525,6 @@ class EdgeAligner(object):
         num_tiles = self.metadata.num_images
         # If not enough tiles overlap to matter, skip this whole thing.
         if len(edges) <= 1:
-            self.errors_negative_sampled = np.empty(0)
             self.max_error = np.inf
             return
         widths = np.array([
@@ -586,7 +591,7 @@ class EdgeAligner(object):
         if self.verbose:
             print()
         self.errors_negative_sampled = errors
-        self.max_error = np.percentile(errors, self.false_positive_ratio * 100)
+        self.max_error = np.percentile(errors, self.alpha * 100)
 
     def register_all(self):
         n = self.neighbors_graph.size()
