@@ -423,7 +423,7 @@ class BarrelCorrectionReader(Reader):
     def read(self, series, c):
         img = self.reader.read(series, c)
         img = transform.barrel_correction(img, self.k)
-        img = skimage.util.img_as_uint(img)
+        img = utils.dtype_convert(img, self.metadata.pixel_dtype)
         return img
 
 
