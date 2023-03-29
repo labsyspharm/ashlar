@@ -157,10 +157,7 @@ def paste(target, img, pos, func=None):
             return
     if np.issubdtype(img.dtype, np.floating):
         np.clip(img, 0, 1, img)
-    # It's safe to silence this FutureWarning as we pinned the skimage version.
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", r".*scikit-image 1\.0", FutureWarning)
-        img = skimage.util.dtype.convert(img, target.dtype)
+    img = dtype_convert(img, target.dtype)
     if func is None:
         target_slice[:] = img
     elif isinstance(func, np.ufunc):
@@ -190,6 +187,19 @@ def crop_like(img, target):
     if (img.shape[1] > target.shape[1]):
         img = img[:, :target.shape[1]]
     return img
+
+
+def dtype_convert(img, dtype):
+    """Convert an image to the requested data-type.
+
+    This is just a wrapper around skimage.util.dtype.convert that silences its
+    FutureWarning, as Ashlar pins skimage to a version before that planned
+    deprecation.
+
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", r".*scikit-image 1\.0", FutureWarning)
+        return skimage.util.dtype.convert(img, dtype)
 
 
 def imsave(fname, arr, **kwargs):
