@@ -1013,13 +1013,15 @@ class Mosaic(object):
 
     def __init__(
         self, aligner, shape, channels=None, ffp_path=None, dfp_path=None,
-        flip_mosaic_x=False, flip_mosaic_y=False, verbose=False
+        flip_mosaic_x=False, flip_mosaic_y=False, barrel_correction=None,
+        verbose=False
     ):
         self.aligner = aligner
         self.shape = tuple(shape)
         self.channels = self._sanitize_channels(channels)
         self.flip_mosaic_x = flip_mosaic_x
         self.flip_mosaic_y = flip_mosaic_y
+        self.barrel_correction = barrel_correction
         self.dtype = aligner.metadata.pixel_dtype
         self._load_correction_profiles(dfp_path, ffp_path)
         self.verbose = verbose
@@ -1084,6 +1086,13 @@ class Mosaic(object):
                     profile_type.capitalize(), profile.shape, img_size
                 )
             )
+
+        if self.barrel_correction:
+            cval = 0 if profile_type == "dark" else 1
+            for cimg in profile:
+                cimg[:] = transform.barrel_correction(
+                    cimg, self.barrel_correction, cval=cval
+                )
 
         return profile
 
