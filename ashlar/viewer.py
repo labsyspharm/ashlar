@@ -110,7 +110,7 @@ def view_edges(
             contrast_limits=(dmin, dmax),
             gamma=gamma,
             blending='additive',
-            interpolation='bilinear',
+            interpolation='linear',
         )
         image.events.contrast_limits.connect(contrast_limits_callback)
         image.events.gamma.connect(gamma_callback)
