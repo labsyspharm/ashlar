@@ -177,7 +177,14 @@ def pastefunc_blend(target, img):
     if dmax == 0:
         alpha = 0
     else:
-        alpha = dist / dist.max()
+        alpha = dist / dmax
+        # Keep target pixel values where img has value 0 (with a 1-pixel
+        # dilation to clean up the edge). This is a temporary hack to support
+        # image corrections that leave regions of zero pixels around the edge of
+        # img, such as barrel correction and rotation.
+        # FIXME Should compute the geometry of the source image mask more
+        # deliberately and precisely.
+        alpha[skimage.morphology.binary_dilation(img == 0)] = 1
     return target * alpha + img * (1 - alpha)
 
 
