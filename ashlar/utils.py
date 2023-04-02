@@ -1,3 +1,4 @@
+import functools
 import itertools
 import warnings
 import skimage
@@ -17,9 +18,23 @@ def whiten(img, sigma):
     return output
 
 
+@functools.lru_cache
+def get_window(shape):
+    # Build a 2D Hann window by taking the outer product of two 1-D windows.
+    wy = np.hanning(shape[0]).astype(np.float32)
+    wx = np.hanning(shape[1]).astype(np.float32)
+    window = np.outer(wy, wx)
+    return window
+
+
+def window(img):
+    assert img.ndim == 2
+    return img * get_window(img.shape)
+
+
 def register(img1, img2, sigma, upsample=10):
-    img1w = whiten(img1, sigma)
-    img2w = whiten(img2, sigma)
+    img1w = window(whiten(img1, sigma))
+    img2w = window(whiten(img2, sigma))
     shift = skimage.registration.phase_cross_correlation(
         img1w,
         img2w,
@@ -177,7 +192,14 @@ def pastefunc_blend(target, img):
     if dmax == 0:
         alpha = 0
     else:
-        alpha = dist / dist.max()
+        alpha = dist / dmax
+        # Keep target pixel values where img has value 0 (with a 1-pixel
+        # dilation to clean up the edge). This is a temporary hack to support
+        # image corrections that leave regions of zero pixels around the edge of
+        # img, such as barrel correction and rotation.
+        # FIXME Should compute the geometry of the source image mask more
+        # deliberately and precisely.
+        alpha[skimage.morphology.binary_dilation(img == 0)] = 1
     return target * alpha + img * (1 - alpha)
 
 

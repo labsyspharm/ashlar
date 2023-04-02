@@ -773,8 +773,8 @@ class EdgeAligner(object):
     def debug(self, t1, t2, min_size=0):
         shift, _ = self._register(t1, t2, min_size)
         its, o1, o2 = self.overlap(t1, t2, min_size)
-        w1 = utils.whiten(o1, self.filter_sigma)
-        w2 = utils.whiten(o2, self.filter_sigma)
+        w1 = utils.window(utils.whiten(o1, self.filter_sigma))
+        w2 = utils.window(utils.whiten(o2, self.filter_sigma))
         corr = scipy.fft.fftshift(np.abs(scipy.fft.ifft2(
             scipy.fft.fft2(w1) * scipy.fft.fft2(w2).conj()
         )))
@@ -962,8 +962,8 @@ class LayerAligner(object):
     def debug(self, t):
         shift, _ = self.register(t)
         its, o1, o2 = self.overlap(t)
-        w1 = utils.whiten(o1, self.filter_sigma)
-        w2 = utils.whiten(o2, self.filter_sigma)
+        w1 = utils.window(utils.whiten(o1, self.filter_sigma))
+        w2 = utils.window(utils.whiten(o2, self.filter_sigma))
         corr = scipy.fft.fftshift(np.abs(scipy.fft.ifft2(
             scipy.fft.fft2(w1) * scipy.fft.fft2(w2).conj()
         )))
