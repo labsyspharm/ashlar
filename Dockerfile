@@ -3,7 +3,6 @@ FROM ubuntu:22.04
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
         build-essential \
-        ffmpeg \
         git \
         openjdk-11-jdk-headless \
         python3-dev \
@@ -13,6 +12,7 @@ RUN apt-get update \
 
 RUN pip3 install -q -U \
     numpy \
+    numcodecs \
     pip
 
 COPY / /app/ashlar/
