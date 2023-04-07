@@ -532,7 +532,7 @@ class EdgeAligner(object):
             warn_data("Some neighboring tiles have zero overlap.")
 
     def compute_threshold(self):
-        if self.max_error:
+        if self.max_error is not None:
             if self.verbose:
                 print("    using explicit error threshold")
             return
@@ -674,9 +674,18 @@ class EdgeAligner(object):
         cc0 = list(components[0])
         self.lr = sklearn.linear_model.LinearRegression()
         self.lr.fit(self.metadata.positions[cc0], self.positions[cc0])
-        # Fix up degenerate transform matrix (e.g. when we have only one tile).
-        if (self.lr.coef_ == 0).all():
+        # Fix up degenerate transform matrix. This happens when the spanning
+        # tree is completely edgeless or cc0's metadata positions fall in a
+        # straight line. In this case we fall back to the identity transform.
+        if np.linalg.det(self.lr.coef_) < 1e-3:
+            # FIXME We should probably exit here, not just warn. We may provide
+            # an option to force it anyway.
+            warn_data(
+                "Could not align enough edges, proceeding anyway with original"
+                " stage positions."
+            )
             self.lr.coef_ = np.diag(np.ones(2))
+            self.lr.intercept_ = np.zeros(2)
         # Adjust position of remaining components so their centroids match
         # the predictions of the model.
         for cc in components[1:]:
