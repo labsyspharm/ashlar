@@ -17,6 +17,8 @@ def format_to_regex(s):
     # Translate a restricted subset of the "format" pattern language to
     # a matching regex with named capture.
     s = s.replace('.', '\.')
+    s = s.replace('(', '\(')
+    s = s.replace(')', '\)')
     regex = re.sub(r'{([^:}]+):?([^}]*)}', f2r_repl, s)
     return regex
 
