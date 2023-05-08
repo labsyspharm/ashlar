@@ -33,10 +33,10 @@ ASHLAR directly reads image formats that are compatible with most commercial mic
 ASHLAR is written in Python and is available under the MIT License. It can be downloaded at: [https://github.com/labsyspharm/ashlar](https://github.com/labsyspharm/ashlar).
 
 ## Integrated into the Multiple Choice Microscopy Pipeline
-For more information about the MCMICRO pipeline for processing multi-channel images into single cell data, see [mcmicro.org](mcmicro.org).
+For more information about the MCMICRO pipeline for processing multi-channel images into single cell data, see [mcmicro.org](mcmicro.org){:target="_blank"}.
 
 
-**For more details, read the pre-print manuscript here: [https://doi.org/10.1101/2021.04.20.440625](https://doi.org/10.1101/2021.04.20.440625).**
+**For more details, read the manuscript in _Bioinformatics_: [https://doi.org/10.1093/bioinformatics/btac544](https://doi.org/10.1093/bioinformatics/btac544){:target="_blank"}.**
 
 
 
