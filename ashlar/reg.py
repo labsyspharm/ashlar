@@ -226,6 +226,7 @@ class BioformatsMetadata(PlateMetadata):
         metadata = service.createOMEXMLMetadata()
         self._reader = ChannelSeparator()
         self._reader.setMetadataStore(metadata)
+        self._reader.setFlattenedResolutions(False)
         # For multi-scene .CZI files, we need raw tiles instead of the
         # auto-stitched mosaic and we don't want labels or overview images
         options = DynamicMetadataOptions()
