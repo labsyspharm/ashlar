@@ -992,7 +992,7 @@ class LayerAligner(object):
         plt.plot(origin[1], origin[0], 'r+')
         shift += origin - its.offset_diff_frac
         plt.plot(shift[1], shift[0], 'rx')
-        plt.tight_layout(0, 0, 0)
+        plt.tight_layout()
 
 
 class Intersection(object):
