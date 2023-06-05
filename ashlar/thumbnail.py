@@ -1,9 +1,8 @@
 import sys
 import pathlib
 import numpy as np
-import scipy.ndimage
 from . import utils
-from skimage.transform import rescale
+from skimage.transform import rescale, rotate, AffineTransform
 from skimage.registration import phase_cross_correlation
 import tifffile
 
@@ -54,7 +53,7 @@ def calculate_image_offset(img1, img2, upsample_factor=1):
     return shift
 
 
-def align_cycles(reader1, reader2, scale=0.05):
+def align_cycles(reader1, reader2, scale=0.05, angle=None):
     if not hasattr(reader1, 'thumbnail'):
         raise ValueError('reader1 does not have a thumbnail')
     if not hasattr(reader2, 'thumbnail'):
@@ -68,14 +67,36 @@ def align_cycles(reader1, reader2, scale=0.05):
         utils.paste(padded_img2, img2, [0, 0])
         img1 = padded_img1
         img2 = padded_img2
-    angle = utils.register_angle(img1, img2, sigma=1)
+    if angle is None:
+        angle = utils.register_angle(img1, img2, sigma=0)
+        print(f'\r    estimated cycle rotation = {angle:.4f} degrees')
     if angle != 0:
-        print(f'\r    estimated cycle rotation = {angle:.2f} degrees')
-        img2 = scipy.ndimage.rotate(img2, angle, reshape=False)
-    offset = calculate_image_offset(img1, img2, int(1 / scale)) / scale
-    offset -= (reader2.metadata.origin - reader1.metadata.origin)
+        img2 = rotate(img2, angle, resize=False, center=(0, 0))
+    shifts = calculate_image_offset(img1, img2, int(1 / scale))
+    print(f'\r    estimated shift {shifts / scale}')
+    tform_steps = [
+        ('translation', -reader2.metadata.origin[::-1]),
+        ('scale', scale),
+        ('rotation', np.deg2rad(-angle)),
+        ('translation', shifts[::-1]),
+        ('scale', 1/scale),
+        ('translation', reader1.metadata.origin[::-1])
+    ]
+    tform = AffineTransform()
+    for step in tform_steps:
+        tform += AffineTransform(
+            **{step[0]: step[1]}
+        )
+
+    return tform
+
+
+def calculate_cycle_offset(reader1, reader2, scale=0.05):
+    tform = align_cycles(reader1, reader2, scale, angle=0)
+    offset = reader1.metadata.origin - reader2.metadata.origin
+    offset += tform.translation[::-1]
     print(f'\r    estimated cycle offset [y x] = {offset}')
-    return offset, angle
+    return offset
 
 
 def _save_as_tif(img, file_path, post_fix=''):

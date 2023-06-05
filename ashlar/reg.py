@@ -849,6 +849,7 @@ class LayerAligner(object):
         self.calculate_positions()
 
     def make_thumbnail(self):
+        self.reader.thumbnail_scale = self.reference_aligner.reader.thumbnail_scale
         self.reader.thumbnail = thumbnail.make_thumbnail(
             self.reader,
             channel=self.channel,
