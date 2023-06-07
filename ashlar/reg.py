@@ -1165,7 +1165,8 @@ class Mosaic(object):
 class PyramidWriter:
 
     def __init__(
-        self, mosaics, path, scale=2, tile_size=1024, peak_size=1024, verbose=False
+        self, mosaics, path, scale=2, tile_size=1024, peak_size=1024,
+        parallel_assemble=True, verbose=False
     ):
         if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
             raise ValueError("mosaics must all have the same shape")
@@ -1176,6 +1177,7 @@ class PyramidWriter:
         self.scale = scale
         self.tile_size = tile_size
         self.peak_size = peak_size
+        self.parallel_assemble = parallel_assemble
         self.verbose = verbose
 
     @property
@@ -1222,16 +1224,46 @@ class PyramidWriter:
         ]
         return tile_shapes
 
+    def assemble_all(self):
+        import joblib
+        self.cache_path = f"{pathlib.Path(self.path)}.zarr"
+        root = zarr.open(self.cache_path, mode='w')
+
+        tasks = []
+        root.create_groups(*range(len(self.mosaics)))
+        for mi, mosaic in enumerate(self.mosaics):
+            for channel in mosaic.channels:
+                root[mi].zeros(
+                    channel,
+                    shape=self.base_shape,
+                    dtype=self.ref_mosaic.aligner.metadata.pixel_dtype,
+                    chunks=self.tile_shapes[0]
+                )
+                tasks.append(
+                    (mosaic.assemble_channel, channel, root[mi][channel])
+                )
+        n_jobs = min(len(tasks), joblib.cpu_count())
+        _ = joblib.Parallel(n_jobs=n_jobs, verbose=1)(
+            joblib.delayed(m_func)(channel, out=out_zarr)
+            for m_func, channel, out_zarr in tasks
+        )
+        self.mosaics_zarr = root
+
     def base_tiles(self):
         h, w = self.base_shape
         th, tw = self.tile_shapes[0]
         for mi, mosaic in enumerate(self.mosaics):
             if self.verbose:
                 print(f"Cycle {mi}:")
-            for ci, channel in enumerate(mosaic.channels):
+            for channel in mosaic.channels:
                 if self.verbose:
                     print(f"    Channel {channel}:")
-                img = mosaic.assemble_channel(channel)
+                if self.parallel_assemble:
+                    img = self.mosaics_zarr[mi][channel]
+                    if self.verbose:
+                        print("        Reading from zarr")
+                else:
+                    img = mosaic.assemble_channel(channel)
                 for y in range(0, h, th):
                     for x in range(0, w, tw):
                         # Returning a copy makes the array contiguous, avoiding
@@ -1267,6 +1299,8 @@ class PyramidWriter:
                     yield a
 
     def run(self):
+        if self.parallel_assemble and (not hasattr(self, 'mosaics_zarr')):
+            self.assemble_all()
         dtype = self.ref_mosaic.aligner.metadata.pixel_dtype
         pixel_size = self.ref_mosaic.aligner.metadata.pixel_size
         resolution_cm = 10000 / pixel_size
@@ -1311,6 +1345,8 @@ class PyramidWriter:
                 )
                 if self.verbose:
                     print()
+        if self.parallel_assemble:
+            self.mosaics_zarr.store.rmdir()
 
 
 class TiffListWriter:
