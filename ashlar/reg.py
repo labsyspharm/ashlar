@@ -1508,12 +1508,13 @@ def plot_edge_scatter(aligner, annotate=True):
     g = sns.JointGrid(x=xdata, y=ydata)
     g.plot_joint(sns.scatterplot, alpha=0.5)
     _, xbins = np.histogram(np.hstack([xdata, pdata]), bins=40)
-    sns.distplot(
-        xdata, ax=g.ax_marg_x, kde=False, bins=xbins, norm_hist=True
+    sns.histplot(
+        xdata, ax=g.ax_marg_x, kde=False, bins=xbins, stat='density',
+        element='step'
     )
-    sns.distplot(
-        pdata, ax=g.ax_marg_x, kde=False, bins=xbins, norm_hist=True,
-        hist_kws=dict(histtype='step')
+    sns.histplot(
+        pdata, ax=g.ax_marg_x, kde=False, bins=xbins, stat='density',
+        element='step', fill=False, color='orange'
     )
     g.ax_joint.axvline(aligner.max_error, c='k', ls=':')
     g.ax_joint.axhline(aligner.max_shift_pixels, c='k', ls=':')
