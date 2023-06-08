@@ -18,6 +18,10 @@ requires = [
     'tifffile>=2023.3.15',
     'zarr>=2.11.3',
     'blessed>=1.17',
+    'tqdm>=4.63.0',
+    'fire==0.5.0',
+    'seaborn>=0.12.0',
+    'opencv-python>=4.6.0'
 ]
 
 
@@ -108,7 +112,8 @@ setup(
         'console_scripts': [
             'ashlar=ashlar.scripts.ashlar:main',
             'preview_slide=ashlar.scripts.preview_slide:main',
-            'make_alignment_movie=ashlar.scripts.make_alignment_movie:main'
+            'make_alignment_movie=ashlar.scripts.make_alignment_movie:main',
+            'rcashlar=ashlar.rc.run:main'
         ]
     },
     classifiers=[
