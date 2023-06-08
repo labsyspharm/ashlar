@@ -1,6 +1,8 @@
 import json
 import pathlib
 import pickle
+import sys
+from typing import Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,9 +12,14 @@ from . import align_cycles, subtract_pyramid
 
 
 def stitch(
-    path, raw_endwith='pysed.ome.tif',
-    channel=0, max_shift=15, alpha=0.01, max_error=None,
-    filter_sigma=1.0, is_cli=True
+    path: str | pathlib.Path,
+    raw_endwith: str = 'pysed.ome.tif',
+    channel: int = 0,
+    max_shift: float = 15,
+    alpha: float = 0.01,
+    max_error: float | None = None,
+    filter_sigma: float = 1.0,
+    is_cli: bool = True
 ):
     path = pathlib.Path(path)
     raws = sorted(path.glob(f"*{raw_endwith}"))
@@ -59,9 +66,14 @@ def stitch(
 
 
 def register(
-    ref_path, moving_path, raw_endwith='pysed.ome.tif',
-    channel1=None, channel2=None,
-    max_shift=15, filter_sigma=0.0, is_cli=True
+    ref_path: str | pathlib.Path,
+    moving_path: str | pathlib.Path,
+    raw_endwith: str = 'pysed.ome.tif',
+    channel_ref: int | None = None,
+    channel_moving: int | None = None,
+    max_shift: float = 15,
+    filter_sigma: float = 1.0,
+    is_cli: bool = True
 ):
     ref_path, moving_path = pathlib.Path(ref_path), pathlib.Path(moving_path)
     c1e = _load_ashlar_pkl(ref_path)
@@ -76,8 +88,8 @@ def register(
             f"Consider using {ref_edgealigner_path} as reference instead.\n"
         )
         c1e.lr = c1e.reference_aligner.lr
-    if channel1 is not None:
-        c1e.channel = channel1
+    if channel_ref is not None:
+        c1e.channel = channel_ref
 
     raws = sorted(moving_path.glob(f"*{raw_endwith}"))
     assert len(raws) == 1
@@ -91,7 +103,7 @@ def register(
         c2r.metadata._positions *= [-1, 1]
     c21l = align_cycles.process_rotated_reader(
         c2r, c1e,
-        channel=channel2, max_shift=max_shift,
+        channel=channel_moving, max_shift=max_shift,
         filter_sigma=filter_sigma
     )
 
@@ -112,7 +124,11 @@ def register(
     return c21l
 
 
-def assemble(path, channels=None, is_cli=True):
+def assemble(
+    path: str | pathlib.Path,
+    channels: list[int] | None = None,
+    is_cli: bool = True
+):
     path = pathlib.Path(path)
     aligner = _load_ashlar_pkl(path)
     out_path = path / f"{aligner.from_pickle.stem}.ome.tif"
@@ -211,3 +227,5 @@ def main():
     })
 
 
+if __name__ == '__main__':
+    sys.exit(main())
