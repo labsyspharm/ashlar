@@ -35,7 +35,7 @@ class SubtractPyramid(reg.PyramidWriter):
         
         if bg_intensity_scaling_factor is None:
             self.bg_intensity_scaling_factor = np.ones(self.num_channels)
-        assert len(self.bg_intensity_scaling_factor) == len(self.num_channels)
+        assert len(self.bg_intensity_scaling_factor) == self.num_channels
     
     def assemble_all_channels(self):
         self.cache_path = f"{pathlib.Path(self.path)}.zarr"
