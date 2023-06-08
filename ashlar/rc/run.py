@@ -142,27 +142,34 @@ def assemble(
 
 
 def subtract(
-        bg_path, ab_path,
-        fiducial_channel=0, as_float=False, is_cli=True
-    ):
+    bg_path: str | pathlib.Path,
+    ab_path: str | pathlib.Path,
+    fiducial_channel: int = 0,
+    bg_intensity_scaling_factor: str | Iterable[int] | None = 'rcjob',
+    as_float: bool = False,
+    is_cli: bool = True
+):
     bg_path, ab_path = pathlib.Path(bg_path), pathlib.Path(ab_path)
     bg_aligner = _load_ashlar_pkl(bg_path)
     ab_aligner = _load_ashlar_pkl(ab_path)
     
-    mosaic_pair = [
+    bg_mosaic, ab_mosaic = [
         reg.Mosaic(aligner, bg_aligner.mosaic_shape, verbose=False)
         for aligner in (bg_aligner, ab_aligner)
     ]
 
     out_path = ''
     out_path = ab_path / f"{ab_aligner.from_pickle.stem}-subtracted.ome.tif"
-    scaling_factors = _exposure_time_factor(bg_path, ab_path)
+    
+    if type(bg_intensity_scaling_factor) == str:
+        assert bg_intensity_scaling_factor == 'rcjob'
+        bg_intensity_scaling_factor = _exposure_time_factor(bg_path, ab_path)
 
     sp = subtract_pyramid.SubtractPyramid(
-        mosaic_pair,
+        bg_mosaic, ab_mosaic,
         str(out_path),
         verbose=True,
-        scaling_factors=scaling_factors,
+        bg_intensity_scaling_factor=bg_intensity_scaling_factor,
         fiducial_channel=fiducial_channel,
         as_float=as_float
     )
