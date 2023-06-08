@@ -66,6 +66,16 @@ def register(
     ref_path, moving_path = pathlib.Path(ref_path), pathlib.Path(moving_path)
     c1e = _load_ashlar_pkl(ref_path)
     
+    if issubclass(type(c1e), reg.LayerAligner):
+        ref_edgealigner_path = c1e.reference_aligner.reader.reader.path
+        ref_edgealigner_path = pathlib.Path(ref_edgealigner_path).parent
+        reg.warn_data(
+            "\n\n"
+            f"Image in {ref_path} was aligned to {ref_edgealigner_path}.\n"
+            f"Using {ref_path} as reference propogates errors.\n"
+            f"Consider using {ref_edgealigner_path} as reference instead.\n"
+        )
+        c1e.lr = c1e.reference_aligner.lr
     if channel1 is not None:
         c1e.channel = channel1
 
