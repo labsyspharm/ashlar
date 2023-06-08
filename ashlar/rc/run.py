@@ -12,7 +12,7 @@ from . import align_cycles, subtract_pyramid
 def stitch(
     path, raw_endwith='pysed.ome.tif',
     channel=0, max_shift=15, alpha=0.01, max_error=None,
-    filter_sigma=1.0, is_cli=False
+    filter_sigma=1.0, is_cli=True
 ):
     path = pathlib.Path(path)
     raws = sorted(path.glob(f"*{raw_endwith}"))
@@ -61,7 +61,7 @@ def stitch(
 def register(
     ref_path, moving_path, raw_endwith='pysed.ome.tif',
     channel1=None, channel2=None,
-    max_shift=15, filter_sigma=0.0, is_cli=False
+    max_shift=15, filter_sigma=0.0, is_cli=True
 ):
     ref_path, moving_path = pathlib.Path(ref_path), pathlib.Path(moving_path)
     c1e = _load_ashlar_pkl(ref_path)
@@ -87,7 +87,7 @@ def register(
 
     reg.plot_layer_quality(c21l, img=c21l.reader.thumbnail)
     fig = plt.gcf()
-    fig.suptitle(raw.name, y=.90, va='top')
+    fig.suptitle(raw.name)
     fig.set_size_inches(fig.get_size_inches()*2)    
     fig.tight_layout()
     fig.savefig(moving_path / f"{raw.stem}.ashlarqc.pdf", bbox_inches='tight')
@@ -102,7 +102,7 @@ def register(
     return c21l
 
 
-def assemble(path, channels=None, is_cli=False):
+def assemble(path, channels=None, is_cli=True):
     path = pathlib.Path(path)
     aligner = _load_ashlar_pkl(path)
     out_path = path / f"{aligner.from_pickle.stem}.ome.tif"
@@ -117,7 +117,7 @@ def assemble(path, channels=None, is_cli=False):
 
 def subtract(
         bg_path, ab_path,
-        fiducial_channel=0, as_float=False, is_cli=False
+        fiducial_channel=0, as_float=False, is_cli=True
     ):
     bg_path, ab_path = pathlib.Path(bg_path), pathlib.Path(ab_path)
     bg_aligner = _load_ashlar_pkl(bg_path)
@@ -193,12 +193,11 @@ def _exposure_time_rcjob(path):
 
 def main():
     import fire
-    import functools
     fire.Fire({
-        'stitch': functools.partial(stitch, is_cli=True),
-        'register': functools.partial(register, is_cli=True),
-        'assemble': functools.partial(assemble, is_cli=True),
-        'subtract': functools.partial(subtract, is_cli=True)
+        'stitch': stitch,
+        'register': register,
+        'assemble': assemble,
+        'subtract': subtract
     })
 
 
