@@ -2,13 +2,14 @@ import numpy as np
 import skimage.io
 import skimage.transform
 
-from .. import reg
+from .. import reg, transform, utils
 
 
 class PreprocBioformatsReader(reg.BioformatsReader):
     def __init__(
         self, path, plate=None, well=None,
         flip_x=False, flip_y=False, angle=0,
+        barrel_k=0,
         center_crop_shape=None,
         flip_pos_x=False, flip_pos_y=False
     ):
@@ -16,6 +17,7 @@ class PreprocBioformatsReader(reg.BioformatsReader):
         self.flip_x = flip_x
         self.flip_y = flip_y
         self.angle = angle
+        self.barrek_k = barrel_k
         self.center_crop_shape = center_crop_shape
 
         _ = self.metadata.positions
@@ -33,6 +35,9 @@ class PreprocBioformatsReader(reg.BioformatsReader):
     
     def read(self, series, c):
         img = super().read(series=series, c=c)
+        if self.barrek_k != 0:
+            img = transform.barrel_correction(img, self.barrek_k)
+            img = utils.dtype_convert(img, self.metadata.pixel_dtype)
         if self.flip_x:
             img = np.fliplr(img)
         if self.flip_y:
