@@ -93,8 +93,7 @@ def align_cycles(reader1, reader2, scale=0.05, angle=None):
 
 def calculate_cycle_offset(reader1, reader2, scale=0.05):
     tform = align_cycles(reader1, reader2, scale, angle=0)
-    offset = reader1.metadata.origin - reader2.metadata.origin
-    offset += tform.translation[::-1]
+    offset = tform.translation[::-1]
     print(f'\r    estimated cycle offset [y x] = {offset}')
     return offset
 
