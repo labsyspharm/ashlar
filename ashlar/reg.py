@@ -1564,8 +1564,12 @@ def plot_layer_quality(
         ]
 
     # Bounding boxes denoting new tile positions.
+    ales = aligner.errors
+    errors = np.clip(
+        ales, 0, np.nanmax(ales[np.isfinite(ales)]) + 2
+    )
     color_index = skimage.exposure.rescale_intensity(
-        aligner.errors, out_range=np.uint8
+        errors, out_range=np.uint8
     ).astype(np.uint8)
     color_map = mcm.magma_r
     for xy, c_idx in zip(np.fliplr(positions), color_index):
