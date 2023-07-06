@@ -70,7 +70,18 @@ def nccw(img1, img2, sigma):
     correlation = np.abs(np.sum(img1w * img2w))
     total_amplitude = np.linalg.norm(img1w) * np.linalg.norm(img2w)
     if correlation > 0 and total_amplitude > 0:
-        error = -np.log(correlation / total_amplitude)
+        diff = correlation - total_amplitude
+        if diff <= 0:
+            error = -np.log(correlation / total_amplitude)
+        elif diff < 1e-5:
+            # This situation can occur due to numerical precision issues when
+            # img1 and img2 are very nearly or exactly identical. If the
+            # difference is small enough, let it slide.
+            error = 0
+        else:
+            raise RuntimeError(
+                f"correlation > total_amplitude (diff={diff})"
+            )
     else:
         error = np.inf
     return error
