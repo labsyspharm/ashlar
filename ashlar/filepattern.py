@@ -1,8 +1,10 @@
+import itertools
 import re
+import os
 import pathlib
 import numpy as np
-import skimage.io
 from . import reg
+
 from .fileseries import _read
 
 
@@ -28,6 +30,18 @@ class FilePatternMetadata(reg.Metadata):
         self._pixel_size = pixel_size
         self._enumerate_tiles()
 
+    def _find_first_tile(self, rows, cols):
+        # find the first tile that exists (for non-rectangular patterns)
+
+        for r, c in itertools.product(rows, cols):
+            path = self.path / self.pattern.format(
+                row=r, col=c,
+                channel=self.channel_map[0]
+            )
+            if os.path.exists(path):
+                return path
+        raise ValueError('No tiles found')
+
     def _enumerate_tiles(self):
         # Translate a restricted subset of the "format" pattern language to
         # a matching regex with named capture.
@@ -47,18 +61,22 @@ class FilePatternMetadata(reg.Metadata):
                 cols.add(int(gd['col']))
                 channels.add(gd.get('channel'))
                 n += 1
-        if n != len(rows) * len(cols) * len(channels):
-            raise Exception("Tiles do not form a full rectangular grid")
+
         self._actual_num_images = len(rows) * len(cols)
         self.channel_map = dict(enumerate(sorted(channels)))
         self.height = len(rows)
         self.width = len(cols)
         self.row_offset = min(rows)
         self.col_offset = min(cols)
+
         path = self.path / self.pattern.format(
             row=self.row_offset, col=self.col_offset,
             channel=self.channel_map[0]
         )
+        if not os.path.exists(path):
+            path = self._find_first_tile(rows, cols)
+
+
         img = _read(path)
         if img.ndim not in (2, 3):
             raise Exception(f"Image must have 2 or 3 dimensions: {path}")
@@ -114,8 +132,9 @@ class FilePatternReader(reg.Reader):
     def read(self, series, c):
         path = self.path / self.filename(series, c)
         channel = c if self.metadata.multi_channel_tiles else 0
-        img = _read(path, channel)
-        return img
+        if os.path.exists(path):
+            return _read(path, channel)
+        return np.zeros(self.metadata._tile_size, dtype=self.metadata._dtype)
 
     def filename(self, series, c):
         row, col = self.metadata.tile_rc(series)
