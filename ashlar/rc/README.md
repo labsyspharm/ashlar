@@ -17,7 +17,7 @@ Activate the conda environment and pip install aslar from GitHub:
 
 ```bash
 conda activate rcashlar
-python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@dd08fadaf19bf7300a6b5d162e0fb32c4212a2dc"
+python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@573818b6a793a7eb82adadcbd59171a3f25a4420"
 ```
 
 ## Workflow
@@ -42,6 +42,13 @@ python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@dd08fada
             - 1 pyramidal image in the second folder (`.ashlar-subtracted.ome.tif`)
 
 ## Example scenario and commands
+
+NOTE: The following commands are executed in the `rcashlar` conda environment,
+which can be activated by running
+
+```bash
+conda activate rcashlar
+```
 
 1. Slide being imaged for the first time, this scan serves as a reference, and all the
    successive scans will be registered to it.
