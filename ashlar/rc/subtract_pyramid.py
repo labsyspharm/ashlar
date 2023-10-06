@@ -3,7 +3,7 @@ import pathlib
 import numpy as np
 import tifffile
 import zarr
-from joblib import Parallel, delayed
+import joblib
 
 from .. import _version, reg
 
@@ -41,7 +41,7 @@ class SubtractPyramid(reg.PyramidWriter):
         self.cache_path = f"{pathlib.Path(self.path)}.zarr"
         root = zarr.open(self.cache_path, mode='w')
         root.create_groups('ab_mosaic', 'bg_mosaic')
-        to_assemble = []
+        tasks = []
         for channel in self.channels:
             root['ab_mosaic'].zeros(
                 channel, 
@@ -55,13 +55,14 @@ class SubtractPyramid(reg.PyramidWriter):
                 dtype=self.bg_mosaic.dtype,
                 chunks=(1024, 1024)
             )
-            to_assemble.append((self.ab_mosaic.assemble_channel, channel, root['ab_mosaic'][channel]))
+            tasks.append((self.ab_mosaic.assemble_channel, channel, root['ab_mosaic'][channel]))
             if channel != self.fiducial_channel:
-                to_assemble.append((self.bg_mosaic.assemble_channel, channel, root['bg_mosaic'][channel]))
-
-        Parallel(n_jobs=len(to_assemble), verbose=1)(
-            delayed(m_func)(channel, out=out_zarr)
-            for m_func, channel, out_zarr in to_assemble
+                tasks.append((self.bg_mosaic.assemble_channel, channel, root['bg_mosaic'][channel]))
+        n_jobs = min(len(tasks), joblib.cpu_count())
+        verboses = [True] + [False] * (len(tasks) - 1)
+        _ = joblib.Parallel(n_jobs=n_jobs, verbose=0)(
+            joblib.delayed(m_func)(channel, out=out_zarr, verbose=v)
+            for (m_func, channel, out_zarr), v in zip(tasks, verboses)
         )
         self.mosaics_zarr = root
 

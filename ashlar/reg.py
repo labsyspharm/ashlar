@@ -1120,7 +1120,9 @@ class Mosaic(object):
             self.dfp /= np.iinfo(self.dtype).max
             self.do_correction = True
 
-    def assemble_channel(self, channel, out=None):
+    def assemble_channel(self, channel, out=None, verbose=None):
+        if verbose is None:
+            verbose = self.verbose
         num_tiles = len(self.aligner.positions)
         if out is None:
             out = np.zeros(self.shape, self.dtype)
@@ -1131,7 +1133,7 @@ class Mosaic(object):
                     f" shape {self.shape}"
                 )
         for si, position in enumerate(self.aligner.positions):
-            if self.verbose:
+            if verbose:
                 sys.stdout.write(f"\r        merging tile {si + 1}/{num_tiles}")
                 sys.stdout.flush()
             
@@ -1149,7 +1151,7 @@ class Mosaic(object):
         if self.flip_mosaic_y:
             for i in range(len(out) // 2):
                 out[[i, -i-1]] = out[[-i-1, i]]
-        if self.verbose:
+        if verbose:
             print()
         return out
 
@@ -1243,9 +1245,10 @@ class PyramidWriter:
                     (mosaic.assemble_channel, channel, root[mi][channel])
                 )
         n_jobs = min(len(tasks), joblib.cpu_count())
-        _ = joblib.Parallel(n_jobs=n_jobs, verbose=1)(
-            joblib.delayed(m_func)(channel, out=out_zarr)
-            for m_func, channel, out_zarr in tasks
+        verboses = [True] + [False] * (len(tasks) - 1)
+        _ = joblib.Parallel(n_jobs=n_jobs, verbose=0)(
+            joblib.delayed(m_func)(channel, out=out_zarr, verbose=v)
+            for (m_func, channel, out_zarr), v in zip(tasks, verboses)
         )
         self.mosaics_zarr = root
 
