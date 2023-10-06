@@ -21,7 +21,7 @@ def stitch(
     filter_sigma: float = 1.0,
     is_cli: bool = True
 ):
-    path = pathlib.Path(path)
+    path = pathlib.Path(path).absolute()
     raws = sorted(path.glob(f"*{raw_endwith}"))
     assert len(raws) == 1
     raw = raws[0]
@@ -75,7 +75,8 @@ def register(
     filter_sigma: float = 1.0,
     is_cli: bool = True
 ):
-    ref_path, moving_path = pathlib.Path(ref_path), pathlib.Path(moving_path)
+    ref_path = pathlib.Path(ref_path).absolute()
+    moving_path = pathlib.Path(moving_path).absolute()
     c1e = _load_ashlar_pkl(ref_path)
     
     if issubclass(type(c1e), reg.LayerAligner):
@@ -129,7 +130,7 @@ def assemble(
     channels: list[int] | None = None,
     is_cli: bool = True
 ):
-    path = pathlib.Path(path)
+    path = pathlib.Path(path).absolute()
     aligner = _load_ashlar_pkl(path)
     out_path = path / f"{aligner.from_pickle.stem}.ome.tif"
     
@@ -149,7 +150,8 @@ def subtract(
     as_float: bool = False,
     is_cli: bool = True
 ):
-    bg_path, ab_path = pathlib.Path(bg_path), pathlib.Path(ab_path)
+    bg_path = pathlib.Path(bg_path).absolute()
+    ab_path = pathlib.Path(ab_path).absolute()
     bg_aligner = _load_ashlar_pkl(bg_path)
     ab_aligner = _load_ashlar_pkl(ab_path)
     
@@ -158,7 +160,6 @@ def subtract(
         for aligner in (bg_aligner, ab_aligner)
     ]
 
-    out_path = ''
     out_path = ab_path / f"{ab_aligner.from_pickle.stem}-subtracted.ome.tif"
     
     if type(bg_intensity_scaling_factor) == str:
