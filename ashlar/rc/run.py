@@ -225,12 +225,17 @@ def _exposure_time_rcjob(path):
 
 
 def main():
+    combine_cycles = None
+    if sys.argv[1] == 'combine':
+        from .combine import combine_cycles
+
     import fire
     fire.Fire({
         'stitch': stitch,
         'register': register,
         'assemble': assemble,
-        'subtract': subtract
+        'subtract': subtract,
+        'combine': combine_cycles
     })
 
 

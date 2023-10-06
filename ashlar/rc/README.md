@@ -17,7 +17,7 @@ Activate the conda environment and pip install aslar from GitHub:
 
 ```bash
 conda activate rcashlar
-python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@573818b6a793a7eb82adadcbd59171a3f25a4420"
+python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2023-10-1"
 ```
 
 ## Workflow
@@ -40,6 +40,55 @@ python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@573818b6
         - `subtract` the first mosaic (background/autofluorescence image) from
           the second mosaic (antibody image), will generate
             - 1 pyramidal image in the second folder (`.ashlar-subtracted.ome.tif`)
+
+3. (Optional) Combine multiple ome-tiff into one single ome-tiff
+
+    ```bash
+    NAME
+        rcashlar combine
+
+    SYNOPSIS
+        rcashlar combine <flags>
+
+    FLAGS
+        --input_dir=INPUT_DIR
+            Type: str | pathlib.Path
+            Default: '.'
+        -g, --glob_file_pattern=GLOB_FILE_PATTERN
+            Type: str
+            Default: '*/*.ashlar*.ome.tif'
+        --output_path=OUTPUT_PATH
+            Type: Optional[str | pathlib.Path]
+            Default: None
+        --input_files=INPUT_FILES
+            Type: Optional[list]
+            Default: None
+        --dna_filename=DNA_FILENAME
+            Type: Optional[str]
+            Default: None
+        --dna_channel_number=DNA_CHANNEL_NUMBER
+            Type: int
+            Default: 0
+        --overwrite=OVERWRITE
+            Type: bool
+            Default: False
+    ```
+
+    __Parameter details:__
+    - Use `--input_dir` and `--glob_file_pattern` to search and sort
+      automatically in lexicographical order.
+    - If `--output_path` is not provided, the default output path is
+      `{input-dir}/{name-of-input-dir}-combined.ome.tif`
+    - Use `--input_files` to customize files and file ordering to combine. In
+      the format of
+
+      ```bash
+      --input_files [r"path/to/file1.ome.tif", r"path/to/file2.ome.tif"]
+      ```
+
+    - Use `--dna_filename` to select which input file get to keep its DNA
+      channel in the output file. __Provide just the "file name" not "file
+      path".__ If not specified, the first file in the file list will be used.
 
 ## Example scenario and commands
 
@@ -74,16 +123,24 @@ conda activate rcashlar
         rcashlar register /project/demo/21-2D474_001-2D01@20230523_173947_224759 /project/demo/21-2D474_001-2D01@20230523_180743_729614
         ```
 
-3. Slide stained with antibodies and being imaged for the third time. 
+3. Slide stained with antibodies and being imaged for the third time.
     - Run `pysed`
     - Run `rcashlar register` to the first scan
 
         ```bash
-        rcashlar rcashlar register /project/demo/21-2D474_001-2D01@20230523_173947_224759 /project/demo/21-2D474_001-2D01@20230523_183243_352969
+        rcashlar register /project/demo/21-2D474_001-2D01@20230523_173947_224759 /project/demo/21-2D474_001-2D01@20230523_183243_352969
         ```
 
     - Run `rcashlar subtract` against the second scan
 
         ```bash
         rcashlar subtract /project/demo/230523_3scans/21-2D474_001-2D01@20230523_180743_729614 /project/demo/230523_3scans/21-2D474_001-2D01@20230523_183243_352969
+        ```
+
+4. Combine the assembled image from the first and the subtracted image into a
+   single ome-tiff file.
+    - Run `rcashlar combine` on the `demo/` directory
+
+        ```bash
+        rcashlar combine --input_dir /project/demo
         ```

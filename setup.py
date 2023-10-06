@@ -21,7 +21,8 @@ requires = [
     'tqdm>=4.63.0',
     'fire==0.5.0',
     'seaborn>=0.12.0',
-    'opencv-python>=4.6.0'
+    'opencv-python>=4.6.0',
+    'palom>=2023.9.2'
 ]
 
 
