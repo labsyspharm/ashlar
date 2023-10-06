@@ -1246,6 +1246,7 @@ class PyramidWriter:
                 )
         n_jobs = min(len(tasks), joblib.cpu_count())
         verboses = [True] + [False] * (len(tasks) - 1)
+        print('Generating mosaics in parallel')
         _ = joblib.Parallel(n_jobs=n_jobs, verbose=0)(
             joblib.delayed(m_func)(channel, out=out_zarr, verbose=v)
             for (m_func, channel, out_zarr), v in zip(tasks, verboses)

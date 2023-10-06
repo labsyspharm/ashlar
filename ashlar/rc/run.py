@@ -146,7 +146,7 @@ def subtract(
     bg_path: str | pathlib.Path,
     ab_path: str | pathlib.Path,
     fiducial_channel: int = 0,
-    bg_intensity_scaling_factor: str | Iterable[int] | None = 'rcjob',
+    bg_intensity_scaling_factor: str | Iterable[float] | None = 'rcjob',
     as_float: bool = False,
     is_cli: bool = True
 ):
@@ -226,9 +226,10 @@ def _exposure_time_rcjob(path):
 
 
 def main():
-    combine_cycles = None
-    if sys.argv[1] == 'combine':
-        from .combine import combine_cycles
+    def combine_cycles(): return
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'combine':
+            from .combine import combine_cycles
 
     import fire
     fire.Fire({
