@@ -17,7 +17,7 @@ Activate the conda environment and pip install aslar from GitHub:
 
 ```bash
 conda activate rcashlar
-python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2023-10-1"
+python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2023-10-2"
 ```
 
 ## Workflow
@@ -41,7 +41,7 @@ python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2023
           the second mosaic (antibody image), will generate
             - 1 pyramidal image in the second folder (`.ashlar-subtracted.ome.tif`)
 
-3. (Optional) Combine multiple ome-tiff into one single ome-tiff
+3. (Optional) Combine multiple OME-TIFFs into one single OME-TIFF
 
     ```bash
     NAME
@@ -78,9 +78,9 @@ python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2023
     - Use `--input_dir` and `--glob_file_pattern` to search and sort
       automatically in lexicographical order.
     - If `--output_path` is not provided, the default output path is
-      `{input-dir}/{name-of-input-dir}-combined.ome.tif`
+      `{input-dir}/{name-of-input-dir}-combined.ome.tif`.
     - Use `--input_files` to customize files and file ordering to combine. In
-      the format of
+      the format of:
 
       ```bash
       --input_files [r"path/to/file1.ome.tif", r"path/to/file2.ome.tif"]
@@ -89,6 +89,9 @@ python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2023
     - Use `--dna_filename` to select which input file get to keep its DNA
       channel in the output file. __Provide just the "file name" not "file
       path".__ If not specified, the first file in the file list will be used.
+    - Use `--dna_channel_number` to specify DNA channel location; default is 0
+      (first channel). Only one DNA channel image will be written to the
+      combined OME-TIFF.
 
 ## Example scenario and commands
 
@@ -137,8 +140,8 @@ conda activate rcashlar
         rcashlar subtract /project/demo/230523_3scans/21-2D474_001-2D01@20230523_180743_729614 /project/demo/230523_3scans/21-2D474_001-2D01@20230523_183243_352969
         ```
 
-4. Combine the assembled image from the first and the subtracted image into a
-   single ome-tiff file.
+4. Combine the assembled images from the first and the subtracted image into a
+   single OME-TIFF.
     - Run `rcashlar combine` on the `demo/` directory
 
         ```bash
