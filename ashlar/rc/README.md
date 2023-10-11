@@ -83,7 +83,7 @@ python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2023
       the format of:
 
       ```bash
-      --input_files [r"path/to/file1.ome.tif", r"path/to/file2.ome.tif"]
+      --input_files "[r'path/to/file1.ome.tif', r'path/to/file2.ome.tif']"
       ```
 
     - Use `--dna_filename` to select which input file get to keep its DNA
