@@ -17,6 +17,7 @@ class SubtractPyramid(reg.PyramidWriter):
         as_float=False,
         fiducial_channel=0,
         bg_intensity_scaling_factor=None,
+        camera_bias=0,
         peak_size=1024,
         verbose=False,
     ):
@@ -31,6 +32,7 @@ class SubtractPyramid(reg.PyramidWriter):
         self.as_float = as_float
         self.fiducial_channel = fiducial_channel
         self.bg_intensity_scaling_factor = bg_intensity_scaling_factor
+        self.camera_bias = camera_bias
 
         if bg_intensity_scaling_factor is None:
             self.bg_intensity_scaling_factor = np.ones(self.num_channels)
@@ -95,12 +97,18 @@ class SubtractPyramid(reg.PyramidWriter):
             ab_img = self.mosaics_zarr["ab_mosaic"][channel]
             for y in range(0, h, th):
                 for x in range(0, w, tw):
-                    # Returning a copy makes the array contiguous, avoiding
-                    # a severely unoptimized code path in ndarray.tofile.
-                    subtracted = (
+                    corrected_ab_tile = (
                         ab_img[y : y + th, x : x + tw].astype(np.float32)
-                        - bg_img[y : y + th, x : x + tw].astype(np.float32)
-                        * int_scaling_factor
+                        - self.camera_bias
+                    )
+                    corrected_bg_tile = (
+                        bg_img[y : y + th, x : x + tw].astype(np.float32)
+                        - self.camera_bias
+                    )
+                    subtracted = (
+                        corrected_ab_tile
+                        - corrected_bg_tile * int_scaling_factor
+                        + self.camera_bias
                     )
                     if self.as_float or (not is_int_dtype):
                         yield subtracted

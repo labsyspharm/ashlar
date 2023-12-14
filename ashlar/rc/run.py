@@ -147,6 +147,7 @@ def subtract(
     ab_path: str | pathlib.Path,
     fiducial_channel: int = 0,
     bg_intensity_scaling_factor: str | Iterable[float] | None = 'rcjob',
+    camera_bias: float = 105.0,
     as_float: bool = False,
     is_cli: bool = True
 ):
@@ -171,6 +172,7 @@ def subtract(
         str(out_path),
         verbose=True,
         bg_intensity_scaling_factor=bg_intensity_scaling_factor,
+        camera_bias=camera_bias,
         fiducial_channel=fiducial_channel,
         as_float=as_float
     )
