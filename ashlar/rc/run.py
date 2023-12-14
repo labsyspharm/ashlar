@@ -162,7 +162,7 @@ def subtract(
 
     out_path = ab_path / f"{ab_aligner.from_pickle.stem}-subtracted.ome.tif"
     
-    if type(bg_intensity_scaling_factor) == str:
+    if isinstance(bg_intensity_scaling_factor, str):
         assert bg_intensity_scaling_factor == 'rcjob'
         bg_intensity_scaling_factor = _exposure_time_factor(bg_path, ab_path)
 

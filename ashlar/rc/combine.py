@@ -111,7 +111,6 @@ def _get_output_path(input_dir, output_path):
     if output_path is not None:
         output_path = pathlib.Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        return output_path
     else:
         input_dir = pathlib.Path(input_dir).absolute()
         output_path = input_dir / f"{input_dir.name}-combined.ome.tif"

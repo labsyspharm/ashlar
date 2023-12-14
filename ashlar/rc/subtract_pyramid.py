@@ -9,7 +9,6 @@ from .. import _version, reg
 
 
 class SubtractPyramid(reg.PyramidWriter):
-    
     def __init__(
         self,
         bg_mosaic,
@@ -19,7 +18,7 @@ class SubtractPyramid(reg.PyramidWriter):
         fiducial_channel=0,
         bg_intensity_scaling_factor=None,
         peak_size=1024,
-        verbose=False
+        verbose=False,
     ):
         super().__init__(
             [bg_mosaic, ab_mosaic], path, peak_size=peak_size, verbose=verbose
@@ -32,35 +31,43 @@ class SubtractPyramid(reg.PyramidWriter):
         self.as_float = as_float
         self.fiducial_channel = fiducial_channel
         self.bg_intensity_scaling_factor = bg_intensity_scaling_factor
-        
+
         if bg_intensity_scaling_factor is None:
             self.bg_intensity_scaling_factor = np.ones(self.num_channels)
         assert len(self.bg_intensity_scaling_factor) == self.num_channels
-    
+
     def assemble_all_channels(self):
         self.cache_path = f"{pathlib.Path(self.path)}.zarr"
-        root = zarr.open(self.cache_path, mode='w')
-        root.create_groups('ab_mosaic', 'bg_mosaic')
+        root = zarr.open(self.cache_path, mode="w")
+        root.create_groups("ab_mosaic", "bg_mosaic")
         tasks = []
         for channel in self.channels:
-            root['ab_mosaic'].zeros(
-                channel, 
+            root["ab_mosaic"].zeros(
+                channel,
                 shape=self.ab_mosaic.shape,
                 dtype=self.dtype,
-                chunks=(1024, 1024)
+                chunks=(1024, 1024),
             )
-            root['bg_mosaic'].zeros(
+            root["bg_mosaic"].zeros(
                 channel,
                 shape=self.bg_mosaic.shape,
                 dtype=self.bg_mosaic.dtype,
-                chunks=(1024, 1024)
+                chunks=(1024, 1024),
             )
-            tasks.append((self.ab_mosaic.assemble_channel, channel, root['ab_mosaic'][channel]))
+            tasks.append(
+                (self.ab_mosaic.assemble_channel, channel, root["ab_mosaic"][channel])
+            )
             if channel != self.fiducial_channel:
-                tasks.append((self.bg_mosaic.assemble_channel, channel, root['bg_mosaic'][channel]))
+                tasks.append(
+                    (
+                        self.bg_mosaic.assemble_channel,
+                        channel,
+                        root["bg_mosaic"][channel],
+                    )
+                )
         n_jobs = min(len(tasks), joblib.cpu_count())
         verboses = [True] + [False] * (len(tasks) - 1)
-        print('Generating mosaics in parallel')
+        print("Generating mosaics in parallel")
         _ = joblib.Parallel(n_jobs=n_jobs, verbose=0)(
             joblib.delayed(m_func)(channel, out=out_zarr, verbose=v)
             for (m_func, channel, out_zarr), v in zip(tasks, verboses)
@@ -81,32 +88,35 @@ class SubtractPyramid(reg.PyramidWriter):
 
             if channel != self.fiducial_channel:
                 print("    Ab & Bg Image")
-                bg_img = self.mosaics_zarr['bg_mosaic'][channel]
+                bg_img = self.mosaics_zarr["bg_mosaic"][channel]
             else:
                 print("    Ab Image")
                 bg_img = np.zeros(self.ab_mosaic.shape, dtype=self.dtype)
-            ab_img = self.mosaics_zarr['ab_mosaic'][channel]
+            ab_img = self.mosaics_zarr["ab_mosaic"][channel]
             for y in range(0, h, th):
                 for x in range(0, w, tw):
                     # Returning a copy makes the array contiguous, avoiding
                     # a severely unoptimized code path in ndarray.tofile.
                     subtracted = (
-                        ab_img[y:y+th, x:x+tw].astype(np.float32) - 
-                        bg_img[y:y+th, x:x+tw].astype(np.float32) * int_scaling_factor
+                        ab_img[y : y + th, x : x + tw].astype(np.float32)
+                        - bg_img[y : y + th, x : x + tw].astype(np.float32)
+                        * int_scaling_factor
                     )
                     if self.as_float or (not is_int_dtype):
                         yield subtracted
                     else:
-                        yield np.clip(np.round(subtracted), dmin, dmax).astype(self.dtype)
+                        yield np.clip(np.round(subtracted), dmin, dmax).astype(
+                            self.dtype
+                        )
             # Allow img to be freed immediately to avoid keeping it in
             # memory while the next loop iteration calls assemble_channel.
             ab_img = None
-            bg_img = None  
+            bg_img = None
 
     @property
     def num_channels(self):
         return len(self.bg_mosaic.channels)
-    
+
     @property
     def dtype(self):
         return self.bg_mosaic.dtype
@@ -114,9 +124,9 @@ class SubtractPyramid(reg.PyramidWriter):
     @property
     def channels(self):
         return self.bg_mosaic.channels
-    
+
     def run(self):
-        if not hasattr(self, 'mosaics_zarr'):
+        if not hasattr(self, "mosaics_zarr"):
             self.assemble_all_channels()
         dtype = np.float32 if self.as_float else self.dtype
         compression = dict(compression="adobe_deflate", predictor=True)
@@ -128,8 +138,10 @@ class SubtractPyramid(reg.PyramidWriter):
         metadata = {
             "Creator": software,
             "Pixels": {
-                "PhysicalSizeX": pixel_size, "PhysicalSizeXUnit": "\u00b5m",
-                "PhysicalSizeY": pixel_size, "PhysicalSizeYUnit": "\u00b5m"
+                "PhysicalSizeX": pixel_size,
+                "PhysicalSizeXUnit": "\u00b5m",
+                "PhysicalSizeY": pixel_size,
+                "PhysicalSizeYUnit": "\u00b5m",
             },
         }
         with tifffile.TiffWriter(self.path, ome=True, bigtiff=True) as tiff:
@@ -144,7 +156,7 @@ class SubtractPyramid(reg.PyramidWriter):
                 resolution=(resolution_cm, resolution_cm, "centimeter"),
                 # FIXME Propagate this from input files (especially RGB).
                 photometric="minisblack",
-                **compression
+                **compression,
             )
             if self.verbose:
                 print("Generating pyramid")
@@ -159,10 +171,10 @@ class SubtractPyramid(reg.PyramidWriter):
                     subfiletype=1,
                     dtype=dtype,
                     tile=tile_shape,
-                    **compression
+                    **compression,
                 )
                 if self.verbose:
                     print()
-    
+
     def cleanup(self):
         self.mosaics_zarr.store.rmdir()
