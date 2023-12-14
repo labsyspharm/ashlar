@@ -127,13 +127,16 @@ def register(
 
 def assemble(
     path: str | pathlib.Path,
+    out_path: str | pathlib.Path = None,
     channels: list[int] | None = None,
     is_cli: bool = True
 ):
     path = pathlib.Path(path).absolute()
     aligner = _load_ashlar_pkl(path)
-    out_path = path / f"{aligner.from_pickle.stem}.ome.tif"
-    
+    if out_path is None:
+        out_path = path / f"{aligner.from_pickle.stem}.ome.tif"
+    else:
+        out_path = _custom_out_path(out_path)
     mosaic = reg.Mosaic(aligner, shape=aligner.mosaic_shape, verbose=False, channels=channels)
     writer = reg.PyramidWriter([mosaic], out_path, parallel_assemble=True, verbose=True)
     writer.run()
@@ -145,6 +148,7 @@ def assemble(
 def subtract(
     bg_path: str | pathlib.Path,
     ab_path: str | pathlib.Path,
+    out_path: str | pathlib.Path = None,
     fiducial_channel: int = 0,
     bg_intensity_scaling_factor: str | Iterable[float] | None = 'rcjob',
     camera_bias: float = 105.0,
@@ -161,7 +165,10 @@ def subtract(
         for aligner in (bg_aligner, ab_aligner)
     ]
 
-    out_path = ab_path / f"{ab_aligner.from_pickle.stem}-subtracted.ome.tif"
+    if out_path is None:
+        out_path = ab_path / f"{ab_aligner.from_pickle.stem}-subtracted.ome.tif"
+    else:
+        out_path = _custom_out_path(out_path)
     
     if isinstance(bg_intensity_scaling_factor, str):
         assert bg_intensity_scaling_factor == 'rcjob'
@@ -225,6 +232,15 @@ def _exposure_time_rcjob(path):
     with open(path) as f:
         cfg = json.load(f)
     return cfg['scanner']['assay']['exposures']
+
+
+def _custom_out_path(out_path):
+    out_path = pathlib.Path(out_path)
+    assert out_path.name.endswith(".ome.tif"), (
+        f"`out_path` must be a file path ends with .ome.tif; not {out_path}"
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    return out_path
 
 
 def main():
