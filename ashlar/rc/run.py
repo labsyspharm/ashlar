@@ -26,7 +26,7 @@ def stitch(
     assert len(raws) == 1
     raw = raws[0]
 
-    out_path = path / f"{raw.stem}.ashlar.pkl"
+    output_path = path / f"{raw.stem}.ashlar.pkl"
 
     c1r = reg.BioformatsReader(str(raw))
     if "rcpnl" not in raw_endwith:
@@ -60,7 +60,7 @@ def stitch(
     plt.close(fig)
 
     c1e.reader._cache = {}
-    with open(out_path, "wb") as f:
+    with open(output_path, "wb") as f:
         pickle.dump(c1e, f)
 
     if is_cli:
@@ -99,7 +99,7 @@ def register(
     assert len(raws) == 1
     raw = raws[0]
 
-    out_path = moving_path / f"{raw.stem}.ashlar.pkl"
+    output_path = moving_path / f"{raw.stem}.ashlar.pkl"
 
     c2r = reg.BioformatsReader(str(raw))
     if "rcpnl" not in raw_endwith:
@@ -118,7 +118,7 @@ def register(
     plt.close("all")
 
     c1e.reader._cache = {}
-    with open(out_path, "wb") as f:
+    with open(output_path, "wb") as f:
         pickle.dump(c21l, f)
 
     if is_cli:
@@ -128,30 +128,32 @@ def register(
 
 def assemble(
     path: str | pathlib.Path,
-    out_path: str | pathlib.Path = None,
+    output_path: str | pathlib.Path = None,
     channels: list[int] | None = None,
     is_cli: bool = True,
 ):
     path = pathlib.Path(path).absolute()
     aligner = _load_ashlar_pkl(path)
-    if out_path is None:
-        out_path = path / f"{aligner.from_pickle.stem}.ome.tif"
+    if output_path is None:
+        output_path = path / f"{aligner.from_pickle.stem}.ome.tif"
     else:
-        out_path = _custom_out_path(out_path)
+        output_path = _custom_output_path(output_path)
     mosaic = reg.Mosaic(
         aligner, shape=aligner.mosaic_shape, verbose=False, channels=channels
     )
-    writer = reg.PyramidWriter([mosaic], out_path, parallel_assemble=True, verbose=True)
+    writer = reg.PyramidWriter(
+        [mosaic], output_path, parallel_assemble=True, verbose=True
+    )
     writer.run()
     if is_cli:
         return 0
-    return out_path
+    return output_path
 
 
 def subtract(
     bg_path: str | pathlib.Path,
     ab_path: str | pathlib.Path,
-    out_path: str | pathlib.Path = None,
+    output_path: str | pathlib.Path = None,
     fiducial_channel: int = 0,
     bg_intensity_scaling_factor: str | Iterable[float] | None = "rcjob",
     camera_bias: float = 105.0,
@@ -169,10 +171,10 @@ def subtract(
         for aligner in (bg_aligner, ab_aligner)
     ]
 
-    if out_path is None:
-        out_path = ab_path / f"{ab_aligner.from_pickle.stem}-subtracted.ome.tif"
+    if output_path is None:
+        output_path = ab_path / f"{ab_aligner.from_pickle.stem}-subtracted.ome.tif"
     else:
-        out_path = _custom_out_path(out_path)
+        output_path = _custom_output_path(output_path)
 
     if isinstance(bg_intensity_scaling_factor, str):
         assert bg_intensity_scaling_factor == "rcjob"
@@ -181,7 +183,7 @@ def subtract(
     sp = subtract_pyramid.SubtractPyramid(
         bg_mosaic,
         ab_mosaic,
-        str(out_path),
+        str(output_path),
         verbose=True,
         bg_intensity_scaling_factor=bg_intensity_scaling_factor,
         camera_bias=camera_bias,
@@ -194,7 +196,7 @@ def subtract(
     sp.cleanup()
     if is_cli:
         return 0
-    return out_path
+    return output_path
 
 
 def _load_ashlar_pkl(path):
@@ -240,13 +242,13 @@ def _exposure_time_rcjob(path):
     return cfg["scanner"]["assay"]["exposures"]
 
 
-def _custom_out_path(out_path):
-    out_path = pathlib.Path(out_path)
-    assert out_path.name.endswith(
+def _custom_output_path(output_path):
+    output_path = pathlib.Path(output_path)
+    assert output_path.name.endswith(
         ".ome.tif"
-    ), f"`out_path` must be a file path ends with .ome.tif; not {out_path}"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    return out_path
+    ), f"`output_path` must be a file path ends with .ome.tif; not {output_path}"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    return output_path
 
 
 def main():
