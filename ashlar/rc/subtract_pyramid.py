@@ -93,23 +93,25 @@ class SubtractPyramid(reg.PyramidWriter):
                 bg_img = self.mosaics_zarr["bg_mosaic"][channel]
             else:
                 print("    Ab Image")
-                bg_img = np.zeros(self.ab_mosaic.shape, dtype=self.dtype)
             ab_img = self.mosaics_zarr["ab_mosaic"][channel]
             for y in range(0, h, th):
                 for x in range(0, w, tw):
-                    corrected_ab_tile = (
-                        ab_img[y : y + th, x : x + tw].astype(np.float32)
-                        - self.camera_bias
-                    )
-                    corrected_bg_tile = (
-                        bg_img[y : y + th, x : x + tw].astype(np.float32)
-                        - self.camera_bias
-                    )
-                    subtracted = (
-                        corrected_ab_tile
-                        - corrected_bg_tile * int_scaling_factor
-                        + self.camera_bias
-                    )
+                    if channel != self.fiducial_channel:
+                        corrected_ab_tile = (
+                            ab_img[y : y + th, x : x + tw].astype(np.float32)
+                            - self.camera_bias
+                        )
+                        corrected_bg_tile = (
+                            bg_img[y : y + th, x : x + tw].astype(np.float32)
+                            - self.camera_bias
+                        )
+                        subtracted = (
+                            corrected_ab_tile
+                            - corrected_bg_tile * int_scaling_factor
+                            + self.camera_bias
+                        )
+                    else:
+                        subtracted = ab_img[y : y + th, x : x + tw].astype(np.float32)
                     if self.as_float or (not is_int_dtype):
                         yield subtracted
                     else:
