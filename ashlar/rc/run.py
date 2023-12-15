@@ -155,7 +155,7 @@ def subtract(
     fiducial_channel: int = 0,
     bg_intensity_scaling_factor: str | Iterable[float] | None = "rcjob",
     camera_bias: float = 105.0,
-    add_camera_bias_back: bool = True,
+    add_camera_bias_back: bool = False,
     as_float: bool = False,
     is_cli: bool = True,
 ):

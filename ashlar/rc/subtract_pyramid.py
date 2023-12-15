@@ -18,7 +18,7 @@ class SubtractPyramid(reg.PyramidWriter):
         fiducial_channel=0,
         bg_intensity_scaling_factor=None,
         camera_bias=0,
-        add_camera_bias_back=True,
+        add_camera_bias_back=False,
         peak_size=1024,
         verbose=False,
     ):
