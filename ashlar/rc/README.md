@@ -17,7 +17,7 @@ Activate the conda environment and pip install aslar from GitHub:
 
 ```bash
 conda activate rcashlar
-python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2023-10-2"
+python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2023-12-1"
 ```
 
 ## Workflow
@@ -43,7 +43,7 @@ python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2023
 
 3. (Optional) Combine multiple OME-TIFFs into one single OME-TIFF
 
-    ```bash
+    ```text
     NAME
         rcashlar combine
 
@@ -147,3 +147,130 @@ conda activate rcashlar
         ```bash
         rcashlar combine --input_dir /project/demo
         ```
+
+## Command reference
+
+1. Stitch
+
+    ```text
+    NAME
+        rcashlar stitch
+
+    SYNOPSIS
+        rcashlar stitch PATH <flags>
+
+    POSITIONAL ARGUMENTS
+        PATH
+            Type: str | pathlib.Path
+
+    FLAGS
+        -r, --raw_endwith=RAW_ENDWITH
+            Type: str
+            Default: 'pysed.ome.tif'
+        -c, --channel=CHANNEL
+            Type: int
+            Default: 0
+        --max_shift=MAX_SHIFT
+            Type: float
+            Default: 15
+        -a, --alpha=ALPHA
+            Type: float
+            Default: 0.01
+        --max_error=MAX_ERROR
+            Type: Optional[float | None]
+            Default: None
+        -f, --filter_sigma=FILTER_SIGMA
+            Type: float
+            Default: 1.0
+    ```
+
+1. Register
+
+    ```text
+    NAME
+        rcashlar register
+
+    SYNOPSIS
+        rcashlar register REF_PATH MOVING_PATH <flags>
+
+    POSITIONAL ARGUMENTS
+        REF_PATH
+            Type: str | pathlib.Path
+        MOVING_PATH
+            Type: str | pathlib.Path
+
+    FLAGS
+        -r, --raw_endwith=RAW_ENDWITH
+            Type: str
+            Default: 'pysed.ome.tif'
+        --channel_ref=CHANNEL_REF
+            Type: Optional[int | None]
+            Default: None
+        --channel_moving=CHANNEL_MOVING
+            Type: Optional[int | None]
+            Default: None
+        -m, --max_shift=MAX_SHIFT
+            Type: float
+            Default: 15
+        -f, --filter_sigma=FILTER_SIGMA
+            Type: float
+            Default: 1.0
+    ```
+
+1. Assemble
+
+    ```text
+    NAME
+        rcashlar assemble
+
+    SYNOPSIS
+        rcashlar assemble PATH <flags>
+
+    POSITIONAL ARGUMENTS
+        PATH
+            Type: str | pathlib.Path
+
+    FLAGS
+        -o, --output_path=OUTPUT_PATH
+            Type: Optional[str | pathlib.Path]
+            Default: None
+        -c, --channels=CHANNELS
+            Type: Optional[list[int] | None]
+            Default: None
+    ```
+
+1. Subtract
+
+    ```text
+    NAME
+        rcashlar subtract
+
+    SYNOPSIS
+        rcashlar subtract BG_PATH AB_PATH <flags>
+
+    POSITIONAL ARGUMENTS
+        BG_PATH
+            Type: str | pathlib.Path
+        AB_PATH
+            Type: str | pathlib.Path
+
+    FLAGS
+        -o, --output_path=OUTPUT_PATH
+            Type: Optional[str | pathlib.Path]
+            Default: None
+        -f, --fiducial_channel=FIDUCIAL_CHANNEL
+            Type: int
+            Default: 0
+        -b, --bg_intensity_scaling_factor=BG_INTENSITY_SCALING_FACTOR
+            Type: Union
+            Default: 'rcjob'
+        -c, --camera_bias=CAMERA_BIAS
+            Type: float
+            Default: 105.0
+        --add_camera_bias_back=ADD_CAMERA_BIAS_BACK
+            Type: bool
+            Default: False
+        --as_float=AS_FLOAT
+            Type: bool
+            Default: False
+    ```
