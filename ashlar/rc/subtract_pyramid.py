@@ -18,6 +18,7 @@ class SubtractPyramid(reg.PyramidWriter):
         fiducial_channel=0,
         bg_intensity_scaling_factor=None,
         camera_bias=0,
+        add_camera_bias_back=True,
         peak_size=1024,
         verbose=False,
     ):
@@ -33,6 +34,7 @@ class SubtractPyramid(reg.PyramidWriter):
         self.fiducial_channel = fiducial_channel
         self.bg_intensity_scaling_factor = bg_intensity_scaling_factor
         self.camera_bias = camera_bias
+        self.add_camera_bias_back = add_camera_bias_back
 
         if bg_intensity_scaling_factor is None:
             self.bg_intensity_scaling_factor = np.ones(self.num_channels)
@@ -106,10 +108,10 @@ class SubtractPyramid(reg.PyramidWriter):
                             - self.camera_bias
                         )
                         subtracted = (
-                            corrected_ab_tile
-                            - corrected_bg_tile * int_scaling_factor
-                            + self.camera_bias
+                            corrected_ab_tile - corrected_bg_tile * int_scaling_factor
                         )
+                        if self.add_camera_bias_back:
+                            subtracted += self.camera_bias
                     else:
                         subtracted = ab_img[y : y + th, x : x + tw].astype(np.float32)
                     if self.as_float or (not is_int_dtype):
