@@ -6,9 +6,10 @@ from typing import Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
+import tifffile
 
 from .. import reg
-from . import align_cycles, subtract_pyramid
+from . import align_cycles, subtract_pyramid, ome_metadata
 
 
 def stitch(
@@ -82,8 +83,8 @@ def register(
     moving_path = pathlib.Path(moving_path).absolute()
     c1e = _load_ashlar_pkl(ref_path)
 
-    if issubclass(type(c1e), reg.LayerAligner):
-        ref_edgealigner_path = c1e.reference_aligner.reader.reader.path
+    if isinstance(c1e, reg.LayerAligner):
+        ref_edgealigner_path = _get_ref_path(c1e)
         ref_edgealigner_path = pathlib.Path(ref_edgealigner_path).parent
         reg.warn_data(
             "\n\n"
@@ -145,6 +146,12 @@ def assemble(
         [mosaic], output_path, parallel_assemble=True, verbose=True
     )
     writer.run()
+
+    ref_path = _get_ref_path(aligner)
+    ome = ome_metadata._assemble_metadata(
+        ref_path, _get_aligner_reader_path(aligner), output_path, channels
+    )
+    tifffile.tiffcomment(output_path, ome.to_xml().encode())
     if is_cli:
         return 0
     return output_path
@@ -194,6 +201,17 @@ def subtract(
     sp.assemble_all_channels()
     sp.run()
     sp.cleanup()
+
+    ome = ome_metadata._subtract_metadata(
+        bg_path=_get_aligner_reader_path(bg_aligner),
+        ab_path=_get_aligner_reader_path(ab_aligner),
+        bg_ref_path=_get_ref_path(bg_aligner),
+        ab_ref_path=_get_ref_path(ab_aligner),
+        output_path=output_path,
+        fiducial_channel=fiducial_channel,
+    )
+    tifffile.tiffcomment(output_path, ome.to_xml().encode())
+
     if is_cli:
         return 0
     return output_path
@@ -249,6 +267,24 @@ def _custom_output_path(output_path):
     ), f"`output_path` must be a file path ends with .ome.tif; not {output_path}"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     return output_path
+
+
+def _get_ref_path(aligner):
+    if not isinstance(aligner, reg.LayerAligner):
+        return None
+    ref = aligner.reference_aligner
+    if isinstance(ref.reader, reg.CachingReader):
+        return ref.reader.reader.path
+    return ref.reader.path
+
+
+def _get_aligner_reader_path(aligner):
+    if not isinstance(aligner, (reg.EdgeAligner, reg.LayerAligner)):
+        return
+    reader = aligner.reader
+    if isinstance(reader, reg.CachingReader):
+        return reader.reader.path
+    return reader.path
 
 
 def main():

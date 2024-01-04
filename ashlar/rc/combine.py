@@ -4,6 +4,8 @@ import sys
 import palom
 import tifffile
 
+from . import ome_metadata
+
 
 def combine_cycles(
     input_dir: str | pathlib.Path = ".",
@@ -83,6 +85,15 @@ DNA channel number:
         save_RAM=True,
         kwargs_tifffile=tif_tags,
     )
+
+    ome = ome_metadata._combine_metadata(
+        input_files=input_files,
+        output_path=output_path,
+        dna_file_index=dna_file_index,
+        dna_channel_number=dna_channel_number,
+    )
+    tifffile.tiffcomment(output_path, ome.to_xml().encode())
+
     return 0
 
 
