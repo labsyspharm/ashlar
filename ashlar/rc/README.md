@@ -17,7 +17,7 @@ Activate the conda environment and pip install aslar from GitHub:
 
 ```bash
 conda activate rcashlar
-python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2023-12-1"
+python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2024-1-1"
 ```
 
 ## Workflow
