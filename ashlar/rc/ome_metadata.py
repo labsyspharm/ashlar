@@ -55,6 +55,7 @@ def read_metadata_file(metadata_path=None, rcjob_path=None):
         i += 1
         channels.append(
             ome_types.model.Channel(
+                id=f"Channel:{i-1}",
                 emission_wavelength=metadata[f"Biomarker{i}Em"],
                 excitation_wavelength=metadata[f"Biomarker{i}Ex"],
                 name=metadata[f"Biomarker{i}Name"],
@@ -84,10 +85,6 @@ def read_metadata_file(metadata_path=None, rcjob_path=None):
     image = ome_types.model.Image(pixels=pixel, acquisition_date=job_datetime)
 
     return ome_types.model.OME(instruments=[instrument], images=[image])
-
-
-metadata_path = "/Users/yuanchen/Downloads/State Manager scan metadata/ScalingTest02@20231208_222543_174378.metadata"
-rcjob_path = "/Users/yuanchen/Downloads/State Manager scan metadata/ScalingTest02@20231208_222543_174378.rcjob"
 
 
 @dataclass
@@ -196,6 +193,10 @@ def _subtract_metadata(
         metadata_path=metadata_path, rcjob_path=rcjob_path
     )
     metadata_pixels = metadata_ome.images[0].pixels
+    for channel in metadata_pixels.channels:
+        parts = channel.id.split(":")
+        parts.insert(1, "background")
+        channel.id = ":".join(parts)
 
     metadata = {
         "fiducial": dict(is_subtracted=False),
