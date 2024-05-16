@@ -252,6 +252,17 @@ class BioformatsMetadata(PlateMetadata):
     @property
     def num_channels(self):
         return self._metadata.getChannelCount(0)
+    
+    @property
+    def channel_map(self):
+        n_channels = self._metadata.getChannelCount(0)
+        channel_names = []
+        
+        for id in range(n_channels):
+            channel_names.append(self._metadata.getChannelName(0, id))
+        channel_map = dict(zip(list(range(n_channels)), channel_names))
+    
+        return channel_map
 
     @property
     def num_plates(self):
@@ -391,7 +402,7 @@ class BioformatsMetadata(PlateMetadata):
             v = method(i).value
             values.append(v)
         return np.array(values, dtype=int)
-
+ 
 
 class BioformatsReader(PlateReader):
 
