@@ -22,9 +22,9 @@ or [Anaconda](https://www.anaconda.com/products/individual), download the python
 3.x version and install. Then, run the following commands from a terminal (Linux/Mac)
 or command prompt (Windows):
 
-Create a named conda environment with python 3.7:
+Create a named conda environment with python 3.10:
 ```bash
-conda create -y -n ashlar python=3.7
+conda create -y -n ashlar python=3.10
 ```
 
 Activate the conda environment:
