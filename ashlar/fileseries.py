@@ -186,10 +186,17 @@ class FileSeriesMetadata(reg.PlateMetadata):
             if self.layout == "snake" and col % 2 == 1:
                 row = self.height - 1 - row
         return row, col
+    
+    def get_from_channel_map(self, c):
+        if isinstance(c, int):
+            return self.channel_map[c]
+        if c in list(self.channel_map.values()):
+            return c
+        raise Exception(f"{c} was notrecognized as a channel")
 
     def filename(self, series, c):
         well, series = self.all_series[self.active_series[series]]
-        c = self.channel_map[c]
+        c = self.get_from_channel_map(c)
         components = self.filename_components[well, series, c]
         return self.pattern.format(**components)
 
