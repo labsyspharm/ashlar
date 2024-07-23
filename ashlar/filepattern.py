@@ -98,6 +98,13 @@ class FilePatternMetadata(reg.Metadata):
         row = i // self.width + self.row_offset
         col = i % self.width + self.col_offset
         return row, col
+    
+    def get_from_channel_map(self, c):
+        if isinstance(c, int):
+            return self.channel_map[c]
+        if c in list(self.channel_map.values()):
+            return c
+        raise Exception(f"{c} was notrecognized as a channel")
 
 
 class FilePatternReader(reg.Reader):
@@ -119,5 +126,5 @@ class FilePatternReader(reg.Reader):
 
     def filename(self, series, c):
         row, col = self.metadata.tile_rc(series)
-        c = self.metadata.channel_map[c]
+        c = self.metadata.get_from_channel_map(c)
         return self.pattern.format(row=row, col=col, channel=c)
