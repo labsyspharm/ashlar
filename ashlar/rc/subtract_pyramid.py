@@ -1,3 +1,4 @@
+import itertools
 import pathlib
 
 import numpy as np
@@ -21,6 +22,7 @@ class SubtractPyramid(reg.PyramidWriter):
         add_camera_bias_back=False,
         peak_size=1024,
         verbose=False,
+        subtraction_config=None,
     ):
         super().__init__(
             [bg_mosaic, ab_mosaic], path, peak_size=peak_size, verbose=verbose
@@ -40,35 +42,49 @@ class SubtractPyramid(reg.PyramidWriter):
             self.bg_intensity_scaling_factor = np.ones(self.num_channels)
         assert len(self.bg_intensity_scaling_factor) == self.num_channels
 
+        if subtraction_config is not None:
+            # FIXME re-assign bg_mosaic.channels and handle None
+            self.bg_mosaic.channels = [
+                cc["bg_channel"].get("channel_index", None) for cc in subtraction_config
+            ]
+            bg_int_factor = [
+                np.divide(
+                    cc["exposure_time"], cc["bg_channel"].get("exposure_time", np.nan)
+                )
+                for cc in subtraction_config
+            ]
+            self.bg_intensity_scaling_factor = np.nan_to_num(bg_int_factor, nan=0)
+
+        if self.fiducial_channel is not None:
+            if self.fiducial_channel in self.ab_mosaic.channels:
+                self.bg_mosaic.channels[
+                    self.ab_mosaic.channels.index(self.fiducial_channel)
+                ] = None
+
     def assemble_all_channels(self):
         self.cache_path = f"{pathlib.Path(self.path)}.zarr"
         root = zarr.open(self.cache_path, mode="w")
         root.create_groups("ab_mosaic", "bg_mosaic")
         tasks = []
-        for channel in self.channels:
+        for idx, (ch_ab, ch_bg) in enumerate(
+            zip(self.ab_mosaic.channels, self.bg_mosaic.channels)
+        ):
             root["ab_mosaic"].zeros(
-                channel,
+                idx,
                 shape=self.ab_mosaic.shape,
                 dtype=self.dtype,
                 chunks=(1024, 1024),
             )
             root["bg_mosaic"].zeros(
-                channel,
+                idx,
                 shape=self.bg_mosaic.shape,
                 dtype=self.bg_mosaic.dtype,
                 chunks=(1024, 1024),
             )
-            tasks.append(
-                (self.ab_mosaic.assemble_channel, channel, root["ab_mosaic"][channel])
-            )
-            if channel != self.fiducial_channel:
-                tasks.append(
-                    (
-                        self.bg_mosaic.assemble_channel,
-                        channel,
-                        root["bg_mosaic"][channel],
-                    )
-                )
+            tasks.append((self.ab_mosaic.assemble_channel, ch_ab, root["ab_mosaic"][idx]))
+            if ch_bg is None:
+                continue
+            tasks.append((self.bg_mosaic.assemble_channel, ch_bg, root["bg_mosaic"][idx]))
         n_jobs = min(len(tasks), joblib.cpu_count())
         verboses = [True] + [False] * (len(tasks) - 1)
         print("Generating mosaics in parallel")
@@ -85,41 +101,37 @@ class SubtractPyramid(reg.PyramidWriter):
         if is_int_dtype:
             iinfo = np.iinfo(self.dtype)
             dmin, dmax = iinfo.min, iinfo.max
-        for channel, int_scaling_factor in zip(
-            self.channels, self.bg_intensity_scaling_factor
+        for idx, (ch_ab, ch_bg, int_scaling_factor) in enumerate(
+            zip(
+                self.ab_mosaic.channels,
+                self.bg_mosaic.channels,
+                self.bg_intensity_scaling_factor,
+            )
         ):
-            print(f"Channel {channel}:")
-
-            if channel != self.fiducial_channel:
+            print(f"Channel {ch_ab}:")
+            if ch_bg is not None:
                 print("    Ab & Bg Image")
-                bg_img = self.mosaics_zarr["bg_mosaic"][channel]
             else:
                 print("    Ab Image")
-            ab_img = self.mosaics_zarr["ab_mosaic"][channel]
-            for y in range(0, h, th):
-                for x in range(0, w, tw):
-                    if channel != self.fiducial_channel:
-                        corrected_ab_tile = (
-                            ab_img[y : y + th, x : x + tw].astype(np.float32)
-                            - self.camera_bias
-                        )
-                        corrected_bg_tile = (
-                            bg_img[y : y + th, x : x + tw].astype(np.float32)
-                            - self.camera_bias
-                        )
-                        subtracted = (
-                            corrected_ab_tile - corrected_bg_tile * int_scaling_factor
-                        )
-                        if self.add_camera_bias_back:
-                            subtracted += self.camera_bias
-                    else:
-                        subtracted = ab_img[y : y + th, x : x + tw].astype(np.float32)
-                    if self.as_float or (not is_int_dtype):
-                        yield subtracted
-                    else:
-                        yield np.clip(np.round(subtracted), dmin, dmax).astype(
-                            self.dtype
-                        )
+
+            bg_img = self.mosaics_zarr["bg_mosaic"][idx]
+            ab_img = self.mosaics_zarr["ab_mosaic"][idx]
+            for y, x in itertools.product(range(0, h, th), range(0, w, tw)):
+                corrected_ab_tile = (
+                    ab_img[y : y + th, x : x + tw].astype(np.float32) - self.camera_bias
+                )
+                if ch_bg is None:
+                    corrected_bg_tile = np.zeros_like(corrected_ab_tile)
+                else:
+                    corrected_bg_tile = (
+                        bg_img[y : y + th, x : x + tw].astype(np.float32)
+                        - self.camera_bias
+                    )
+                subtracted = corrected_ab_tile - corrected_bg_tile * int_scaling_factor
+                if self.as_float or (not is_int_dtype):
+                    yield subtracted
+                else:
+                    yield np.clip(np.round(subtracted), dmin, dmax).astype(self.dtype)
             # Allow img to be freed immediately to avoid keeping it in
             # memory while the next loop iteration calls assemble_channel.
             ab_img = None
@@ -127,15 +139,15 @@ class SubtractPyramid(reg.PyramidWriter):
 
     @property
     def num_channels(self):
-        return len(self.bg_mosaic.channels)
+        return len(self.ab_mosaic.channels)
 
     @property
     def dtype(self):
-        return self.bg_mosaic.dtype
+        return self.ab_mosaic.dtype
 
     @property
     def channels(self):
-        return self.bg_mosaic.channels
+        return self.ab_mosaic.channels
 
     def run(self):
         if not hasattr(self, "mosaics_zarr"):

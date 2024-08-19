@@ -175,6 +175,7 @@ def _subtract_metadata(
     ab_ref_path,
     output_path,
     fiducial_channel,
+    subtraction_config,
 ):
     ab_path = pathlib.Path(ab_path).absolute()
     bg_path = pathlib.Path(bg_path).absolute()
@@ -215,16 +216,25 @@ def _subtract_metadata(
         value=ChannelMetadata(**metadata["subtracted"]).to_xml()
     )
     ome.structured_annotations.extend([annot_fiducial, annot_subtracted])
-    for idx, channel in enumerate(ome.images[0].pixels.channels):
-        if idx == fiducial_channel:
+
+    ab_channel_ids = [ch_ab["channel_index"] for ch_ab in subtraction_config]
+    if fiducial_channel is not None:
+        assert fiducial_channel in ab_channel_ids
+        subtraction_config[ab_channel_ids.index(fiducial_channel)]["bg_channel"] = {}
+
+    for channel, config in zip(ome.images[0].pixels.channels, subtraction_config):
+        bg_channel_id = config["bg_channel"].get("channel_index", None)
+        if bg_channel_id is None:
             channel.annotation_refs.append(
                 ome_types.model.AnnotationRef(id=annot_fiducial.id)
             )
             continue
         annot_channel = ome_types.model.XMLAnnotation(
             value=ChannelMetadata(
-                subtraction_exposure_time=metadata_pixels.planes[idx].exposure_time,
-                subtraction_channel=metadata_pixels.channels[idx],
+                subtraction_exposure_time=metadata_pixels.planes[
+                    bg_channel_id
+                ].exposure_time,
+                subtraction_channel=metadata_pixels.channels[bg_channel_id],
             ).to_xml()
         )
         ome.structured_annotations.append(annot_channel)

@@ -163,11 +163,14 @@ def subtract(
     output_path: str | pathlib.Path = None,
     fiducial_channel: int = 0,
     bg_intensity_scaling_factor: str | Iterable[float] | None = "rcjob",
+    channel_matching_by: str = "rcjob",
     camera_bias: float = 105.0,
     add_camera_bias_back: bool = False,
     as_float: bool = False,
     is_cli: bool = True,
 ):
+    assert channel_matching_by in ["rcjob", "index"]
+
     bg_path = pathlib.Path(bg_path).absolute()
     ab_path = pathlib.Path(ab_path).absolute()
     bg_aligner = _load_ashlar_pkl(bg_path)
@@ -187,6 +190,22 @@ def subtract(
         assert bg_intensity_scaling_factor == "rcjob"
         bg_intensity_scaling_factor = _exposure_time_factor(bg_path, ab_path)
 
+    if channel_matching_by == "index":
+        # match bg and ab channels by their indecies; number of channels must match
+        assert bg_mosaic.channels == ab_mosaic.channels
+
+        if bg_intensity_scaling_factor is not None:
+            assert len(bg_intensity_scaling_factor) == len(ab_mosaic.channels)
+        subtraction_config = _subtraction_config_by_index(
+            ab_mosaic.channels, bg_intensity_scaling_factor
+        )
+    else:
+        # use excitation and emission info in rcjob file to map channel between
+        # bg and ab cycles; do not subtract an ab channel if no matching channel
+        # is present in the bg cycle
+        subtraction_config = _subtraction_config_by_rcjob(bg_path, ab_path)
+        bg_intensity_scaling_factor = None
+
     sp = subtract_pyramid.SubtractPyramid(
         bg_mosaic,
         ab_mosaic,
@@ -197,6 +216,7 @@ def subtract(
         add_camera_bias_back=add_camera_bias_back,
         fiducial_channel=fiducial_channel,
         as_float=as_float,
+        subtraction_config=subtraction_config,
     )
     sp.assemble_all_channels()
     sp.run()
@@ -209,6 +229,7 @@ def subtract(
         ab_ref_path=_get_ref_path(ab_aligner),
         output_path=output_path,
         fiducial_channel=fiducial_channel,
+        subtraction_config=subtraction_config,
     )
     tifffile.tiffcomment(output_path, ome.to_xml().encode())
 
@@ -258,6 +279,54 @@ def _exposure_time_rcjob(path):
     with open(path) as f:
         cfg = json.load(f)
     return cfg["scanner"]["assay"]["exposures"]
+
+
+def _subtraction_config_by_index(channels, bg_intensity_scaling_factor):
+    subtraction_config = []
+    for cc, ff in zip(channels, bg_intensity_scaling_factor):
+        subtraction_config.append(
+            {
+                "channel_index": cc,
+                "exposure_time": ff,
+                # artificially set bg channel exposure time to 1 - the intensity
+                # scaling factor is already calculated
+                "bg_channel": {"channel_index": cc, "exposure_time": 1},
+            }
+        )
+    return subtraction_config
+
+
+def _subtraction_config_by_rcjob(bg_path, ab_path):
+    bg_jobs = sorted(bg_path.glob("*.rcjob"))
+    ab_jobs = sorted(ab_path.glob("*.rcjob"))
+    assert len(bg_jobs) == 1
+    assert len(ab_jobs) == 1
+    job_bg = bg_jobs[0]
+    job_ab = ab_jobs[0]
+    settings_bg = _channel_settings_rcjob(job_bg)
+    settings_ab = _channel_settings_rcjob(job_ab)
+
+    for ab in settings_ab:
+        ab["bg_channel"] = {}
+        for bg in settings_bg:
+            if ab["ex_em"] == bg["ex_em"]:
+                ab["bg_channel"] = bg
+                # break at first match
+                break
+    return settings_ab
+
+
+def _channel_settings_rcjob(path):
+    with open(path) as f:
+        cfg = json.load(f)
+    assay = cfg["scanner"]["assay"]
+
+    settings = []
+    for idx, (ex, em, et) in enumerate(
+        zip(assay["excitations"], assay["emissions"], assay["exposures"])
+    ):
+        settings.append({"channel_index": idx, "ex_em": (ex, em), "exposure_time": et})
+    return settings
 
 
 def _custom_output_path(output_path):
