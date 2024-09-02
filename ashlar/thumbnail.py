@@ -47,9 +47,8 @@ def calculate_image_offset(img1, img2, upsample_factor=1):
         ref,
         test,
         upsample_factor=upsample_factor,
-        normalization=None,
-        return_error=False,
-    )
+        normalization=None
+    )[0]
     return shift
 
 
