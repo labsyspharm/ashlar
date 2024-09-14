@@ -29,7 +29,6 @@ class SubtractPyramid(reg.PyramidWriter):
         )
         self.bg_mosaic = bg_mosaic
         self.ab_mosaic = ab_mosaic
-        assert self.bg_mosaic.channels == self.ab_mosaic.channels
         assert self.bg_mosaic.dtype == self.ab_mosaic.dtype
 
         self.as_float = as_float

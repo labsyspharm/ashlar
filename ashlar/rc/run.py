@@ -193,9 +193,7 @@ def subtract(
     if channel_matching_by == "index":
         # match bg and ab channels by their indecies; number of channels must match
         assert bg_mosaic.channels == ab_mosaic.channels
-
-        if bg_intensity_scaling_factor is not None:
-            assert len(bg_intensity_scaling_factor) == len(ab_mosaic.channels)
+        assert len(bg_intensity_scaling_factor) == len(ab_mosaic.channels)
         subtraction_config = _subtraction_config_by_index(
             ab_mosaic.channels, bg_intensity_scaling_factor
         )
@@ -272,6 +270,14 @@ def _exposure_time_factor(bg_path, ab_path):
     assert len(ab_jobs) == 1
     bg = _exposure_time_rcjob(bg_jobs[0])
     ab = _exposure_time_rcjob(ab_jobs[0])
+    if len(ab) != len(bg):
+        print(
+            "\n"
+            f"Number of channels does not match\n"
+            f"\t{len(bg)} channels in {bg_path}\n"
+            f"\t{len(ab)} channels in {ab_path}\n"
+        )
+        return None
     return np.divide(ab, bg)
 
 
