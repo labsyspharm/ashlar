@@ -18,6 +18,8 @@ def combine_cycles(
     # set `dna_channel_number` to None to keep all the channels in the input
     # files
     dna_channel_number: int = 0,
+    flip_image_x=True,
+    flip_image_y=False,
     overwrite: bool = False,
     _level: int = 0,
 ):
@@ -49,6 +51,10 @@ Keeping DNA channel from:
 
 DNA channel number:
 \t{dna_channel_number}
+
+Flip image:
+\tX: {flip_image_x}
+\tY: {flip_image_y}
 """
     print(print_str)
 
@@ -59,6 +65,10 @@ DNA channel number:
 
     for idx, reader in enumerate(readers):
         _mosaic = reader.pyramid[_level]
+        if flip_image_x:
+            _mosaic = _mosaic[:, :, ::-1]
+        if flip_image_y:
+            _mosaic = _mosaic[:, ::-1, :]
         channels = list(range(_mosaic.shape[0]))
         if idx != dna_file_index:
             if dna_channel_number in channels:
