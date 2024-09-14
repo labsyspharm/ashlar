@@ -22,7 +22,8 @@ requires = [
     'fire==0.5.0',
     'seaborn>=0.12.0',
     'opencv-python>=4.6.0',
-    'palom>=2023.9.2'
+    'palom>=2024.9.1',
+    'lxml>=5.2.1',
 ]
 
 
