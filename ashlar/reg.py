@@ -898,6 +898,11 @@ class LayerAligner(object):
         position_diffs = np.absolute(
             self.positions - self.reference_aligner_positions
         )
+        # This should only happen when registering the same cycles/files
+        if np.all(position_diffs == 0):
+            self.discard = np.full(len(position_diffs), False)
+            self.offset = 0
+            return
         # Round the diffs to one decimal point because the subpixel shifts are
         # calculated by 10x upsampling and thus only accurate to that level.
         position_diffs = np.rint(position_diffs * 10) / 10
