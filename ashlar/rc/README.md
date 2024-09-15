@@ -17,7 +17,7 @@ Activate the conda environment and pip install aslar from GitHub:
 
 ```bash
 conda activate rcashlar
-python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2024-1-1"
+python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2024-9-1"
 ```
 
 ## Workflow
@@ -69,6 +69,10 @@ python -m pip install "ashlar @ git+https://github.com/yu-anchen/ashlar@afr-2024
         --dna_channel_number=DNA_CHANNEL_NUMBER
             Type: int
             Default: 0
+        --flip_image_x=FLIP_IMAGE_X
+            Default: True
+        --flip_image_y=FLIP_IMAGE_Y
+            Default: False
         --overwrite=OVERWRITE
             Type: bool
             Default: False
@@ -264,7 +268,10 @@ conda activate rcashlar
         -b, --bg_intensity_scaling_factor=BG_INTENSITY_SCALING_FACTOR
             Type: Union
             Default: 'rcjob'
-        -c, --camera_bias=CAMERA_BIAS
+        --channel_matching_by=CHANNEL_MATCHING_BY
+            Type: str
+            Default: 'rcjob'
+        --camera_bias=CAMERA_BIAS
             Type: float
             Default: 105.0
         --add_camera_bias_back=ADD_CAMERA_BIAS_BACK
