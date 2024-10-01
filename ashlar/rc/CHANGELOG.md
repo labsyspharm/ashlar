@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [afr-2024-9-2] - 2024-09-30
+
+### Changed
+
+- Microscope serial number metadata: use "serialNumber" field in rcjob file,
+  fall back to "jobHostname" when not available for backward compatibility
+
 ## [afr-2024-9-1] - 2024-09-14
 
 ### Added

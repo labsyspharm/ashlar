@@ -37,7 +37,7 @@ def read_metadata_file(metadata_path=None, rcjob_path=None):
     microscope = ome_types.model.Microscope(
         manufacturer="RareCyte",
         model="CyteFinder II HT",
-        serial_number=rcjob["jobHostname"],
+        serial_number=rcjob["serialNumber"] or rcjob["jobHostname"],
     )
 
     instrument = ome_types.model.Instrument(
