@@ -404,7 +404,8 @@ class BioformatsReader(PlateReader):
         self.metadata._reader.setSeries(self.metadata.active_series[series])
         index = self.metadata._reader.getIndex(0, c, 0)
         byte_array = self.metadata._reader.openBytes(index)
-        dtype = self.metadata.pixel_dtype
+        endian = "<" if self.metadata._reader.isLittleEndian() else ">"
+        dtype = self.metadata.pixel_dtype.newbyteorder(endian)
         shape = self.metadata.tile_size(series)
         img = np.frombuffer(byte_array.tostring(), dtype=dtype).reshape(shape)
         return img
