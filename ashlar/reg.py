@@ -28,9 +28,9 @@ from . import __version__ as _version
 
 if not jnius_config.vm_running:
     pkg_root = pathlib.Path(__file__).parent.resolve()
-    bf_jar_path = pkg_root / 'jars' / 'loci_tools.jar'
+    bf_jar_path = pkg_root / 'jars' / 'bioformats_package.jar'
     if not bf_jar_path.exists():
-        raise RuntimeError("loci_tools.jar missing from distribution"
+        raise RuntimeError("bioformats_package.jar missing from distribution"
                            " (expected it at %s)" % bf_jar_path)
     jnius_config.add_classpath(str(bf_jar_path))
     # These settings constrain the memory used by BioFormats to near the minimum
@@ -48,7 +48,7 @@ OMEXMLService = jnius.autoclass('loci.formats.services.OMEXMLService')
 ChannelSeparator = jnius.autoclass('loci.formats.ChannelSeparator')
 DynamicMetadataOptions = jnius.autoclass('loci.formats.in.DynamicMetadataOptions')
 UNITS = jnius.autoclass('ome.units.UNITS')
-DebugTools.enableLogging("ERROR")
+DebugTools.setRootLevel("ERROR")
 
 
 # TODO:
@@ -378,9 +378,13 @@ class BioformatsMetadata(PlateMetadata):
                 value = v.doubleValue()
             values.append(value)
         position_microns = np.array(values, dtype=float)
-        # Invert Y so that stage position coordinates and image pixel
-        # coordinates are aligned (most formats seem to work this way).
-        position_microns *= [-1, 1]
+        # Flip the y-axis of the stage coordinate system to align it with the
+        # image coordinate system, as seems to be required for most formats.
+        # Skip this for any formats known not to require it.
+        if self.format_name not in (
+            "InCell 1000/2000", # As of Bioformats 6.4.0
+        ):
+            position_microns *= [-1, 1]
         position_pixels = position_microns / self.pixel_size
         return position_pixels
 
