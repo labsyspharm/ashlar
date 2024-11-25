@@ -378,9 +378,13 @@ class BioformatsMetadata(PlateMetadata):
                 value = v.doubleValue()
             values.append(value)
         position_microns = np.array(values, dtype=float)
-        # Invert Y so that stage position coordinates and image pixel
-        # coordinates are aligned (most formats seem to work this way).
-        position_microns *= [-1, 1]
+        # Flip the y-axis of the stage coordinate system to align it with the
+        # image coordinate system, as seems to be required for most formats.
+        # Skip this for any formats known not to require it.
+        if self.format_name not in (
+            "InCell 1000/2000", # As of Bioformats 6.4.0
+        ):
+            position_microns *= [-1, 1]
         position_pixels = position_microns / self.pixel_size
         return position_pixels
 
