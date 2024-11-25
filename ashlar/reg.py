@@ -48,7 +48,7 @@ OMEXMLService = jnius.autoclass('loci.formats.services.OMEXMLService')
 ChannelSeparator = jnius.autoclass('loci.formats.ChannelSeparator')
 DynamicMetadataOptions = jnius.autoclass('loci.formats.in.DynamicMetadataOptions')
 UNITS = jnius.autoclass('ome.units.UNITS')
-DebugTools.enableLogging("ERROR")
+DebugTools.setRootLevel("ERROR")
 
 
 # TODO:
