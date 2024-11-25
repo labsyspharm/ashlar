@@ -28,9 +28,9 @@ from . import __version__ as _version
 
 if not jnius_config.vm_running:
     pkg_root = pathlib.Path(__file__).parent.resolve()
-    bf_jar_path = pkg_root / 'jars' / 'loci_tools.jar'
+    bf_jar_path = pkg_root / 'jars' / 'bioformats_package.jar'
     if not bf_jar_path.exists():
-        raise RuntimeError("loci_tools.jar missing from distribution"
+        raise RuntimeError("bioformats_package.jar missing from distribution"
                            " (expected it at %s)" % bf_jar_path)
     jnius_config.add_classpath(str(bf_jar_path))
     # These settings constrain the memory used by BioFormats to near the minimum

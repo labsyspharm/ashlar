@@ -43,32 +43,32 @@ AUTHOR_EMAIL = 'jeremy_muhlich@hms.harvard.edu'
 LICENSE = 'MIT License'
 HOMEPAGE = 'https://github.com/sorgerlab/ashlar'
 
-LOCI_TOOLS_URL = 'https://downloads.openmicroscopy.org/bio-formats/6.3.1/artifacts/loci_tools.jar'
-LOCI_TOOLS_SHA1 = 'bdf1a37b561fea02fd8d1c747bd34db3fc49667b'
+BIOFORMATS_JAR_URL = 'https://downloads.openmicroscopy.org/bio-formats/8.0.1/artifacts/bioformats_package.jar'
+BIOFORMATS_JAR_SHA256 = '8c7557a9357a83bf40272292fbd676beb466a9a8bab34126e92a49d636c64bc2'
 
 def download_bioformats():
     print("Ensuring latest bioformats is present:")
     dist_root = os.path.abspath(os.path.dirname(__file__))
     jar_dir = os.path.join(dist_root, 'ashlar', 'jars')
-    lt_jar_path = os.path.join(jar_dir, 'loci_tools.jar')
+    lt_jar_path = os.path.join(jar_dir, 'bioformats_package.jar')
     if not os.access(jar_dir, os.F_OK):
         os.mkdir(jar_dir)
     try:
         with open(lt_jar_path, 'rb') as f:
-            existing_sha1 = hashlib.sha1(f.read()).hexdigest()
-            if existing_sha1 == LOCI_TOOLS_SHA1:
+            existing_sha256 = hashlib.sha256(f.read()).hexdigest()
+            if existing_sha256 == BIOFORMATS_JAR_SHA256:
                 print("    Up to date!")
                 return
     except IOError:
         pass
-    print("    Downloading BioFormats from %s ..." % LOCI_TOOLS_URL)
+    print("    Downloading BioFormats from %s ..." % BIOFORMATS_JAR_URL)
     # FIXME add progress bar
-    content = urlopen(LOCI_TOOLS_URL).read()
-    content_sha1 = hashlib.sha1(content).hexdigest()
+    content = urlopen(BIOFORMATS_JAR_URL).read()
+    content_sha256 = hashlib.sha256(content).hexdigest()
     with open(lt_jar_path, 'wb') as f:
         f.write(content)
-    if content_sha1 != LOCI_TOOLS_SHA1:
-        raise RuntimeError("loci_tools.jar hash mismatch")
+    if content_sha256 != BIOFORMATS_JAR_SHA256:
+        raise RuntimeError("bioformats_package.jar hash mismatch")
 
 # Define some distutils command subclasses for a few key commands to trigger
 # downloading the BioFormats JAR before they run.
