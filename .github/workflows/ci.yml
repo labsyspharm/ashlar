@@ -16,13 +16,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Build the Docker container
         run: docker build -t ashlar:test .
 
       # Cache test data to avoid repeated download
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         id: cache-data
         with:
           path: |
@@ -56,7 +56,7 @@ jobs:
 
       # If the action is successful, the output will be available as a downloadable artifact
       - name: Upload processed result
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: exemplar-001
           path: |
