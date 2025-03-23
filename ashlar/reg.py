@@ -1138,9 +1138,14 @@ class Mosaic(object):
             if self.verbose:
                 sys.stdout.write(f"\r        merging tile {si + 1}/{num_tiles}")
                 sys.stdout.flush()
-            img = self.aligner.reader.read(c=channel, series=si)
-            img = self.correct_illumination(img, channel)
-            utils.paste(out, img, position, func=utils.pastefunc_blend)
+            
+            mosaic_slice = utils.calculate_mosaic_position(
+                position, self.aligner.metadata.tile_size(si), self.shape
+            )['mosaic']
+            if mosaic_slice is not None:
+                img = self.aligner.reader.read(c=channel, series=si)
+                img = self.correct_illumination(img, channel)
+                utils.paste(out, img, position, func=utils.pastefunc_blend)
         # Memory-conserving axis flips.
         if self.flip_mosaic_x:
             for i in range(len(out)):
