@@ -441,6 +441,15 @@ class CachingReader(Reader):
         self.channel = channel
         self._cache = {}
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['_cache']
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._cache = {}
+
     @property
     def metadata(self):
         return self.reader.metadata
