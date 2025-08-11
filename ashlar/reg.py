@@ -1295,7 +1295,8 @@ class PyramidWriter:
                 subifds=int(self.num_levels - 1),
                 dtype=dtype,
                 tile=self.tile_shapes[0],
-                resolution=(resolution_cm, resolution_cm, "centimeter"),
+                resolution=(resolution_cm, resolution_cm),
+                resolutionunit="centimeter",
                 # FIXME Propagate this from input files (especially RGB).
                 photometric="minisblack",
                 compression="adobe_deflate",
