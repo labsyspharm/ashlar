@@ -3,6 +3,7 @@ import sys
 import re
 import argparse
 import pathlib
+import csv
 import blessed
 from .. import __version__ as VERSION
 from .. import reg
@@ -25,12 +26,24 @@ def main(argv=sys.argv):
     parser.add_argument(
         '-o', '--output', dest='output', default='ashlar_output.ome.tif',
         metavar='PATH',
-        help=("Output file. If PATH ends in .ome.tif a pyramidal OME-TIFF will"
-              " be written. If PATH ends in just .tif and includes {cycle} and"
-              " {channel} placeholders, a series of single-channel plain TIFF"
-              " files will be written. If PATH starts with a relative or"
-              " absolute path to another directory, that directory must already"
-              " exist."),
+        help=("Output path for stitched image. If PATH ends in .ome.tif a"
+              " pyramidal OME-TIFF will be written. If PATH ends in just .tif"
+              " and includes {cycle} and {channel} placeholders, a series of"
+              " single-channel plain TIFF files will be written. If PATH starts"
+              " with a relative or absolute path to another directory, that"
+              " directory must already exist."),
+    )
+    parser.add_argument(
+        "--output-positions", default="ashlar_positions.csv", metavar="PATH",
+        help=("Output path for corrected tile coordinates in CSV format."),
+    )
+    parser.add_argument(
+        "--skip-image", default=False, action="store_true",
+        help="Do not write stitched image file.",
+    )
+    parser.add_argument(
+        "--skip-positions", default=False, action="store_true",
+        help="Do not write tile coordinates CSV file.",
     )
     parser.add_argument(
         '-c', '--align-channel', dest='align_channel', type=int,
@@ -170,6 +183,23 @@ def main(argv=sys.argv):
     if re.search(r"\.ome\.tiff?$", args.filename_format, re.IGNORECASE):
         args.pyramid = True
 
+    if args.skip_image and args.skip_positions:
+        print_error("Requested to skip writing all outputs; nothing to do")
+        return 1
+    if args.skip_image:
+        args.filename_format = None
+    if args.skip_positions:
+        args.output_positions = None
+
+    if args.plates and args.output_positions:
+        p = pathlib.Path(args.output_positions)
+        if str(p) != p.name:
+            print_error(
+                "When specifying --plates, --output-positions must be a plain"
+                " filename without any leading path components."
+            )
+            return 1
+
     if args.tile_size != parser.get_default("tile_size") and not args.pyramid:
         print_error("--tile-size can only be used with OME-TIFF output")
         return 1
@@ -217,16 +247,21 @@ def main(argv=sys.argv):
     try:
         if args.plates:
             return process_plates(
-                filepaths, output_path, args.filename_format, args.flip_x,
-                args.flip_y, ffp_paths, dfp_paths, args.barrel_correction,
-                aligner_args, mosaic_args, args.pyramid, args.quiet
+                filepaths, output_path, args.filename_format,
+                args.output_positions, args.flip_x, args.flip_y, ffp_paths,
+                dfp_paths, args.barrel_correction, aligner_args, mosaic_args,
+                args.pyramid, args.quiet
             )
         else:
-            mosaic_path_format = str(output_path / args.filename_format)
+            if args.skip_image:
+                mosaic_path_format = None
+            else:
+                mosaic_path_format = str(output_path / args.filename_format)
             return process_single(
-                filepaths, mosaic_path_format, args.flip_x, args.flip_y,
-                ffp_paths, dfp_paths, args.barrel_correction, aligner_args,
-                mosaic_args, args.pyramid, args.quiet
+                filepaths, mosaic_path_format, args.output_positions,
+                args.flip_x, args.flip_y, ffp_paths, dfp_paths,
+                args.barrel_correction, aligner_args, mosaic_args, args.pyramid,
+                args.quiet
             )
     except ProcessingError as e:
         print_error(str(e))
@@ -234,8 +269,8 @@ def main(argv=sys.argv):
 
 
 def process_single(
-    filepaths, output_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
-    barrel_correction, aligner_args, mosaic_args, pyramid, quiet,
+    filepaths, image_path_format, positions_path, flip_x, flip_y, ffp_paths,
+    dfp_paths, barrel_correction, aligner_args, mosaic_args, pyramid, quiet,
     plate_well=None
 ):
 
@@ -286,21 +321,37 @@ def process_single(
     # Disable reader caching to save memory during mosaicing and writing.
     edge_aligner.reader = edge_aligner.reader.reader
 
+    if positions_path is not None:
+        with open(positions_path, mode="w", newline="") as f:
+            pos_writer = csv.writer(f)
+            pos_writer.writerow(["Cycle", "Tile", "OriginalX", "OriginalY", "X", "Y"])
+            for cycle, mosaic in enumerate(mosaics):
+                orig_pos = mosaic.aligner.reader.metadata.positions
+                pos = mosaic.aligner.positions
+                for tile, ((oy, ox), (y, x)) in enumerate(zip(orig_pos, pos)):
+                    pos_writer.writerow([cycle, tile, ox, oy, x, y])
+    if image_path_format is not None:
+        if not quiet:
+            print()
+            print(f"Merging tiles and writing to {image_path_format}")
+        writer_class = reg.PyramidWriter if pyramid else reg.TiffListWriter
+        writer = writer_class(
+            mosaics, image_path_format, verbose=not quiet, **writer_args
+        )
+        writer.run()
     if not quiet:
         print()
-        print(f"Merging tiles and writing to {output_path_format}")
-    writer_class = reg.PyramidWriter if pyramid else reg.TiffListWriter
-    writer = writer_class(
-        mosaics, output_path_format, verbose=not quiet, **writer_args
-    )
-    writer.run()
+        print("Output summary")
+        print(f"  Merged image: {image_path_format}")
+        print(f"  Tile positions: {positions_path}")
 
     return 0
 
 
 def process_plates(
-    filepaths, output_path, filename_format, flip_x, flip_y, ffp_paths,
-    dfp_paths, barrel_correction, aligner_args, mosaic_args, pyramid, quiet
+    filepaths, output_path, filename_format, positions_filename, flip_x, flip_y,
+    ffp_paths, dfp_paths, barrel_correction, aligner_args, mosaic_args, pyramid,
+    quiet
 ):
 
     temp_reader = build_reader(filepaths[0])
@@ -316,16 +367,25 @@ def process_plates(
             print("Well {}\n-----".format(well_name))
             if len(metadata.plate_well_series[p][w]) > 0:
                 plate_path = output_path / plate_name
-                if pyramid:
-                    out_file_path = plate_path / f"{well_name}_{filename_format}"
+                plate_path.mkdir(parents=True, exist_ok=True)
+                if filename_format is None:
+                    mosaic_path_format = None
                 else:
-                    out_file_path = plate_path / well_name / filename_format
-                out_file_path.parent.mkdir(parents=True, exist_ok=True)
-                mosaic_path_format = str(out_file_path)
+                    if pyramid:
+                        out_file_path = plate_path / f"{well_name}_{filename_format}"
+                    else:
+                        well_path = plate_path / well_name
+                        well_path.mkdir(exist_ok=True)
+                        out_file_path = well_path / filename_format
+                    mosaic_path_format = str(out_file_path)
+                if positions_filename is None:
+                    positions_path = None
+                else:
+                    positions_path = str(plate_path / f"{well_name}_{positions_filename}")
                 process_single(
-                    filepaths, mosaic_path_format, flip_x, flip_y,
-                    ffp_paths, dfp_paths, barrel_correction, aligner_args,
-                    mosaic_args, pyramid, quiet, plate_well=(p, w)
+                    filepaths, mosaic_path_format, positions_path, flip_x,
+                    flip_y, ffp_paths, dfp_paths, barrel_correction,
+                    aligner_args, mosaic_args, pyramid, quiet, plate_well=(p, w)
                 )
             else:
                 print("Skipping -- No images found.")
