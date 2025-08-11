@@ -56,7 +56,7 @@ jobs:
 
       # If the action is successful, the output will be available as a downloadable artifact
       - name: Upload processed result
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: exemplar-001
           path: |
