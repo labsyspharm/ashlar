@@ -1038,7 +1038,7 @@ class Mosaic(object):
     def __init__(
         self, aligner, shape, channels=None, ffp_path=None, dfp_path=None,
         flip_mosaic_x=False, flip_mosaic_y=False, barrel_correction=None,
-        verbose=False
+        pastefunc = utils.pastefunc_blend, verbose=False
     ):
         self.aligner = aligner
         self.shape = tuple(shape)
@@ -1049,6 +1049,7 @@ class Mosaic(object):
         self.dtype = aligner.metadata.pixel_dtype
         self._load_correction_profiles(dfp_path, ffp_path)
         self.verbose = verbose
+        self.pastefunc = pastefunc
 
     def _sanitize_channels(self, channels):
         all_channels = range(self.aligner.metadata.num_channels)
@@ -1149,7 +1150,7 @@ class Mosaic(object):
                 sys.stdout.flush()
             img = self.aligner.reader.read(c=channel, series=si)
             img = self.correct_illumination(img, channel)
-            utils.paste(out, img, position, func=utils.pastefunc_blend)
+            utils.paste(out, img, position, func=self.pastefunc)
         # Memory-conserving axis flips.
         if self.flip_mosaic_x:
             for i in range(len(out)):
