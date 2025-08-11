@@ -1024,7 +1024,7 @@ class Mosaic(object):
     def __init__(
         self, aligner, shape, channels=None, ffp_path=None, dfp_path=None,
         flip_mosaic_x=False, flip_mosaic_y=False, barrel_correction=None,
-        verbose=False, pastefunc = utils.pastefunc_blend
+        pastefunc = utils.pastefunc_blend, verbose=False
     ):
         self.aligner = aligner
         self.shape = tuple(shape)
