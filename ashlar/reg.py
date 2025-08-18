@@ -1177,7 +1177,7 @@ class PyramidWriter:
 
     def __init__(
         self, mosaics, path, scale=2, tile_size=1024, peak_size=1024,
-        parallel_assemble=True, verbose=False
+        parallel_assemble=True, n_jobs=None, verbose=False
     ):
         if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
             raise ValueError("mosaics must all have the same shape")
@@ -1189,6 +1189,7 @@ class PyramidWriter:
         self.tile_size = tile_size
         self.peak_size = peak_size
         self.parallel_assemble = parallel_assemble
+        self.n_jobs = n_jobs
         self.verbose = verbose
 
     @property
@@ -1253,8 +1254,11 @@ class PyramidWriter:
                 tasks.append(
                     (mosaic.assemble_channel, channel, root[mi][channel])
                 )
-        n_jobs = min(len(tasks), joblib.cpu_count())
-        verboses = [True] + [False] * (len(tasks) - 1)
+        if self.n_jobs is None:
+            self.n_jobs = joblib.cpu_count()
+        n_jobs = min(len(tasks), joblib.cpu_count(), self.n_jobs)
+        verboses = np.full(len(tasks), fill_value=False)
+        verboses[::n_jobs] = True
         print(f"Generating mosaics in parallel ({n_jobs} processes)")
         _ = joblib.Parallel(n_jobs=n_jobs, verbose=0)(
             joblib.delayed(m_func)(channel, out=out_zarr, verbose=v)
