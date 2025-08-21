@@ -116,7 +116,8 @@ setup(
             'ashlar=ashlar.scripts.ashlar:main',
             'preview_slide=ashlar.scripts.preview_slide:main',
             'make_alignment_movie=ashlar.scripts.make_alignment_movie:main',
-            'rcashlar=ashlar.rc.run:main'
+            'rcashlar=ashlar.rc.run:main',
+            'rcashlar-orion=ashlar.rc.orion:main'
         ]
     },
     classifiers=[
