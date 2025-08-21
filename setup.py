@@ -24,6 +24,7 @@ requires = [
     'opencv-python>=4.6.0',
     'palom>=2024.9.1',
     'lxml>=5.2.1',
+    'joblib<1.5',
 ]
 
 
