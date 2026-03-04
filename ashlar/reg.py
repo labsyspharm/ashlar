@@ -1578,8 +1578,12 @@ def plot_layer_quality(
         ]
 
     # Bounding boxes denoting new tile positions.
+    ales = aligner.errors
+    errors = np.clip(
+        ales, 0, np.nanmax(ales[np.isfinite(ales)]) + 2
+    )
     color_index = skimage.exposure.rescale_intensity(
-        aligner.errors, out_range=np.uint8
+        errors, out_range=np.uint8
     ).astype(np.uint8)
     color_map = mcm.magma_r
     for xy, c_idx in zip(np.fliplr(positions), color_index):
@@ -1620,5 +1624,6 @@ def plot_layer_quality(
 def draw_mosaic_image(ax, aligner, img, **kwargs):
     if img is None:
         img = [[0]]
-    h, w = aligner.mosaic_shape
-    ax.imshow(img, extent=(-0.5, w-0.5, h-0.5, -0.5), **kwargs)
+    r0, c0 = aligner.positions.min(axis=0)
+    r1, c1 = aligner.positions.max(axis=0) + aligner.metadata.size
+    ax.imshow(img, extent=(c0-0.5, c1-0.5, r1-0.5, r0-0.5), **kwargs)

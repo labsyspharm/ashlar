@@ -345,3 +345,13 @@ def imsave(fname, arr, **kwargs):
     del kwargs["check_contrast"]
     import skimage.external.tifffile
     skimage.external.tifffile.imsave(fname, arr, **kwargs)
+
+
+def visualize_long_tail_image(img, clip_min_factor=1e-3):
+    import skimage.exposure
+
+    img = skimage.exposure.rescale_intensity(img, out_range=(1, 1e3))
+    img = np.log(img)
+    nonzero_min = img[img > 0].min()
+    img[img == 0] = nonzero_min
+    return img
