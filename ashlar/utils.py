@@ -20,11 +20,14 @@ def whiten(img, sigma):
 
 @functools.lru_cache
 def get_window(shape):
-    # Build a 2D Hann window by taking the outer product of two 1-D windows.
-    wy = np.hanning(shape[0]).astype(np.float32)
-    wx = np.hanning(shape[1]).astype(np.float32)
-    window = np.outer(wy, wx)
-    return window
+    if isinstance(shape, int) or len(shape) == 1:
+        return np.kaiser(shape, beta=2).astype(np.float32)
+    else:
+        # Build a 2D window by taking the outer product of two 1-D windows.
+        wy = np.kaiser(shape[0], beta=2).astype(np.float32)
+        wx = np.kaiser(shape[1], beta=2).astype(np.float32)
+        window = np.outer(wy, wx)
+        return window
 
 
 def window(img):
@@ -131,6 +134,38 @@ def fourier_shift(img, shift):
     # FIXME need to zero out row(s) and column(s) we shifted away from,
     # since at this point we have a cyclic rotation rather than a shift.
     return img_s.real
+
+
+def register_angle(img1, img2, sigma, upsample=10):
+    p1w = whiten(reg_transform_polar(img1), sigma)
+    p2w = whiten(reg_transform_polar(img2), sigma)
+    shift = skimage.registration.phase_cross_correlation(
+        p1w,
+        p2w,
+        upsample_factor=upsample,
+        normalization=None,
+        return_error=False,
+    )
+    # The output of reg_transform_polar has ambiguous phase (+/- 180 degrees) in
+    # the polar axis due to the way it produces a shift-invariant image.  We
+    # expect the true angle to be close to zero, so we'll invert anything beyond
+    # +/-90 degrees.
+    angle = (shift[0] / p1w.shape[0] * 360 + 90) % 180 - 90
+    # skimage's warp_polar maps polar angle to the Y-axis in the opposite
+    # direction our math expects, so we need to flip the angle's sign.
+    angle = -angle
+    return angle
+
+
+def reg_transform_polar(img):
+    freq_mag = np.abs(np.fft.fft2(window(img)))
+    trans_inv_img = np.fft.fftshift(np.fft.ifft2(freq_mag).real)
+    pshape = (360 * 10, round(np.linalg.norm(img.shape) / 2))
+    polar_img = skimage.transform.warp_polar(
+        window(trans_inv_img), output_shape=pshape
+    )
+    polar_img = np.clip(polar_img, 0, None) * get_window(polar_img.shape[1])
+    return polar_img
 
 
 def _paste(target, img, pos, func=None):
