@@ -1,6 +1,7 @@
 *.pyc
 *.egg-info
 dist
+build
 
 ashlar/jars
 
