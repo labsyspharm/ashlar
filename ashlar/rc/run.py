@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tifffile
 
-from .. import reg
+from .. import reg, utils
 from .. import __version__ as VERSION
 from . import align_cycles, ome_metadata
 
@@ -43,10 +43,19 @@ def stitch(
     )
     c1e.run()
 
-    reg.plot_edge_quality(c1e, img=c1e.reader.thumbnail)
+    reg.plot_edge_quality(
+        c1e,
+        img=utils.visualize_long_tail_image(c1e.reader.thumbnail),
+        im_kwargs=dict(
+            interpolation="nearest",
+            vmin=np.percentile(
+                utils.visualize_long_tail_image(c1e.reader.thumbnail), 25
+            ),
+        ),
+    )
     fig = plt.gcf()
     fig.suptitle(path.name, color="white")
-    fig.set_size_inches(fig.get_size_inches() * 2)
+    fig.set_size_inches(fig.get_size_inches() * 4)
     fig.tight_layout()
     fig.savefig(path / f"{raw.stem}.ashlarqc.pdf", bbox_inches="tight")
     plt.close(fig)
@@ -109,7 +118,16 @@ def register(
         c2r, c1e, channel=channel_moving, max_shift=max_shift, filter_sigma=filter_sigma
     )
 
-    reg.plot_layer_quality(c21l, img=c21l.reader.thumbnail)
+    reg.plot_layer_quality(
+        c21l,
+        img=utils.visualize_long_tail_image(c21l.reader.thumbnail),
+        im_kwargs=dict(
+            interpolation="nearest",
+            vmin=np.percentile(
+                utils.visualize_long_tail_image(c21l.reader.thumbnail), 25
+            ),
+        ),
+    )
     fig = plt.gcf()
     fig.suptitle(raw.name)
     fig.set_size_inches(fig.get_size_inches() * 2)

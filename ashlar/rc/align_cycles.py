@@ -52,7 +52,14 @@ def refine_angle(layer_aligner, rank=None, top_k=None):
     top_k = min(top_k, len(tiles))
     tiles = tiles[:top_k]
     from joblib import Parallel, cpu_count, delayed
-    angles = Parallel(verbose=1, n_jobs=cpu_count())(delayed(register)(layer_aligner, t) for t in tiles)
+    img_pairs = filter(lambda x: x[0].size > 0, [
+        layer_aligner.overlap(t)[1:3]
+        for t in tiles
+    ])
+    angles = Parallel(verbose=1, n_jobs=cpu_count())(
+        delayed(utils.register_angle)(img1, img2, layer_aligner.filter_sigma)
+        for img1, img2 in img_pairs
+    )
     return np.nanmedian(angles)
 
 
@@ -89,6 +96,7 @@ def process_rotated_reader(
 
     edgy_scores = tile_edge_score(c2r, c21l.channel)
     angle = refine_angle(c21l, rank=np.argsort(edgy_scores)[::-1], top_k=30)
+    print(f'\r    refined cycle rotation = {angle:.4f} degrees')
 
     ori_shape = c2r.metadata.size
     rotation_slice = rotation_utils.compute_slice(ori_shape, angle)
