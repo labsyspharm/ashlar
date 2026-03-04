@@ -904,6 +904,11 @@ class LayerAligner(object):
         # Round the diffs to one decimal point because the subpixel shifts are
         # calculated by 10x upsampling and thus only accurate to that level.
         position_diffs = np.rint(position_diffs * 10) / 10
+        # This should only happen when registering the same cycles/files
+        if np.all(position_diffs == 0):
+            self.discard = np.full(len(position_diffs), False)
+            self.offset = 0
+            return
         # Discard camera background registration which will shift target
         # positions to reference aligner positions, due to strong
         # self-correlation of the sensor dark current pattern which dominates in
@@ -996,7 +1001,7 @@ class LayerAligner(object):
         plt.plot(origin[1], origin[0], 'r+')
         shift += origin - its.offset_diff_frac
         plt.plot(shift[1], shift[0], 'rx')
-        plt.tight_layout(0, 0, 0)
+        plt.tight_layout()
 
 
 class Intersection(object):
@@ -1123,7 +1128,9 @@ class Mosaic(object):
             self.dfp /= np.iinfo(self.dtype).max
             self.do_correction = True
 
-    def assemble_channel(self, channel, out=None):
+    def assemble_channel(self, channel, out=None, verbose=None):
+        if verbose is None:
+            verbose = self.verbose
         num_tiles = len(self.aligner.positions)
         if out is None:
             out = np.zeros(self.shape, self.dtype)
@@ -1134,12 +1141,17 @@ class Mosaic(object):
                     f" shape {self.shape}"
                 )
         for si, position in enumerate(self.aligner.positions):
-            if self.verbose:
+            if verbose:
                 sys.stdout.write(f"\r        merging tile {si + 1}/{num_tiles}")
                 sys.stdout.flush()
-            img = self.aligner.reader.read(c=channel, series=si)
-            img = self.correct_illumination(img, channel)
-            utils.paste(out, img, position, func=utils.pastefunc_blend)
+
+            mosaic_slice = utils.calculate_mosaic_position(
+                position, self.aligner.metadata.tile_size(si), self.shape
+            )['mosaic']
+            if mosaic_slice is not None:
+                img = self.aligner.reader.read(c=channel, series=si)
+                img = self.correct_illumination(img, channel)
+                utils.paste(out, img, position, func=utils.pastefunc_blend)
         # Memory-conserving axis flips.
         if self.flip_mosaic_x:
             for i in range(len(out)):
@@ -1147,7 +1159,7 @@ class Mosaic(object):
         if self.flip_mosaic_y:
             for i in range(len(out) // 2):
                 out[[i, -i-1]] = out[[-i-1, i]]
-        if self.verbose:
+        if verbose:
             print()
         return out
 
@@ -1163,7 +1175,8 @@ class Mosaic(object):
 class PyramidWriter:
 
     def __init__(
-        self, mosaics, path, scale=2, tile_size=1024, peak_size=1024, verbose=False
+        self, mosaics, path, scale=2, tile_size=1024, peak_size=1024,
+        parallel_assemble=True, verbose=False
     ):
         if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
             raise ValueError("mosaics must all have the same shape")
@@ -1174,6 +1187,7 @@ class PyramidWriter:
         self.scale = scale
         self.tile_size = tile_size
         self.peak_size = peak_size
+        self.parallel_assemble = parallel_assemble
         self.verbose = verbose
 
     @property
@@ -1220,16 +1234,48 @@ class PyramidWriter:
         ]
         return tile_shapes
 
+    def assemble_all(self):
+        import joblib
+        self.cache_path = f"{pathlib.Path(self.path)}.zarr"
+        root = zarr.open(self.cache_path, mode='w')
+
+        tasks = []
+        root.create_groups(*range(len(self.mosaics)))
+        for mi, mosaic in enumerate(self.mosaics):
+            for channel in mosaic.channels:
+                root[mi].zeros(
+                    channel,
+                    shape=self.base_shape,
+                    dtype=self.ref_mosaic.aligner.metadata.pixel_dtype,
+                    chunks=self.tile_shapes[0]
+                )
+                tasks.append(
+                    (mosaic.assemble_channel, channel, root[mi][channel])
+                )
+        n_jobs = min(len(tasks), joblib.cpu_count())
+        verboses = [True] + [False] * (len(tasks) - 1)
+        print(f"Generating mosaics in parallel ({n_jobs} processes)")
+        _ = joblib.Parallel(n_jobs=n_jobs, verbose=0)(
+            joblib.delayed(m_func)(channel, out=out_zarr, verbose=v)
+            for (m_func, channel, out_zarr), v in zip(tasks, verboses)
+        )
+        self.mosaics_zarr = root
+
     def base_tiles(self):
         h, w = self.base_shape
         th, tw = self.tile_shapes[0]
         for mi, mosaic in enumerate(self.mosaics):
             if self.verbose:
                 print(f"Cycle {mi}:")
-            for ci, channel in enumerate(mosaic.channels):
+            for channel in mosaic.channels:
                 if self.verbose:
                     print(f"    Channel {channel}:")
-                img = mosaic.assemble_channel(channel)
+                if self.parallel_assemble:
+                    img = self.mosaics_zarr[mi][channel]
+                    if self.verbose:
+                        print("        Reading from zarr")
+                else:
+                    img = mosaic.assemble_channel(channel)
                 for y in range(0, h, th):
                     for x in range(0, w, tw):
                         # Returning a copy makes the array contiguous, avoiding
@@ -1276,6 +1322,8 @@ class PyramidWriter:
                 "PhysicalSizeY": pixel_size, "PhysicalSizeYUnit": "\u00b5m"
             },
         }
+        if self.parallel_assemble and (not hasattr(self, 'mosaics_zarr')):
+            self.assemble_all()
         with tifffile.TiffWriter(self.path, ome=True, bigtiff=True) as tiff:
             tiff.write(
                 data=self.base_tiles(),
@@ -1310,6 +1358,8 @@ class PyramidWriter:
                 )
                 if self.verbose:
                     print()
+        if self.parallel_assemble:
+            self.mosaics_zarr.store.rmdir()
 
 
 class TiffListWriter:
