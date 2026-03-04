@@ -28,8 +28,9 @@ def run_orion(
     alpha: float = 0.01,
     max_error: float | None = None,
     n_jobs: int = 10,
+    no_mask_background: bool = False,
 ):
-    ...
+
     paths = [pathlib.Path(pp) for pp in paths]
     for pp in paths:
         assert pp.exists(), f"{pp} does not exist"
@@ -95,8 +96,14 @@ def run_orion(
         for aa in aligners
     ]
 
+    do_mask_tissue = not no_mask_background
     writer = reg.PyramidWriter(
-        mosaics, output_path, parallel_assemble=True, n_jobs=n_jobs, verbose=True
+        mosaics,
+        output_path,
+        parallel_assemble=True,
+        do_mask_tissue=do_mask_tissue,
+        n_jobs=n_jobs,
+        verbose=True,
     )
     writer.run()
 
@@ -210,6 +217,11 @@ def main(argv=sys.argv):
         default=10,
         help="Number of parallel jobs.",
     )
+    parser.add_argument(
+        "--no-mask-background",
+        action="store_true",
+        help="Do not automatically mask out background region",
+    )
 
     args = parser.parse_args(argv[1:])
 
@@ -233,6 +245,7 @@ def main(argv=sys.argv):
         alpha=args.alpha,
         max_error=args.max_error,
         n_jobs=args.n_jobs,
+        no_mask_background=args.no_mask_background,
     )
 
 

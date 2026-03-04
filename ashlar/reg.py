@@ -1129,7 +1129,30 @@ class Mosaic(object):
             self.dfp /= np.iinfo(self.dtype).max
             self.do_correction = True
 
-    def assemble_channel(self, channel, out=None, verbose=None):
+    def make_tissue_mask(self, qc_dir=None):
+        from .tissue_mask import make_reader_mask
+
+        p_final = self.aligner.positions
+        reader = self.aligner.reader
+        p_ori = np.array(reader.metadata.positions)
+
+        reader.metadata._position = p_final
+        if isinstance(reader, CachingReader):
+            fname = pathlib.Path(reader.reader.path).name
+        else:
+            fname = pathlib.Path(reader.path).name
+        
+        reader.tile_mask = make_reader_mask(reader, plot=True, figure_title=fname)
+        reader.metadata._position = p_ori
+
+        fig = plt.gcf()
+        if qc_dir is not None:
+            out_dir = pathlib.Path(qc_dir)
+            fig.savefig(out_dir / (fname.replace(".", "-") + "-tissue-mask.jpg"))
+        plt.close(fig)
+        
+
+    def assemble_channel(self, channel, out=None, verbose=None, do_mask=False):
         if verbose is None:
             verbose = self.verbose
         num_tiles = len(self.aligner.positions)
@@ -1146,12 +1169,21 @@ class Mosaic(object):
                 sys.stdout.write(f"\r        merging tile {si + 1}/{num_tiles}")
                 sys.stdout.flush()
 
+            mask = np.ones(
+                self.aligner.metadata.tile_size(si),
+                dtype=self.aligner.metadata.pixel_dtype,
+            )
+            if do_mask:
+                mask *= self.aligner.reader.tile_mask[str(si)]
+            if not np.any(mask):
+                continue
             mosaic_slice = utils.calculate_mosaic_position(
                 position, self.aligner.metadata.tile_size(si), self.shape
-            )['mosaic']
+            )["mosaic"]
             if mosaic_slice is not None:
                 img = self.aligner.reader.read(c=channel, series=si)
                 img = self.correct_illumination(img, channel)
+                img = img * mask
                 utils.paste(out, img, position, func=utils.pastefunc_blend)
         # Memory-conserving axis flips.
         if self.flip_mosaic_x:
@@ -1159,7 +1191,7 @@ class Mosaic(object):
                 out[i] = out[i, ::-1]
         if self.flip_mosaic_y:
             for i in range(len(out) // 2):
-                out[[i, -i-1]] = out[[-i-1, i]]
+                out[[i, -i - 1]] = out[[-i - 1, i]]
         if verbose:
             print()
         return out
@@ -1177,7 +1209,7 @@ class PyramidWriter:
 
     def __init__(
         self, mosaics, path, scale=2, tile_size=1024, peak_size=1024,
-        parallel_assemble=True, n_jobs=None, verbose=False
+        parallel_assemble=True, do_mask_tissue=False, n_jobs=None, verbose=False
     ):
         if any(m.shape != mosaics[0].shape for m in mosaics[1:]):
             raise ValueError("mosaics must all have the same shape")
@@ -1189,6 +1221,7 @@ class PyramidWriter:
         self.tile_size = tile_size
         self.peak_size = peak_size
         self.parallel_assemble = parallel_assemble
+        self.do_mask_tissue = do_mask_tissue
         self.n_jobs = n_jobs
         self.verbose = verbose
 
@@ -1238,22 +1271,23 @@ class PyramidWriter:
 
     def assemble_all(self):
         import joblib
+
         self.cache_path = f"{pathlib.Path(self.path)}.zarr"
-        root = zarr.open(self.cache_path, mode='w')
+        root = zarr.open(self.cache_path, mode="w")
 
         tasks = []
         root.create_groups(*range(len(self.mosaics)))
         for mi, mosaic in enumerate(self.mosaics):
+            if self.do_mask_tissue:
+                mosaic.make_tissue_mask(qc_dir=pathlib.Path(self.path).parent)
             for channel in mosaic.channels:
                 root[mi].zeros(
                     channel,
                     shape=self.base_shape,
                     dtype=self.ref_mosaic.aligner.metadata.pixel_dtype,
-                    chunks=self.tile_shapes[0]
+                    chunks=self.tile_shapes[0],
                 )
-                tasks.append(
-                    (mosaic.assemble_channel, channel, root[mi][channel])
-                )
+                tasks.append((mosaic.assemble_channel, channel, root[mi][channel]))
         if self.n_jobs is None:
             self.n_jobs = joblib.cpu_count()
         n_jobs = min(len(tasks), joblib.cpu_count(), self.n_jobs)
@@ -1261,7 +1295,9 @@ class PyramidWriter:
         verboses[::n_jobs] = True
         print(f"Generating mosaics in parallel ({n_jobs} processes)")
         _ = joblib.Parallel(n_jobs=n_jobs, verbose=0)(
-            joblib.delayed(m_func)(channel, out=out_zarr, verbose=v)
+            joblib.delayed(m_func)(
+                channel, out=out_zarr, verbose=v, do_mask=self.do_mask_tissue
+            )
             for (m_func, channel, out_zarr), v in zip(tasks, verboses)
         )
         self.mosaics_zarr = root
