@@ -1,7 +1,9 @@
 import argparse
+import datetime
 import pathlib
 import pickle
 import sys
+import time
 
 import lxml.etree
 import matplotlib.pyplot as plt
@@ -30,6 +32,8 @@ def run_orion(
     n_jobs: int = 10,
     no_mask_background: bool = False,
 ):
+
+    start = int(time.perf_counter())
 
     paths = [pathlib.Path(pp) for pp in paths]
     for pp in paths:
@@ -96,6 +100,8 @@ def run_orion(
         for aa in aligners
     ]
 
+    start_mosaic = int(time.perf_counter())
+
     do_mask_tissue = not no_mask_background
     writer = reg.PyramidWriter(
         mosaics,
@@ -118,6 +124,10 @@ def run_orion(
         names.extend(list(np.asarray(nn)[output_channels]))
 
     _add_channel_name(output_path, names)
+
+    end = int(time.perf_counter())
+    print("\nelapsed (mosaic):", datetime.timedelta(seconds=end - start_mosaic))
+    print("elapsed (total):", datetime.timedelta(seconds=end - start))
     return
 
 
