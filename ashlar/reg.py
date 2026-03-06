@@ -1271,6 +1271,7 @@ class PyramidWriter:
 
     def assemble_all(self):
         import joblib
+        from joblib.externals.loky import get_reusable_executor
 
         self.cache_path = f"{pathlib.Path(self.path)}.zarr"
         root = zarr.open(self.cache_path, mode="w")
@@ -1280,6 +1281,9 @@ class PyramidWriter:
         for mi, mosaic in enumerate(self.mosaics):
             if self.do_mask_tissue:
                 mosaic.make_tissue_mask(qc_dir=pathlib.Path(self.path).parent)
+            if isinstance(mosaic.aligner.reader, CachingReader):
+                mosaic.aligner.reader._cache = {}
+                mosaic.aligner.reader.channel = -1
             for channel in mosaic.channels:
                 root[mi].zeros(
                     channel,
@@ -1294,12 +1298,23 @@ class PyramidWriter:
         verboses = np.full(len(tasks), fill_value=False)
         verboses[::n_jobs] = True
         print(f"Generating mosaics in parallel ({n_jobs} processes)")
-        _ = joblib.Parallel(n_jobs=n_jobs, verbose=0)(
-            joblib.delayed(m_func)(
-                channel, out=out_zarr, verbose=v, do_mask=self.do_mask_tissue
-            )
-            for (m_func, channel, out_zarr), v in zip(tasks, verboses)
-        )
+
+        executor = get_reusable_executor(max_workers=n_jobs, timeout=300)
+
+        try:
+            futures = [
+                executor.submit(
+                    m_func,
+                    channel,
+                    out=out_zarr,
+                    verbose=v,
+                    do_mask=self.do_mask_tissue,
+                )
+                for (m_func, channel, out_zarr), v in zip(tasks, verboses)
+            ]
+            _ = [ff.result() for ff in futures]
+        finally:
+            executor.shutdown(wait=True, kill_workers=False)
         self.mosaics_zarr = root
 
     def base_tiles(self):
