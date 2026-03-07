@@ -2,7 +2,7 @@
 authors = ["Yu-An Chen <atwood12@gmail.com>"]
 channels = ["conda-forge"]
 name = "pixi-env"
-platforms = ["osx-arm64"]
+platforms = ["osx-arm64", "win-64", "linux-64"]
 version = "0.1.0"
 
 [tasks]
@@ -15,5 +15,12 @@ pyqt = ">=5.15.11,<6"
 asciitree = ">=0.3.3,<0.4"
 fire = "0.5.0.*"
 
+[target.win-64.dependencies]
+pyjnius = ">=1.6.1,<2"
+
+[target.linux-64.dependencies]
+pyjnius = ">=1.6.1,<2"
+
 [pypi-dependencies]
 ashlar = { path = "..", editable = true }
+palom = ">=2025.7"

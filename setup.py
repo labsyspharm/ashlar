@@ -19,11 +19,12 @@ requires = [
     'zarr>=2.11.3',
     'blessed>=1.17',
     'tqdm>=4.63.0',
-    'fire==0.5.0',
+    'fire>=0.5.0',
     'seaborn>=0.12.0',
     'opencv-python-headless>=4.9',
     'palom>=2024.9.1',
     'lxml>=5.2.1',
+    'ome-types>=0.6',
     'joblib<1.5',
     'compress-bg @ https://github.com/Yu-AnChen/compress-bg.git',
 ]
