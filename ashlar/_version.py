@@ -51,7 +51,7 @@ def get_config() -> VersioneerConfig:
     cfg = VersioneerConfig()
     cfg.VCS = "git"
     cfg.style = "pep440"
-    cfg.tag_prefix = "afr-"
+    cfg.tag_prefix = "orion-"
     cfg.parentdir_prefix = "ashlar-"
     cfg.versionfile_source = "ashlar/_version.py"
     cfg.verbose = False
