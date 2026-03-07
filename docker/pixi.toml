@@ -1,0 +1,20 @@
+[workspace]
+channels = ["conda-forge"]
+name = "pixi-ashlar-env-prod"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "3.10.*"
+pip = ">=25.2,<26"
+pyjnius = ">=1.6.1,<2"
+openjdk = ">=21,<22"
+pyqt = ">=5.15.11,<6"
+asciitree = ">=0.3.3,<0.4"
+fire = "*"
+
+[pypi-dependencies]
+ashlar = { url = "https://github.com/Yu-AnChen/ashlar/releases/download/orion-2026.3.2/ashlar-2026.3.2-py3-none-any.whl" }
+palom = ">=2025.7"
