@@ -144,11 +144,11 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/xorg-libxxf86vm-1.1.7-hb03c661_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/78/b6/6307fbef88d9b5ee7421e68d78a9f162e0da4900bc5f5793f6d3d0e34fb8/annotated_types-0.7.0-py3-none-any.whl
-      - pypi: direct+https://github.com/Yu-AnChen/ashlar/releases/download/orion-2026.3.2/ashlar-2026.3.2-py3-none-any.whl
+      - pypi: git+https://github.com/Yu-AnChen/ashlar?rev=5bb9b3df730a2a10a4f0d1f2a76177f94b07bf03#5bb9b3df730a2a10a4f0d1f2a76177f94b07bf03
       - pypi: https://files.pythonhosted.org/packages/22/04/2b4e111e0b902b1ac0b25e5e010af71c79fca093a3399bd7f8b82adcc536/blessed-1.33.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/98/78/01c019cdb5d6498122777c1a43056ebb3ebfeef2076d9d026bfe15583b2b/click-8.3.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/88/39/799be3f2f0f38cc727ee3b4f1445fe6d5e4133064ec2e4115069418a5bb6/cloudpickle-3.1.2-py3-none-any.whl
-      - pypi: git+https://github.com/Yu-AnChen/compress-bg.git#f1bdd3aaaca1aa54d3fb8223b07f037066420b28
+      - pypi: git+https://github.com/Yu-AnChen/compress-bg.git#b524f02e25adcd43b1b06817602d316a775fb543
       - pypi: https://files.pythonhosted.org/packages/32/5c/1ee32d1c7956923202f00cf8d2a14a62ed7517bdc0ee1e55301227fc273c/contourpy-1.3.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/e7/05/c19819d5e3d95294a6f5947fb9b9629efb316b96de511b418c53d245aae6/cycler-0.12.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e5/23/d39ccc4ed76222db31530b0a7d38876fdb7673e23f838e8d8f0ed4651a4f/dask-2026.1.2-py3-none-any.whl
@@ -247,9 +247,9 @@ packages:
   - pkg:pypi/asciitree?source=hash-mapping
   size: 6164
   timestamp: 1531050741142
-- pypi: direct+https://github.com/Yu-AnChen/ashlar/releases/download/orion-2026.3.2/ashlar-2026.3.2-py3-none-any.whl
+- pypi: git+https://github.com/Yu-AnChen/ashlar?rev=5bb9b3df730a2a10a4f0d1f2a76177f94b07bf03#5bb9b3df730a2a10a4f0d1f2a76177f94b07bf03
   name: ashlar
-  version: 2026.3.2
+  version: 2026.3.3
   requires_dist:
   - numpy>=1.18.1
   - pyjnius>=1.2.1
@@ -269,7 +269,7 @@ packages:
   - lxml>=5.2.1
   - ome-types>=0.6
   - joblib<1.5
-  - compress-bg @ https://github.com/Yu-AnChen/compress-bg.git
+  - compress-bg @ git+https://github.com/Yu-AnChen/compress-bg.git
 - conda: https://conda.anaconda.org/conda-forge/linux-64/attr-2.5.2-h39aace5_0.conda
   sha256: a9c114cbfeda42a226e2db1809a538929d2f118ef855372293bd188f71711c48
   md5: 791365c5f65975051e4e017b5da3abf5
@@ -353,9 +353,9 @@ packages:
   version: 3.1.2
   sha256: 9acb47f6afd73f60dc1df93bb801b472f05ff42fa6c84167d25cb206be1fbf4a
   requires_python: '>=3.8'
-- pypi: git+https://github.com/Yu-AnChen/compress-bg.git#f1bdd3aaaca1aa54d3fb8223b07f037066420b28
+- pypi: git+https://github.com/Yu-AnChen/compress-bg.git#b524f02e25adcd43b1b06817602d316a775fb543
   name: compress-bg
-  version: 0.1.dev10+gf1bdd3aaa
+  version: 0.1.dev11+gb524f02e2
   requires_dist:
   - dask
   - fire

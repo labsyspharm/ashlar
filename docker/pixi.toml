@@ -16,5 +16,5 @@ asciitree = ">=0.3.3,<0.4"
 fire = "*"
 
 [pypi-dependencies]
-ashlar = { url = "https://github.com/Yu-AnChen/ashlar/releases/download/orion-2026.3.2/ashlar-2026.3.2-py3-none-any.whl" }
+ashlar = { git = "https://github.com/Yu-AnChen/ashlar", rev = "5bb9b3df730a2a10a4f0d1f2a76177f94b07bf03" }
 palom = ">=2025.7"
