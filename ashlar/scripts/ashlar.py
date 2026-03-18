@@ -106,6 +106,11 @@ def main(argv=sys.argv):
         "--barrel-correction", type=float, default=0, help=argparse.SUPPRESS
     )
     parser.add_argument(
+        "--no-mask-background",
+        action="store_true",
+        help="Do not automatically mask out background region",
+    )
+    parser.add_argument(
         '--plates', default=False, action='store_true',
         help='Enable plate mode for HTS data',
     )
@@ -226,7 +231,8 @@ def main(argv=sys.argv):
             return process_single(
                 filepaths, mosaic_path_format, args.flip_x, args.flip_y,
                 ffp_paths, dfp_paths, args.barrel_correction, aligner_args,
-                mosaic_args, args.pyramid, args.quiet
+                mosaic_args, args.pyramid, not args.no_mask_background,
+                args.quiet
             )
     except ProcessingError as e:
         print_error(str(e))
@@ -235,8 +241,8 @@ def main(argv=sys.argv):
 
 def process_single(
     filepaths, output_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
-    barrel_correction, aligner_args, mosaic_args, pyramid, quiet,
-    plate_well=None
+    barrel_correction, aligner_args, mosaic_args, pyramid, do_tissue_mask,
+    quiet, plate_well=None
 ):
 
     mosaic_args = mosaic_args.copy()
@@ -293,6 +299,9 @@ def process_single(
     writer = writer_class(
         mosaics, output_path_format, verbose=not quiet, **writer_args
     )
+    if hasattr(writer, "do_mask_tissue"):
+        writer.do_mask_tissue=do_tissue_mask
+        ...
     writer.run()
 
     return 0
@@ -325,7 +334,7 @@ def process_plates(
                 process_single(
                     filepaths, mosaic_path_format, flip_x, flip_y,
                     ffp_paths, dfp_paths, barrel_correction, aligner_args,
-                    mosaic_args, pyramid, quiet, plate_well=(p, w)
+                    mosaic_args, pyramid, False, quiet, plate_well=(p, w)
                 )
             else:
                 print("Skipping -- No images found.")
