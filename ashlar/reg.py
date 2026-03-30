@@ -1,5 +1,6 @@
 import sys
 import math
+import threading
 import warnings
 import xml.etree.ElementTree
 import pathlib
@@ -403,11 +404,22 @@ class BioformatsReader(PlateReader):
         self.path = path
         self.metadata = BioformatsMetadata(self.path)
         self.metadata.set_active_plate_well(plate, well)
+        self._lock = threading.Lock()
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['_lock']
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._lock = threading.Lock()
 
     def read(self, series, c):
-        self.metadata._reader.setSeries(self.metadata.active_series[series])
-        index = self.metadata._reader.getIndex(0, c, 0)
-        byte_array = self.metadata._reader.openBytes(index)
+        with self._lock:
+            self.metadata._reader.setSeries(self.metadata.active_series[series])
+            index = self.metadata._reader.getIndex(0, c, 0)
+            byte_array = self.metadata._reader.openBytes(index)
         dtype = self.metadata.pixel_dtype
         shape = self.metadata.tile_size(series)
         img = np.frombuffer(byte_array.tostring(), dtype=dtype).reshape(shape)
@@ -1271,7 +1283,7 @@ class PyramidWriter:
 
     def assemble_all(self):
         import joblib
-        from joblib.externals.loky import get_reusable_executor
+        from concurrent.futures import ThreadPoolExecutor
 
         self.cache_path = f"{pathlib.Path(self.path)}.zarr"
         root = zarr.open(self.cache_path, mode="w")
@@ -1297,11 +1309,9 @@ class PyramidWriter:
         n_jobs = min(len(tasks), joblib.cpu_count(), self.n_jobs)
         verboses = np.full(len(tasks), fill_value=False)
         verboses[::n_jobs] = True
-        print(f"Generating mosaics in parallel ({n_jobs} processes)")
+        print(f"Generating mosaics in parallel ({n_jobs} threads)")
 
-        executor = get_reusable_executor(max_workers=n_jobs, timeout=300)
-
-        try:
+        with ThreadPoolExecutor(max_workers=n_jobs) as executor:
             futures = [
                 executor.submit(
                     m_func,
@@ -1313,8 +1323,6 @@ class PyramidWriter:
                 for (m_func, channel, out_zarr), v in zip(tasks, verboses)
             ]
             _ = [ff.result() for ff in futures]
-        finally:
-            executor.shutdown(wait=True, kill_workers=False)
         self.mosaics_zarr = root
 
     def base_tiles(self):
