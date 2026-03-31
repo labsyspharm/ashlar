@@ -7,6 +7,7 @@ import blessed
 from .. import __version__ as VERSION
 from .. import reg
 from ..reg import PlateReader, BioformatsReader
+from ..ometiff import OmeTiffReader
 from ..filepattern import FilePatternReader
 from ..fileseries import FileSeriesReader
 from ..zen import ZenReader
@@ -357,6 +358,7 @@ readers = {
     'filepattern': FilePatternReader,
     'fileseries': FileSeriesReader,
     'bioformats': BioformatsReader,
+    'ometiff': OmeTiffReader,
     'zen': ZenReader,
 }
 

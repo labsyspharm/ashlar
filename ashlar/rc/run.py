@@ -7,8 +7,15 @@ import numpy as np
 import tifffile
 
 from .. import reg, utils
+from ..ometiff import OmeTiffReader
 from .. import __version__ as VERSION
 from . import align_cycles, ome_metadata
+
+
+def _build_reader(path):
+    if str(path).endswith(('.ome.tif', '.ome.tiff')):
+        return OmeTiffReader(str(path))
+    return reg.BioformatsReader(str(path))
 
 
 def stitch(
@@ -28,7 +35,7 @@ def stitch(
 
     output_path = path / f"{raw.stem}.ashlar.pkl"
 
-    c1r = reg.BioformatsReader(str(raw))
+    c1r = _build_reader(raw)
     if "rcpnl" not in raw_endwith:
         _ = c1r.metadata.positions
         c1r.metadata._positions *= [-1, 1]
@@ -110,7 +117,7 @@ def register(
 
     output_path = moving_path / f"{raw.stem}.ashlar.pkl"
 
-    c2r = reg.BioformatsReader(str(raw))
+    c2r = _build_reader(raw)
     if "rcpnl" not in raw_endwith:
         _ = c2r.metadata.positions
         c2r.metadata._positions *= [-1, 1]
