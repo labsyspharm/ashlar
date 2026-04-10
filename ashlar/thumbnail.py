@@ -31,18 +31,15 @@ def make_thumbnail(reader, channel=0, scale=0.05):
         sys.stdout.write("\r    assembling thumbnail %d/%d" % (i + 1, total))
         sys.stdout.flush()
         img = reader.read(c=channel, series=i)
-        # We don't need anti-aliasing as long as the coarse features in the
-        # images are bigger than the scale factor. This speeds up the rescaling
-        # dramatically.
-        img_s = rescale(img, scale, anti_aliasing=False)
+        img_s = rescale(img, scale)
         utils.paste(mosaic, img_s, pos_s, utils.pastefunc_blend)
     print()
     return mosaic
 
 
 def calculate_image_offset(img1, img2, upsample_factor=1):
-    ref = utils.window(utils.whiten(img1, 1))
-    test = utils.window(utils.whiten(img2, 1))
+    ref = utils.window(utils.whiten(img1, 0))
+    test = utils.window(utils.whiten(img2, 0))
     shift = phase_cross_correlation(
         ref,
         test,
