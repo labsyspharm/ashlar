@@ -33,10 +33,11 @@ def main(argv=sys.argv):
               " exist."),
     )
     parser.add_argument(
-        '-c', '--align-channel', dest='align_channel', type=int,
+        '-c', '--align-channel', dest='align_channel',
         default='0', metavar='CHANNEL',
         help=('Reference channel number for image alignment. Numbering starts'
-              ' at 0.'),
+              ' at 0. If fileseries or filepattern is used, it may be channel'
+              ' name.'),
     )
     parser.add_argument(
         '--flip-x', default=False, action='store_true',
