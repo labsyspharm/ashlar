@@ -1,5 +1,6 @@
 import warnings
 import sys
+import csv
 import re
 import argparse
 import pathlib
@@ -33,6 +34,12 @@ def main(argv=sys.argv):
               " exist."),
     )
     parser.add_argument(
+        '--output-positions', dest='output_positions', metavar='PATH',
+        help="Output file to save the aligned positions for each tile to a csv file."
+                " The csv file will have four columns: the tile index, the cycle number,"
+                " and the x and y position of the tile.",
+    )
+    parser.add_argument(
         '-c', '--align-channel', dest='align_channel', type=int,
         default='0', metavar='CHANNEL',
         help=('Reference channel number for image alignment. Numbering starts'
@@ -55,9 +62,19 @@ def main(argv=sys.argv):
         help='Flip output image top-to-bottom',
     )
     parser.add_argument(
+        '--transpose', default=False, action='store_true',
+        help='Transpose the x and y axes of tile positions. This happens '
+        'before the x or y axes are flipped based on the flags --flip-x and --flip-y',
+    )
+    parser.add_argument(
         '--output-channels', nargs='+', type=int, metavar='CHANNEL',
         help=('Output only specified channels for each cycle. Numbering starts'
               ' at 0. (default: all channels)'),
+    )
+    parser.add_argument(
+        '--no-resample', default=False, action='store_true',
+        help='Dont resample tiles when creating the final composite. Tile positions'
+        ' will be rounded to the closest integer.'
     )
     parser.add_argument(
         '-m', '--maximum-shift', type=float, default=15, metavar='SHIFT',
@@ -213,20 +230,23 @@ def main(argv=sys.argv):
         mosaic_args['verbose'] = True
     mosaic_args['flip_mosaic_x'] = args.flip_mosaic_x
     mosaic_args['flip_mosaic_y'] = args.flip_mosaic_y
+    mosaic_args['subpixel_shift'] = not args.no_resample
 
     try:
         if args.plates:
             return process_plates(
                 filepaths, output_path, args.filename_format, args.flip_x,
-                args.flip_y, ffp_paths, dfp_paths, args.barrel_correction,
-                aligner_args, mosaic_args, args.pyramid, args.quiet
+                args.flip_y, args.transpose, ffp_paths, dfp_paths,
+                args.barrel_correction, aligner_args, mosaic_args,
+                args.pyramid, args.quiet
             )
         else:
             mosaic_path_format = str(output_path / args.filename_format)
             return process_single(
                 filepaths, mosaic_path_format, args.flip_x, args.flip_y,
-                ffp_paths, dfp_paths, args.barrel_correction, aligner_args,
-                mosaic_args, args.pyramid, args.quiet
+                args.transpose, ffp_paths, dfp_paths, args.barrel_correction, 
+                aligner_args, mosaic_args, args.pyramid,
+                args.output_positions, args.quiet
             )
     except ProcessingError as e:
         print_error(str(e))
@@ -234,8 +254,8 @@ def main(argv=sys.argv):
 
 
 def process_single(
-    filepaths, output_path_format, flip_x, flip_y, ffp_paths, dfp_paths,
-    barrel_correction, aligner_args, mosaic_args, pyramid, quiet,
+    filepaths, output_path_format, flip_x, flip_y, transpose, ffp_paths, dfp_paths,
+    barrel_correction, aligner_args, mosaic_args, pyramid, output_positions, quiet,
     plate_well=None
 ):
 
@@ -252,7 +272,7 @@ def process_single(
         print('Cycle 0:')
         print('    reading %s' % filepaths[0])
     reader = build_reader(filepaths[0], barrel_correction, plate_well=plate_well)
-    process_axis_flip(reader, flip_x, flip_y)
+    process_axis_flip(reader, flip_x, flip_y, transpose)
     ea_args = aligner_args.copy()
     for arg in ("alpha", "max_error"):
         aligner_args.pop(arg, None)
@@ -273,7 +293,7 @@ def process_single(
             print('Cycle %d:' % cycle)
             print('    reading %s' % filepath)
         reader = build_reader(filepath, barrel_correction, plate_well=plate_well)
-        process_axis_flip(reader, flip_x, flip_y)
+        process_axis_flip(reader, flip_x, flip_y, transpose)
         layer_aligner = reg.LayerAligner(reader, edge_aligner, **aligner_args)
         layer_aligner.run()
         mosaic_args_final = mosaic_args.copy()
@@ -285,6 +305,23 @@ def process_single(
 
     # Disable reader caching to save memory during mosaicing and writing.
     edge_aligner.reader = edge_aligner.reader.reader
+
+    if output_positions:
+        if not quiet:
+            print ()
+            print ("Exporting tile positions to csv files")
+
+        all_tables = []
+        with open(output_positions, 'w') as ofile:
+            writer = csv.writer(ofile)
+            writer.writerow(['tile', 'cycle', 'x', 'y'])
+
+            for i, mosaic in enumerate(mosaics):
+                poses = mosaic.aligner.positions
+                for j in range(poses.shape[0]):
+                    writer.writerow([str(j), str(i), str(poses[j,0]), str(poses[j,1])])
+
+        return 0
 
     if not quiet:
         print()
@@ -299,8 +336,9 @@ def process_single(
 
 
 def process_plates(
-    filepaths, output_path, filename_format, flip_x, flip_y, ffp_paths,
-    dfp_paths, barrel_correction, aligner_args, mosaic_args, pyramid, quiet
+    filepaths, output_path, filename_format, flip_x, flip_y, transpose, ffp_paths,
+    dfp_paths, barrel_correction, aligner_args, mosaic_args, pyramid,
+    output_positions, quiet
 ):
 
     temp_reader = build_reader(filepaths[0])
@@ -323,9 +361,9 @@ def process_plates(
                 out_file_path.parent.mkdir(parents=True, exist_ok=True)
                 mosaic_path_format = str(out_file_path)
                 process_single(
-                    filepaths, mosaic_path_format, flip_x, flip_y,
+                    filepaths, mosaic_path_format, flip_x, flip_y, transpose,
                     ffp_paths, dfp_paths, barrel_correction, aligner_args,
-                    mosaic_args, pyramid, quiet, plate_well=(p, w)
+                    mosaic_args, pyramid, output_positions, quiet, plate_well=(p, w)
                 )
             else:
                 print("Skipping -- No images found.")
@@ -335,12 +373,17 @@ def process_plates(
     return 0
 
 
-def process_axis_flip(reader, flip_x, flip_y):
+def process_axis_flip(reader, flip_x, flip_y, transpose):
     metadata = reader.metadata
     # Trigger lazy initialization.
     _ = metadata.positions
     sx = -1 if flip_x else 1
     sy = -1 if flip_y else 1
+    if transpose:
+        assert metadata._positions.shape[1] == 2
+        x_axis = metadata._positions[:,0].copy()
+        metadata._positions[:,0] = metadata._positions[:,1]
+        metadata._positions[:,1] = x_axis
     metadata._positions *= [sy, sx]
 
 

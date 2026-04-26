@@ -146,12 +146,17 @@ def fourier_shift(img, shift):
     return img_s.real
 
 
-def paste(target, img, pos, func=None):
-    """Composite img into target."""
+def paste(target, img, pos, func=None, subpixel_shift=True):
+    """Composite img into target.
+    Interpolation of images can be disabled with subpixel_shift=False, otherwise
+    images with non integer positions will be shifted with scipy.ndimage.shift
+    """
     pos = np.array(pos)
     # Bail out if destination region is out of bounds.
     if np.any(pos >= target.shape[:2]) or np.any(pos + img.shape[:2] < 0):
         return
+    if not subpixel_shift:
+        pos = np.round(pos)
     pos_f, pos_i = np.modf(pos)
     yi, xi = pos_i.astype('i8')
     # Clip img to the edges of the mosaic.
@@ -164,7 +169,7 @@ def paste(target, img, pos, func=None):
     target_slice = target[yi:yi+img.shape[0], xi:xi+img.shape[1]]
     img = crop_like(img, target_slice)
     # Skip expensive sub-pixel shift if fractional position is zero.
-    if pos_f.any():
+    if subpixel_shift and pos_f.any():
         if img.ndim == 2:
             img = scipy.ndimage.shift(img, pos_f)
         else:
