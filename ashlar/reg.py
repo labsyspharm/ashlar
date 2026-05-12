@@ -942,23 +942,8 @@ class LayerAligner(object):
 
         # Discard alignments with infinite error.
         self.discard_error = np.isinf(self.errors)
-        # In low-signal (background) tiles, the camera dark current image will
-        # dominate any true signal causing a spurious aligmnent at exactly 0,0
-        # with respect to the actual image dimensions. It's exceedingly unlikely
-        # to see such an alignment in real data, so we consider it a false
-        # positive and discard it. Rotation correction or gaussian filtering
-        # will destroy the dark current correlation, so in either of those cases
-        # we skip this step.
-        if self.cycle_angle == 0 and self.filter_sigma == 0:
-            position_diffs = np.absolute(
-                self.centers - self.reference_aligner_centers
-            )
-            # Round diffs to one decimal point because subpixel shifts are
-            # calculated by 10x upsampling and thus only accurate to that level.
-            position_diffs = np.rint(position_diffs * 10) / 10
-            self.discard_background = (position_diffs == 0).all(axis=1)
-        else:
-            self.discard_background = np.zeros(self.metadata.num_images, bool)
+        # Discard alignments on non-foreground tiles.
+        self.discard_background = ~self.reference_aligner.foreground[self.reference_idx]
         discard = self.discard_error | self.discard_background
 
         # For the high-quality alignments only, take the median of registered
